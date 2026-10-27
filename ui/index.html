@@ -1,0 +1,1644 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cosmos DB NoSQL</title>
+    <style>
+      :root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  --bg: #111718;
+  --panel: #172022;
+  --line: #2a3739;
+  --text: #e0e9e8;
+  --muted: #93a7a6;
+  --accent: #86dfc9;
+  --field: #111a1b;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+body.light {
+  color-scheme: light;
+  --bg: #f6f8f7;
+  --panel: #fff;
+  --line: #d9e3df;
+  --text: #20322e;
+  --muted: #647b72;
+  --accent: #186f57;
+  --field: #f8faf9;
+}
+header {
+  height: 72px;
+  padding: 16px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand strong {
+  font-size: 17px;
+  font-weight: 600;
+}
+.orbit {
+  font-size: 34px;
+  color: var(--accent);
+}
+small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.muted {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+.badge {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 5px 10px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.workspace {
+  display: grid;
+  grid-template-columns: 210px minmax(320px, 1fr) 340px;
+  height: calc(100vh - 72px);
+  min-height: 500px;
+}
+aside {
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.section-title {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 600;
+}
+.section-title button {
+  font-weight: 400;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--field);
+}
+button {
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled),
+button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+button.primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+button.danger {
+  color: #f4a6a6;
+}
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+input,
+select {
+  padding: 7px;
+  width: 100%;
+  min-width: 0;
+}
+textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  padding: 12px;
+  tab-size: 2;
+  outline: none;
+}
+textarea:focus,
+input:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.info,
+.aside-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.aside-note {
+  margin-top: auto;
+}
+details {
+  font-size: 11px;
+  color: var(--muted);
+}
+summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 1.6;
+}
+main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.query-panel {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+#sql {
+  display: block;
+  width: 100%;
+  height: 130px;
+  min-height: 70px;
+}
+#parameters {
+  width: 100%;
+  height: 70px;
+}
+.query-options {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.query-options select {
+  width: 72px;
+}
+.grow {
+  flex: 1;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+#status {
+  min-height: 40px;
+  padding: 12px 18px;
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+#status.error {
+  color: #edac9e;
+  background: #be543412;
+}
+.results-panel {
+  display: flex;
+  flex: 1;
+  min-height: 160px;
+  flex-direction: column;
+  overflow: hidden;
+}
+.results-panel > .section-title {
+  padding: 10px 18px;
+  flex-wrap: wrap;
+}
+.table-scroll {
+  overflow: auto;
+  flex: 1;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 500;
+  text-align: left;
+}
+th,
+td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tbody tr {
+  cursor: pointer;
+}
+tbody tr:hover,
+tbody tr.selected {
+  background: #7cd4bf13;
+}
+td:first-child,
+th:first-child {
+  width: 36px;
+  color: var(--muted);
+}
+.empty {
+  display: grid;
+  place-content: center;
+  min-height: 170px;
+  color: var(--muted);
+}
+#raw-results {
+  flex: 1;
+  resize: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  width: 100%;
+}
+.document-panel {
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--panel);
+}
+.document-panel > .section-title {
+  padding: 12px 16px;
+}
+.document-fields {
+  padding: 0 16px 12px;
+  display: grid;
+  gap: 10px;
+}
+#editor {
+  flex: 1;
+  min-height: 160px;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  resize: none;
+  background: var(--field);
+}
+.document-footer {
+  padding: 12px 16px;
+  display: grid;
+  gap: 12px;
+}
+.document-footer small {
+  overflow-wrap: anywhere;
+}
+.document-footer .toolbar {
+  justify-content: flex-end;
+}
+dialog {
+  max-width: 430px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 24px;
+  box-shadow: 0 24px 90px #0007;
+}
+dialog::backdrop {
+  background: #0008;
+}
+dialog p {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+dialog .toolbar {
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 175px minmax(300px, 1fr) 290px;
+  }
+  .toolbar button {
+    padding: 5px 7px;
+  }
+  .query-options {
+    flex-wrap: wrap;
+  }
+  .query-options .grow {
+    min-width: 150px;
+  }
+}
+@media (max-width: 800px) {
+  .workspace {
+    grid-template-columns: 155px minmax(320px, 1fr);
+    height: auto;
+  }
+  .document-panel {
+    grid-column: 1/-1;
+    min-height: 500px;
+    border-top: 1px solid var(--line);
+  }
+  main {
+    min-height: 550px;
+  }
+}
+
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="orbit">◉</span>
+        <div>
+          <strong>Cosmos DB <span class="muted">/ NoSQL</span></strong
+          ><small id="connection-name"
+            >从 DBX 打开已保存的 Cosmos DB 连接</small
+          >
+        </div>
+      </div>
+      <span id="mode" class="badge">未连接</span>
+    </header>
+    <div class="workspace">
+      <aside>
+        <div class="section-title">
+          数据库与容器 <button id="refresh" title="刷新数据库列表">↻</button>
+        </div>
+        <label
+          >数据库<select id="database" aria-label="数据库">
+            <option value="">选择数据库</option>
+          </select></label
+        ><label
+          >容器<select id="container" aria-label="容器">
+            <option value="">选择容器</option>
+          </select></label
+        >
+        <div id="container-info" class="info">连接后选择容器开始查询。</div>
+        <details>
+          <summary>容器元数据</summary>
+          <pre id="metadata">—</pre>
+        </details>
+        <div class="aside-note">
+          查询按页读取。RU 与耗时为当前页；导出仅包含当前页。
+        </div>
+      </aside>
+      <main>
+        <section class="query-panel">
+          <div class="section-title">
+            SQL 查询 <span class="muted">⌘ / Ctrl + Enter</span>
+          </div>
+          <textarea id="sql" aria-label="SQL 查询" spellcheck="false">
+SELECT * FROM c</textarea
+          >
+          <div class="query-options">
+            <label
+              >每页<select id="page-size">
+                <option>25</option>
+                <option selected>100</option>
+                <option>250</option>
+                <option>1000</option>
+              </select></label
+            ><label class="grow"
+              >分区键（可选 JSON 数组）<input
+                id="query-pk"
+                placeholder='["tenant-a"] 或留空跨分区'
+                spellcheck="false" /></label
+            ><button id="run" class="primary">运行查询</button>
+          </div>
+          <details>
+            <summary>查询参数</summary>
+            <textarea
+              id="parameters"
+              aria-label="查询参数"
+              spellcheck="false"
+              placeholder='[{"name":"@id","value":"example"}]'
+            >
+[]</textarea
+            >
+          </details>
+        </section>
+        <div id="status" role="status" aria-live="polite">等待连接</div>
+        <section class="results-panel">
+          <div class="section-title">
+            <div>查询结果 <span id="row-count" class="muted">0 条</span></div>
+            <div class="toolbar">
+              <button id="table-view" class="active">表格</button
+              ><button id="json-view">JSON</button
+              ><button id="export">导出当前页</button
+              ><button id="previous">上一页</button
+              ><span id="page-label">第 0 页</span
+              ><button id="next">下一页</button>
+            </div>
+          </div>
+          <div id="table" class="table-scroll">
+            <div class="empty">选择容器后运行查询</div>
+          </div>
+          <textarea
+            id="raw-results"
+            aria-label="JSON 查询结果"
+            readonly
+            hidden
+          ></textarea>
+        </section>
+      </main>
+      <section class="document-panel">
+        <div class="section-title">
+          文档 <span id="document-state" class="muted">未选择</span>
+        </div>
+        <div class="document-fields">
+          <label
+            >文档 id<input
+              id="document-id"
+              placeholder="文档 id"
+              spellcheck="false" /></label
+          ><label
+            >完整分区键（JSON 数组）<input
+              id="document-pk"
+              placeholder='["tenant-a"] / [null] / [{}]'
+              spellcheck="false"
+          /></label>
+          <div class="toolbar">
+            <button id="read">读取完整文档</button
+            ><button id="new">新建</button>
+          </div>
+        </div>
+        <textarea
+          id="editor"
+          aria-label="JSON 文档"
+          spellcheck="false"
+          readonly
+          placeholder="点击结果行预览，再读取完整文档进行编辑"
+        ></textarea>
+        <div class="document-footer">
+          <small id="etag">读取完整文档后才能更新或删除。</small>
+          <div class="toolbar">
+            <button id="save" class="primary">保存</button
+            ><button id="delete" class="danger">删除</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
+      <h3 id="confirm-title">确认操作</h3>
+      <p id="confirm-message"></p>
+      <div class="toolbar">
+        <button id="confirm-cancel" type="button">取消</button
+        ><button id="confirm-accept" type="button" class="primary">确认</button>
+      </div>
+    </dialog>
+    <script type="module">
+      (() => {
+  // node_modules/lossless-json/lib/esm/utils.js
+  function isInteger(value) {
+    return INTEGER_REGEX.test(value);
+  }
+  var INTEGER_REGEX = /^-?[0-9]+$/;
+  function isNumber(value) {
+    return NUMBER_REGEX.test(value);
+  }
+  var NUMBER_REGEX = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+  function isSafeNumber(value, config2) {
+    if (isInteger(value)) {
+      return Number.isSafeInteger(Number.parseInt(value, 10));
+    }
+    const num = Number.parseFloat(value);
+    const parsed = String(num);
+    if (value === parsed) {
+      return true;
+    }
+    const valueDigits = extractSignificantDigits(value);
+    const parsedDigits = extractSignificantDigits(parsed);
+    if (valueDigits === parsedDigits) {
+      return true;
+    }
+    if (config2?.approx === true) {
+      const requiredDigits = 14;
+      if (!isInteger(value) && parsedDigits.length >= requiredDigits && valueDigits.startsWith(parsedDigits.substring(0, requiredDigits))) {
+        return true;
+      }
+    }
+    return false;
+  }
+  var UnsafeNumberReason = /* @__PURE__ */ (function(UnsafeNumberReason2) {
+    UnsafeNumberReason2["underflow"] = "underflow";
+    UnsafeNumberReason2["overflow"] = "overflow";
+    UnsafeNumberReason2["truncate_integer"] = "truncate_integer";
+    UnsafeNumberReason2["truncate_float"] = "truncate_float";
+    return UnsafeNumberReason2;
+  })({});
+  function getUnsafeNumberReason(value) {
+    if (isSafeNumber(value, {
+      approx: false
+    })) {
+      return void 0;
+    }
+    if (isInteger(value)) {
+      return UnsafeNumberReason.truncate_integer;
+    }
+    const num = Number.parseFloat(value);
+    if (!Number.isFinite(num)) {
+      return UnsafeNumberReason.overflow;
+    }
+    if (num === 0) {
+      return UnsafeNumberReason.underflow;
+    }
+    return UnsafeNumberReason.truncate_float;
+  }
+  function extractSignificantDigits(value) {
+    const {
+      start,
+      end
+    } = getSignificantDigitRange(value);
+    const digits = value.substring(start, end);
+    const dot = digits.indexOf(".");
+    if (dot === -1) {
+      return digits;
+    }
+    return digits.substring(0, dot) + digits.substring(dot + 1);
+  }
+  function getSignificantDigitRange(value) {
+    let start = 0;
+    if (value[0] === "-") {
+      start++;
+    }
+    while (value[start] === "0" || value[start] === ".") {
+      start++;
+    }
+    let end = value.lastIndexOf("e");
+    if (end === -1) {
+      end = value.lastIndexOf("E");
+    }
+    if (end === -1) {
+      end = value.length;
+    }
+    while ((value[end - 1] === "0" || value[end - 1] === ".") && end > start) {
+      end--;
+    }
+    return {
+      start,
+      end
+    };
+  }
+
+  // node_modules/lossless-json/lib/esm/LosslessNumber.js
+  var LosslessNumber = class {
+    // numeric value as string
+    // type information
+    isLosslessNumber = true;
+    constructor(value) {
+      if (!isNumber(value)) {
+        throw new Error(`Invalid number (value: "${value}")`);
+      }
+      this.value = value;
+    }
+    /**
+     * Get the value of the LosslessNumber as number or bigint.
+     *
+     * - a number is returned for safe numbers and decimal values that only lose some insignificant digits
+     * - a bigint is returned for big integer numbers
+     * - an Error is thrown for values that will overflow or underflow
+     *
+     * Note that you can implement your own strategy for conversion by just getting the value as string
+     * via .toString(), and using util functions like isInteger, isSafeNumber, getUnsafeNumberReason,
+     * and toSafeNumberOrThrow to convert it to a numeric value.
+     */
+    valueOf() {
+      const unsafeReason = getUnsafeNumberReason(this.value);
+      if (unsafeReason === void 0 || unsafeReason === UnsafeNumberReason.truncate_float) {
+        return Number.parseFloat(this.value);
+      }
+      if (isInteger(this.value)) {
+        return BigInt(this.value);
+      }
+      throw new Error(`Cannot safely convert to number: the value '${this.value}' would ${unsafeReason} and become ${Number.parseFloat(this.value)}`);
+    }
+    /**
+     * Get the value of the LosslessNumber as string.
+     */
+    toString() {
+      return this.value;
+    }
+    // Note: we do NOT implement a .toJSON() method, and you should not implement
+    // or use that, it cannot safely turn the numeric value in the string into
+    // stringified JSON since it has to be parsed into a number first.
+  };
+  function isLosslessNumber(value) {
+    return value && typeof value === "object" && value.isLosslessNumber || false;
+  }
+
+  // node_modules/lossless-json/lib/esm/numberParsers.js
+  function parseLosslessNumber(value) {
+    return new LosslessNumber(value);
+  }
+
+  // node_modules/lossless-json/lib/esm/revive.js
+  function revive(json, reviver) {
+    return reviveValue({
+      "": json
+    }, "", json, reviver);
+  }
+  function reviveValue(context, key, value, reviver) {
+    if (Array.isArray(value)) {
+      return reviver.call(context, key, reviveArray(value, reviver));
+    }
+    if (value && typeof value === "object" && !isLosslessNumber(value)) {
+      return reviver.call(context, key, reviveObject(value, reviver));
+    }
+    return reviver.call(context, key, value);
+  }
+  function reviveObject(object, reviver) {
+    for (const key of Object.keys(object)) {
+      const value = reviveValue(object, key, object[key], reviver);
+      if (value !== void 0) {
+        object[key] = value;
+      } else {
+        delete object[key];
+      }
+    }
+    return object;
+  }
+  function reviveArray(array, reviver) {
+    for (let i = 0; i < array.length; i++) {
+      array[i] = reviveValue(array, String(i), array[i], reviver);
+    }
+    return array;
+  }
+
+  // node_modules/lossless-json/lib/esm/parse.js
+  function parse(text, reviver, options2) {
+    const optionsObj = typeof options2 === "function" ? {
+      parseNumber: options2
+    } : options2;
+    const parseNumber = optionsObj?.parseNumber ?? parseLosslessNumber;
+    const onDuplicateKey = optionsObj?.onDuplicateKey ?? throwDuplicateKey;
+    let i = 0;
+    const value = parseValue();
+    expectValue(value);
+    expectEndOfInput();
+    return reviver ? revive(value, reviver) : value;
+    function parseObject() {
+      if (text.charCodeAt(i) === codeOpeningBrace) {
+        i++;
+        skipWhitespace();
+        const object = {};
+        let initial = true;
+        while (i < text.length && text.charCodeAt(i) !== codeClosingBrace) {
+          if (!initial) {
+            eatComma();
+            skipWhitespace();
+          } else {
+            initial = false;
+          }
+          const start = i;
+          const key = parseString();
+          if (key === void 0) {
+            throwObjectKeyExpected();
+            return;
+          }
+          skipWhitespace();
+          eatColon();
+          const value2 = parseValue();
+          if (value2 === void 0) {
+            throwObjectValueExpected();
+            return;
+          }
+          if (Object.prototype.hasOwnProperty.call(object, key) && !isDeepEqual(value2, object[key])) {
+            const returnedValue = onDuplicateKey({
+              key,
+              position: start + 1,
+              oldValue: object[key],
+              newValue: value2
+            });
+            if (returnedValue !== void 0) {
+              object[key] = returnedValue;
+            }
+          } else {
+            object[key] = value2;
+          }
+        }
+        if (text.charCodeAt(i) !== codeClosingBrace) {
+          throwObjectKeyOrEndExpected();
+        }
+        i++;
+        return object;
+      }
+    }
+    function parseArray2() {
+      if (text.charCodeAt(i) === codeOpeningBracket) {
+        i++;
+        skipWhitespace();
+        const array = [];
+        let initial = true;
+        while (i < text.length && text.charCodeAt(i) !== codeClosingBracket) {
+          if (!initial) {
+            eatComma();
+          } else {
+            initial = false;
+          }
+          const value2 = parseValue();
+          expectArrayItem(value2);
+          array.push(value2);
+        }
+        if (text.charCodeAt(i) !== codeClosingBracket) {
+          throwArrayItemOrEndExpected();
+        }
+        i++;
+        return array;
+      }
+    }
+    function parseValue() {
+      skipWhitespace();
+      const value2 = parseString() ?? parseNumeric() ?? parseObject() ?? parseArray2() ?? parseKeyword("true", true) ?? parseKeyword("false", false) ?? parseKeyword("null", null);
+      skipWhitespace();
+      return value2;
+    }
+    function parseKeyword(name, value2) {
+      if (text.slice(i, i + name.length) === name) {
+        i += name.length;
+        return value2;
+      }
+    }
+    function skipWhitespace() {
+      while (isWhitespace(text.charCodeAt(i))) {
+        i++;
+      }
+    }
+    function parseString() {
+      if (text.charCodeAt(i) === codeDoubleQuote) {
+        i++;
+        let result = "";
+        while (i < text.length && text.charCodeAt(i) !== codeDoubleQuote) {
+          if (text.charCodeAt(i) === codeBackslash) {
+            const char = text[i + 1];
+            const escapeChar = escapeCharacters[char];
+            if (escapeChar !== void 0) {
+              result += escapeChar;
+              i++;
+            } else if (char === "u") {
+              if (isHex(text.charCodeAt(i + 2)) && isHex(text.charCodeAt(i + 3)) && isHex(text.charCodeAt(i + 4)) && isHex(text.charCodeAt(i + 5))) {
+                result += String.fromCharCode(Number.parseInt(text.slice(i + 2, i + 6), 16));
+                i += 5;
+              } else {
+                throwInvalidUnicodeCharacter(i);
+              }
+            } else {
+              throwInvalidEscapeCharacter(i);
+            }
+          } else {
+            if (isValidStringCharacter(text.charCodeAt(i))) {
+              result += text[i];
+            } else {
+              throwInvalidCharacter(text[i]);
+            }
+          }
+          i++;
+        }
+        expectEndOfString();
+        i++;
+        return result;
+      }
+    }
+    function parseNumeric() {
+      const start = i;
+      if (text.charCodeAt(i) === codeMinus) {
+        i++;
+        expectDigit(start);
+      }
+      if (text.charCodeAt(i) === codeZero) {
+        i++;
+      } else if (isNonZeroDigit(text.charCodeAt(i))) {
+        i++;
+        while (isDigit(text.charCodeAt(i))) {
+          i++;
+        }
+      }
+      if (text.charCodeAt(i) === codeDot) {
+        i++;
+        expectDigit(start);
+        while (isDigit(text.charCodeAt(i))) {
+          i++;
+        }
+      }
+      if (text.charCodeAt(i) === codeLowercaseE || text.charCodeAt(i) === codeUppercaseE) {
+        i++;
+        if (text.charCodeAt(i) === codeMinus || text.charCodeAt(i) === codePlus) {
+          i++;
+        }
+        expectDigit(start);
+        while (isDigit(text.charCodeAt(i))) {
+          i++;
+        }
+      }
+      if (i > start) {
+        return parseNumber(text.slice(start, i));
+      }
+    }
+    function eatComma() {
+      if (text.charCodeAt(i) !== codeComma) {
+        throw new SyntaxError(`Comma ',' expected after value ${gotAt()}`);
+      }
+      i++;
+    }
+    function eatColon() {
+      if (text.charCodeAt(i) !== codeColon) {
+        throw new SyntaxError(`Colon ':' expected after property name ${gotAt()}`);
+      }
+      i++;
+    }
+    function expectValue(value2) {
+      if (value2 === void 0) {
+        throw new SyntaxError(`JSON value expected ${gotAt()}`);
+      }
+    }
+    function expectArrayItem(value2) {
+      if (value2 === void 0) {
+        throw new SyntaxError(`Array item expected ${gotAt()}`);
+      }
+    }
+    function expectEndOfInput() {
+      if (i < text.length) {
+        throw new SyntaxError(`Expected end of input ${gotAt()}`);
+      }
+    }
+    function expectDigit(start) {
+      if (!isDigit(text.charCodeAt(i))) {
+        const numSoFar = text.slice(start, i);
+        throw new SyntaxError(`Invalid number '${numSoFar}', expecting a digit ${gotAt()}`);
+      }
+    }
+    function expectEndOfString() {
+      if (text.charCodeAt(i) !== codeDoubleQuote) {
+        throw new SyntaxError(`End of string '"' expected ${gotAt()}`);
+      }
+    }
+    function throwObjectKeyExpected() {
+      throw new SyntaxError(`Quoted object key expected ${gotAt()}`);
+    }
+    function throwDuplicateKey(_ref) {
+      let {
+        key,
+        position
+      } = _ref;
+      throw new SyntaxError(`Duplicate key '${key}' encountered at position ${position}`);
+    }
+    function throwObjectKeyOrEndExpected() {
+      throw new SyntaxError(`Quoted object key or end of object '}' expected ${gotAt()}`);
+    }
+    function throwArrayItemOrEndExpected() {
+      throw new SyntaxError(`Array item or end of array ']' expected ${gotAt()}`);
+    }
+    function throwInvalidCharacter(char) {
+      throw new SyntaxError(`Invalid character '${char}' ${pos()}`);
+    }
+    function throwInvalidEscapeCharacter(start) {
+      const chars = text.slice(start, start + 2);
+      throw new SyntaxError(`Invalid escape character '${chars}' ${pos()}`);
+    }
+    function throwObjectValueExpected() {
+      throw new SyntaxError(`Object value expected after ':' ${pos()}`);
+    }
+    function throwInvalidUnicodeCharacter(start) {
+      const chars = text.slice(start, start + 6);
+      throw new SyntaxError(`Invalid unicode character '${chars}' ${pos()}`);
+    }
+    function pos() {
+      return `at position ${i}`;
+    }
+    function got() {
+      return i < text.length ? `but got '${text[i]}'` : "but reached end of input";
+    }
+    function gotAt() {
+      return `${got()} ${pos()}`;
+    }
+  }
+  function isWhitespace(code) {
+    return code === codeSpace || code === codeNewline || code === codeTab || code === codeReturn;
+  }
+  function isHex(code) {
+    return code >= codeZero && code <= codeNine || code >= codeUppercaseA && code <= codeUppercaseF || code >= codeLowercaseA && code <= codeLowercaseF;
+  }
+  function isDigit(code) {
+    return code >= codeZero && code <= codeNine;
+  }
+  function isNonZeroDigit(code) {
+    return code >= codeOne && code <= codeNine;
+  }
+  function isValidStringCharacter(code) {
+    return code >= 32 && code <= 1114111;
+  }
+  function isDeepEqual(a, b) {
+    if (a === b) {
+      return true;
+    }
+    if (Array.isArray(a) && Array.isArray(b)) {
+      return a.length === b.length && a.every((item, index) => isDeepEqual(item, b[index]));
+    }
+    if (isObject(a) && isObject(b)) {
+      const keys = [.../* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])];
+      return keys.every((key) => isDeepEqual(a[key], b[key]));
+    }
+    return false;
+  }
+  function isObject(value) {
+    return typeof value === "object" && value !== null;
+  }
+  var escapeCharacters = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    b: "\b",
+    f: "\f",
+    n: "\n",
+    r: "\r",
+    t: "	"
+    // note that \u is handled separately in parseString()
+  };
+  var codeBackslash = 92;
+  var codeOpeningBrace = 123;
+  var codeClosingBrace = 125;
+  var codeOpeningBracket = 91;
+  var codeClosingBracket = 93;
+  var codeSpace = 32;
+  var codeNewline = 10;
+  var codeTab = 9;
+  var codeReturn = 13;
+  var codeDoubleQuote = 34;
+  var codePlus = 43;
+  var codeMinus = 45;
+  var codeZero = 48;
+  var codeOne = 49;
+  var codeNine = 57;
+  var codeComma = 44;
+  var codeDot = 46;
+  var codeColon = 58;
+  var codeUppercaseA = 65;
+  var codeLowercaseA = 97;
+  var codeUppercaseE = 69;
+  var codeLowercaseE = 101;
+  var codeUppercaseF = 70;
+  var codeLowercaseF = 102;
+
+  // node_modules/lossless-json/lib/esm/stringify.js
+  function stringify(value, replacer, space, numberStringifiers) {
+    const resolvedSpace = resolveSpace(space);
+    const replacedValue = typeof replacer === "function" ? replacer.call({
+      "": value
+    }, "", value) : value;
+    return stringifyValue(replacedValue, "");
+    function stringifyValue(value2, indent) {
+      if (Array.isArray(numberStringifiers)) {
+        const stringifier = numberStringifiers.find((item) => item.test(value2));
+        if (stringifier) {
+          const str = stringifier.stringify(value2);
+          if (typeof str !== "string" || !isNumber(str)) {
+            throw new Error(`Invalid JSON number: output of a number stringifier must be a string containing a JSON number (output: ${str})`);
+          }
+          return str;
+        }
+      }
+      if (typeof value2 === "boolean" || typeof value2 === "number" || typeof value2 === "string" || value2 === null || value2 instanceof Date || value2 instanceof Boolean || value2 instanceof Number || value2 instanceof String) {
+        return JSON.stringify(value2);
+      }
+      if (value2?.isLosslessNumber) {
+        return value2.toString();
+      }
+      if (typeof value2 === "bigint") {
+        return value2.toString();
+      }
+      if (Array.isArray(value2)) {
+        return stringifyArray(value2, indent);
+      }
+      if (value2 && typeof value2 === "object") {
+        return stringifyObject(value2, indent);
+      }
+      return void 0;
+    }
+    function stringifyArray(array, indent) {
+      if (array.length === 0) {
+        return "[]";
+      }
+      const childIndent = resolvedSpace ? indent + resolvedSpace : void 0;
+      let str = resolvedSpace ? "[\n" : "[";
+      for (let i = 0; i < array.length; i++) {
+        const item = typeof replacer === "function" ? replacer.call(array, String(i), array[i]) : array[i];
+        if (resolvedSpace) {
+          str += childIndent;
+        }
+        if (typeof item !== "undefined" && typeof item !== "function") {
+          str += stringifyValue(item, childIndent);
+        } else {
+          str += "null";
+        }
+        if (i < array.length - 1) {
+          str += resolvedSpace ? ",\n" : ",";
+        }
+      }
+      str += resolvedSpace ? `
+${indent}]` : "]";
+      return str;
+    }
+    function stringifyObject(object, indent) {
+      if (typeof object.toJSON === "function") {
+        return stringify(object.toJSON(), replacer, space, void 0);
+      }
+      const keys = Array.isArray(replacer) ? replacer.map(String) : Object.keys(object);
+      if (keys.length === 0) {
+        return "{}";
+      }
+      const childIndent = resolvedSpace ? indent + resolvedSpace : void 0;
+      let first = true;
+      let str = resolvedSpace ? "{\n" : "{";
+      for (const key of keys) {
+        const value2 = typeof replacer === "function" ? replacer.call(object, key, object[key]) : object[key];
+        if (includeProperty(key, value2)) {
+          if (first) {
+            first = false;
+          } else {
+            str += resolvedSpace ? ",\n" : ",";
+          }
+          const keyStr = JSON.stringify(key);
+          str += resolvedSpace ? `${childIndent + keyStr}: ` : `${keyStr}:`;
+          str += stringifyValue(value2, childIndent);
+        }
+      }
+      str += resolvedSpace ? `
+${indent}}` : "}";
+      return str;
+    }
+    function includeProperty(_key, value2) {
+      return typeof value2 !== "undefined" && typeof value2 !== "function" && typeof value2 !== "symbol";
+    }
+  }
+  function resolveSpace(space) {
+    if (typeof space === "number") {
+      return " ".repeat(space);
+    }
+    if (typeof space === "string" && space !== "") {
+      return space;
+    }
+    return void 0;
+  }
+
+  // src/model.mjs
+  function keyFromDocument(document2, paths) {
+    const values = paths.map((path) => {
+      const tokens = path.replace(/^\//, "").split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
+      let value = document2;
+      for (const token of tokens) {
+        if (value === null || typeof value !== "object" || !Object.hasOwn(value, token))
+          return {};
+        value = value[token];
+      }
+      if (typeof value === "number" && !Number.isSafeInteger(value) && Number.isInteger(value))
+        throw new Error("\u5206\u533A\u952E\u5305\u542B\u5927\u6574\u6570\uFF0C\u8BF7\u624B\u52A8\u586B\u5199\u7CBE\u786E\u7684\u5206\u533A\u952E JSON\u3002");
+      return value;
+    });
+    return stringify(values.length ? values : [{}]);
+  }
+  function parseArray(text, label) {
+    const value = parse(text);
+    if (!Array.isArray(value)) throw new Error(`${label}\u5FC5\u987B\u662F JSON \u6570\u7EC4`);
+    return value;
+  }
+  function columnsFor(rows) {
+    const keys = /* @__PURE__ */ new Set();
+    for (const row of rows) {
+      if (row !== null && typeof row === "object" && !Array.isArray(row) && !isLosslessNumber(row))
+        Object.keys(row).forEach((k) => keys.add(k));
+      else keys.add("(value)");
+    }
+    return [...keys].slice(0, 20);
+  }
+  function formatJSON(text) {
+    let out = "", indent = 0, quoted = false, escaped = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (quoted) {
+        out += ch;
+        if (escaped) escaped = false;
+        else if (ch === "\\") escaped = true;
+        else if (ch === '"') quoted = false;
+        continue;
+      }
+      if (ch === '"') {
+        quoted = true;
+        out += ch;
+      } else if (/\s/.test(ch)) {
+        continue;
+      } else if (ch === "{" || ch === "[") {
+        out += ch;
+        indent++;
+        if (text.slice(i + 1).trimStart()[0] !== (ch === "{" ? "}" : "]"))
+          out += "\n" + "  ".repeat(indent);
+      } else if (ch === "}" || ch === "]") {
+        indent--;
+        const prev = out.trimEnd().slice(-1);
+        if (prev !== "{" && prev !== "[") out += "\n" + "  ".repeat(indent);
+        out += ch;
+      } else if (ch === ",") out += ",\n" + "  ".repeat(indent);
+      else if (ch === ":") out += ": ";
+      else out += ch;
+    }
+    return out;
+  }
+
+  // src/app.mjs
+  var $ = (id) => document.getElementById(id);
+  var state = {
+    connectionId: "",
+    database: "",
+    container: "",
+    containers: [],
+    readOnly: true,
+    busy: false,
+    epoch: 0,
+    pages: [],
+    page: -1,
+    snapshot: null,
+    baseline: "",
+    creating: false
+  };
+  var host = window.dbxPlugin;
+  $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
+  $("confirm-accept").onclick = () => $("confirm-dialog").close("confirm");
+  function status(text, error = false) {
+    $("status").textContent = text;
+    $("status").classList.toggle("error", error);
+  }
+  function dirty() {
+    return !state.readOnly && !!(state.snapshot || state.creating) && $("editor").value !== state.baseline;
+  }
+  function confirmAction(title, message) {
+    status("\u7B49\u5F85\u786E\u8BA4\uFF1A" + title);
+    $("confirm-title").textContent = title;
+    $("confirm-message").textContent = message;
+    return new Promise((resolve) => {
+      const d = $("confirm-dialog");
+      d.returnValue = "cancel";
+      d.addEventListener(
+        "close",
+        () => {
+          const confirmed = d.returnValue === "confirm";
+          if (!confirmed) status("\u5DF2\u53D6\u6D88\u64CD\u4F5C");
+          resolve(confirmed);
+        },
+        { once: true }
+      );
+      d.showModal();
+      d.focus();
+    });
+  }
+  async function discard() {
+    return !dirty() || await confirmAction("\u653E\u5F03\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\uFF1F", "\u6B64\u64CD\u4F5C\u5C06\u66FF\u6362\u5F53\u524D\u6587\u6863\u8349\u7A3F\u3002");
+  }
+  function controls() {
+    const ready = !!state.connectionId, selected = !!state.container, busy = state.busy;
+    for (const id of [
+      "refresh",
+      "database",
+      "container",
+      "sql",
+      "query-pk",
+      "page-size",
+      "parameters",
+      "document-id",
+      "document-pk"
+    ])
+      $(id).disabled = busy || !ready;
+    for (const id of ["run", "read", "new"]) $(id).disabled = busy || !selected;
+    $("previous").disabled = busy || state.page <= 0;
+    $("next").disabled = busy || !state.pages[state.page]?.continuation;
+    $("export").disabled = busy || state.page < 0;
+    $("save").disabled = busy || state.readOnly || !state.snapshot && !state.creating;
+    $("delete").disabled = busy || state.readOnly || !state.snapshot;
+    $("new").disabled ||= state.readOnly;
+    $("editor").readOnly = busy || state.readOnly || !state.snapshot && !state.creating;
+  }
+  async function action(fn) {
+    if (state.busy) return;
+    const epoch = state.epoch;
+    state.busy = true;
+    controls();
+    status("\u6B63\u5728\u5904\u7406\u2026");
+    try {
+      await fn();
+    } catch (error) {
+      if (epoch === state.epoch && error?.message !== "STALE")
+        status(error.message || String(error), true);
+    } finally {
+      if (epoch === state.epoch) {
+        state.busy = false;
+        controls();
+      }
+    }
+  }
+  async function invoke(method, params = {}) {
+    const epoch = state.epoch;
+    const result = await host.invoke(
+      method,
+      { connectionId: state.connectionId, ...params },
+      { timeoutMs: 6e4 }
+    );
+    if (epoch !== state.epoch) throw new Error("STALE");
+    return result;
+  }
+  function scope() {
+    if (!state.database || !state.container)
+      throw new Error("\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93\u548C\u5BB9\u5668");
+    return { database: state.database, container: state.container };
+  }
+  function metrics(result, prefix = "") {
+    status(
+      `${prefix}${result.ru.toFixed(2)} RU \xB7 ${result.durationMs} ms${result.activityId ? " \xB7 Activity: " + result.activityId : ""}`
+    );
+  }
+  function resetEditor() {
+    state.snapshot = null;
+    state.creating = false;
+    state.baseline = "";
+    $("editor").value = "";
+    $("document-id").value = "";
+    $("document-pk").value = "";
+    $("document-state").textContent = "\u672A\u9009\u62E9";
+    $("etag").textContent = "\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u540E\u624D\u80FD\u66F4\u65B0\u6216\u5220\u9664\u3002";
+  }
+  function resetResults() {
+    state.pages = [];
+    state.page = -1;
+    renderPage();
+    resetEditor();
+  }
+  function options(id, items, placeholder) {
+    const el = $(id);
+    el.replaceChildren(new Option(placeholder, ""));
+    for (const item of items) el.add(new Option(item.id, item.id));
+  }
+  async function listAll(method, params) {
+    const items = [];
+    let continuation = "";
+    const seen = /* @__PURE__ */ new Set();
+    do {
+      const p = await invoke(method, { ...params, continuation, pageSize: 100 });
+      items.push(...parse(p.json));
+      continuation = p.continuation;
+      if (continuation && seen.has(continuation))
+        throw new Error("\u670D\u52A1\u8FD4\u56DE\u91CD\u590D\u5206\u9875\u4EE4\u724C");
+      seen.add(continuation);
+    } while (continuation);
+    return items;
+  }
+  async function loadDatabases() {
+    const items = await listAll("cosmos/databases", {});
+    options("database", items, "\u9009\u62E9\u6570\u636E\u5E93");
+    options("container", [], "\u9009\u62E9\u5BB9\u5668");
+    state.database = "";
+    state.container = "";
+    state.containers = [];
+    resetResults();
+    $("metadata").textContent = "\u2014";
+    $("container-info").textContent = `${items.length} \u4E2A\u6570\u636E\u5E93`;
+    status("\u5DF2\u8FDE\u63A5\uFF0C\u9009\u62E9\u6570\u636E\u5E93\u548C\u5BB9\u5668\u3002");
+  }
+  function renderPage() {
+    const p = state.pages[state.page];
+    const rows = p ? parse(p.json) : [];
+    $("row-count").textContent = `${rows.length} \u6761`;
+    $("page-label").textContent = `\u7B2C ${state.page + 1} \u9875`;
+    $("raw-results").value = p ? formatJSON(p.json) : "";
+    const target = $("table");
+    target.replaceChildren();
+    if (!rows.length) {
+      const el = document.createElement("div");
+      el.className = "empty";
+      el.textContent = p ? p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C" : "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2";
+      target.append(el);
+      return;
+    }
+    const columns = columnsFor(rows), table = document.createElement("table"), thead = table.createTHead(), tr = thead.insertRow();
+    for (const name of ["#", ...columns]) {
+      const th = document.createElement("th");
+      th.textContent = name;
+      tr.append(th);
+    }
+    const tbody = table.createTBody();
+    rows.forEach((row, index) => {
+      const tr2 = tbody.insertRow();
+      tr2.tabIndex = 0;
+      for (const value of [
+        index + 1,
+        ...columns.map((k) => k === "(value)" ? row : row?.[k])
+      ]) {
+        const td = tr2.insertCell();
+        td.textContent = typeof value === "object" ? stringify(value) : String(value ?? "");
+        td.title = td.textContent;
+      }
+      const select = () => action(async () => {
+        if (!await discard()) return;
+        resetEditor();
+        state.baseline = stringify(row, null, 2);
+        $("editor").value = state.baseline;
+        $("document-state").textContent = "\u67E5\u8BE2\u6295\u5F71\uFF08\u53EA\u8BFB\uFF09";
+        if (row && typeof row.id === "string") $("document-id").value = row.id;
+        const paths = state.containers.find((x) => x.id === state.container)?.partitionKey?.paths || [];
+        const missing = paths.some((path) => {
+          let value = row;
+          for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
+            if (!value || typeof value !== "object" || !Object.hasOwn(value, part))
+              return true;
+            value = value[part];
+          }
+          return false;
+        });
+        try {
+          if (!missing) $("document-pk").value = keyFromDocument(row, paths);
+        } catch (error) {
+          status(error.message, true);
+          return;
+        }
+        target.querySelectorAll("tr.selected").forEach((x) => x.classList.remove("selected"));
+        tr2.classList.add("selected");
+        status("\u5DF2\u9884\u89C8\u67E5\u8BE2\u7ED3\u679C\u3002\u786E\u8BA4 id \u548C\u5206\u533A\u952E\u540E\uFF0C\u70B9\u51FB\u300C\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u300D\u3002");
+      });
+      tr2.addEventListener("click", select);
+      tr2.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") select();
+      });
+    });
+    target.append(table);
+  }
+  async function query(next = false) {
+    if (!await discard()) return;
+    let spec;
+    if (next) {
+      const p = state.pages[state.page];
+      if (!p?.continuation) return;
+      spec = { ...p.spec, continuation: p.continuation };
+    } else {
+      parseArray($("parameters").value, "\u67E5\u8BE2\u53C2\u6570");
+      if ($("query-pk").value.trim()) parseArray($("query-pk").value, "\u5206\u533A\u952E");
+      spec = {
+        ...scope(),
+        query: $("sql").value,
+        parametersText: $("parameters").value,
+        partitionKeyText: $("query-pk").value.trim(),
+        pageSize: Number($("page-size").value)
+      };
+    }
+    const result = await invoke("cosmos/query", spec);
+    if (!next) state.pages = [];
+    else state.pages = state.pages.slice(0, state.page + 1);
+    state.pages.push({ ...result, spec });
+    state.page = state.pages.length - 1;
+    renderPage();
+    resetEditor();
+    metrics(result);
+  }
+  function point() {
+    const id = $("document-id").value;
+    if (!id) throw new Error("\u8BF7\u8F93\u5165\u6587\u6863 id");
+    parseArray($("document-pk").value, "\u5206\u533A\u952E");
+    return { ...scope(), id, partitionKeyText: $("document-pk").value };
+  }
+  function opened(result, identity) {
+    const doc = parse(result.json), etag = result.etag || doc._etag;
+    state.snapshot = { ...identity, etag };
+    state.creating = false;
+    state.baseline = formatJSON(result.json);
+    $("editor").value = state.baseline;
+    $("document-id").value = identity.id;
+    $("document-pk").value = identity.partitionKeyText;
+    $("document-state").textContent = "\u5B8C\u6574\u6587\u6863";
+    $("etag").textContent = etag ? `ETag: ${etag}` : "\u670D\u52A1\u672A\u63D0\u4F9B ETag\uFF0C\u65E0\u6CD5\u66F4\u65B0\u6216\u5220\u9664";
+    metrics(result, "\u6587\u6863\u5DF2\u8BFB\u53D6 \xB7 ");
+  }
+  function view(json) {
+    $("table").hidden = json;
+    $("raw-results").hidden = !json;
+    $("table-view").classList.toggle("active", !json);
+    $("json-view").classList.toggle("active", json);
+  }
+  var bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
+  bind("refresh", async () => {
+    if (await discard()) await loadDatabases();
+  });
+  $("database").addEventListener(
+    "change",
+    () => action(async () => {
+      const next = $("database").value;
+      if (!await discard()) {
+        $("database").value = state.database;
+        return;
+      }
+      state.database = next;
+      state.container = "";
+      resetResults();
+      options("container", [], "\u9009\u62E9\u5BB9\u5668");
+      state.containers = [];
+      $("metadata").textContent = "\u2014";
+      if (!next) {
+        status("\u8BF7\u9009\u62E9\u6570\u636E\u5E93");
+        return;
+      }
+      const items = await listAll("cosmos/containers", { database: next });
+      state.containers = items;
+      options("container", items, "\u9009\u62E9\u5BB9\u5668");
+      $("container-info").textContent = `${items.length} \u4E2A\u5BB9\u5668`;
+      status("\u8BF7\u9009\u62E9\u5BB9\u5668");
+    })
+  );
+  $("container").addEventListener(
+    "change",
+    () => action(async () => {
+      const next = $("container").value;
+      if (!await discard()) {
+        $("container").value = state.container;
+        return;
+      }
+      state.container = next;
+      resetResults();
+      const item = state.containers.find((x) => x.id === next);
+      $("metadata").textContent = item ? stringify(item, null, 2) : "\u2014";
+      $("container-info").textContent = item ? `\u5206\u533A\u8DEF\u5F84\uFF1A${(item.partitionKey?.paths || []).join(", ") || "\u65E0"}` : "\u9009\u62E9\u5BB9\u5668\u5F00\u59CB\u67E5\u8BE2";
+      status("\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2");
+    })
+  );
+  bind("run", () => query());
+  bind("next", () => query(true));
+  bind("previous", async () => {
+    if (await discard()) {
+      state.page--;
+      renderPage();
+      resetEditor();
+      metrics(state.pages[state.page]);
+    }
+  });
+  bind("read", async () => {
+    if (await discard()) {
+      const identity = point();
+      opened(await invoke("cosmos/read", identity), identity);
+    }
+  });
+  bind("new", async () => {
+    if (!await discard()) return;
+    resetEditor();
+    state.creating = true;
+    state.baseline = '{\n  "id": ""\n}';
+    $("editor").value = state.baseline;
+    $("document-state").textContent = "\u65B0\u6587\u6863";
+    $("etag").textContent = "\u586B\u5199 JSON\uFF08\u542B id\uFF09\u53CA\u5B8C\u6574\u5206\u533A\u952E\u540E\u4FDD\u5B58\u3002";
+    status("\u6B63\u5728\u7F16\u8F91\u65B0\u6587\u6863");
+  });
+  bind("save", async () => {
+    const text = $("editor").value;
+    const doc = parse(text);
+    if (!doc || Array.isArray(doc) || typeof doc.id !== "string" || !doc.id)
+      throw new Error("\u6587\u6863\u5FC5\u987B\u662F\u5305\u542B\u5B57\u7B26\u4E32 id \u7684 JSON \u5BF9\u8C61");
+    const creating = state.creating, identity = creating ? { ...scope(), id: doc.id, partitionKeyText: $("document-pk").value } : state.snapshot;
+    parseArray(identity.partitionKeyText, "\u5206\u533A\u952E");
+    if (!creating && (doc.id !== identity.id || $("document-pk").value !== identity.partitionKeyText || $("document-id").value !== identity.id))
+      throw new Error("\u66F4\u65B0\u65F6\u4E0D\u80FD\u66F4\u6539 id \u6216\u5206\u533A\u952E\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u6587\u6863");
+    if (!await confirmAction(
+      creating ? "\u521B\u5EFA\u6587\u6863\uFF1F" : "\u66FF\u6362\u5B8C\u6574\u6587\u6863\uFF1F",
+      `${identity.database} / ${identity.container}
+id: ${identity.id}
+\u5206\u533A\u952E: ${identity.partitionKeyText}`
+    ))
+      return;
+    const result = await invoke(creating ? "cosmos/create" : "cosmos/replace", {
+      ...identity,
+      documentText: text
+    });
+    opened(result, identity);
+    status("\u4FDD\u5B58\u6210\u529F\u3002\u67E5\u8BE2\u7ED3\u679C\u4E3A\u65E7\u5FEB\u7167\uFF0C\u53EF\u91CD\u65B0\u8FD0\u884C\u67E5\u8BE2\u5237\u65B0\u3002");
+  });
+  bind("delete", async () => {
+    if (dirty()) throw new Error("\u5F53\u524D\u6709\u672A\u4FDD\u5B58\u4FEE\u6539\uFF0C\u8BF7\u5148\u4FDD\u5B58\u6216\u91CD\u65B0\u8BFB\u53D6\u6587\u6863");
+    const identity = state.snapshot;
+    if (!identity) throw new Error("\u8BF7\u5148\u8BFB\u53D6\u5B8C\u6574\u6587\u6863");
+    if (!await confirmAction(
+      "\u6C38\u4E45\u5220\u9664\u6587\u6863\uFF1F",
+      `${identity.database} / ${identity.container}
+id: ${identity.id}
+\u5206\u533A\u952E: ${identity.partitionKeyText}
+\u6B64\u64CD\u4F5C\u65E0\u6CD5\u64A4\u9500\u3002`
+    ))
+      return;
+    const result = await invoke("cosmos/delete", identity);
+    resetEditor();
+    metrics(result, "\u5220\u9664\u6210\u529F\u3002\u91CD\u65B0\u8FD0\u884C\u67E5\u8BE2\u53EF\u5237\u65B0\u7ED3\u679C \xB7 ");
+  });
+  bind("export", async () => {
+    const p = state.pages[state.page];
+    const bytes = new TextEncoder().encode(p.json);
+    if (bytes.length > 1024 * 1024)
+      throw new Error("\u5F53\u524D\u9875\u8D85\u8FC7 1 MiB\uFF0C\u8BF7\u51CF\u5C0F\u6BCF\u9875\u6570\u91CF\u540E\u5BFC\u51FA");
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    const result = await host.request("host.saveFile", {
+      fileName: `${state.container}-page-${state.page + 1}.json`,
+      contentType: "application/json",
+      dataBase64: btoa(binary)
+    });
+    status(result ? "\u5F53\u524D\u9875\u5DF2\u5BFC\u51FA" : "\u5DF2\u53D6\u6D88\u5BFC\u51FA");
+  });
+  $("table-view").onclick = () => view(false);
+  $("json-view").onclick = () => view(true);
+  $("editor").addEventListener("input", () => {
+    $("document-state").textContent = dirty() ? "\u672A\u4FDD\u5B58" : state.creating ? "\u65B0\u6587\u6863" : "\u5B8C\u6574\u6587\u6863";
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (!$("run").disabled) $("run").click();
+    }
+  });
+  async function contextChanged(context) {
+    const id = context?.connectionId || context?.connection?.id || "";
+    if (id === state.connectionId) return;
+    if ($("confirm-dialog").open) $("confirm-dialog").close("cancel");
+    state.epoch++;
+    state.connectionId = id;
+    state.database = "";
+    state.container = "";
+    state.readOnly = true;
+    resetResults();
+    options("database", [], "\u9009\u62E9\u6570\u636E\u5E93");
+    options("container", [], "\u9009\u62E9\u5BB9\u5668");
+    $("connection-name").textContent = context?.connection?.name || context?.connectionName || context?.name || (id ? "\u5DF2\u8FDE\u63A5\u5230 Azure Cosmos DB" : "\u4ECE DBX \u6253\u5F00\u5DF2\u4FDD\u5B58\u7684 Cosmos DB \u8FDE\u63A5");
+    if (!id) {
+      $("mode").textContent = "\u672A\u8FDE\u63A5";
+      status("\u8BF7\u4ECE DBX \u8FDE\u63A5\u5217\u8868\u6253\u5F00\u5DF2\u4FDD\u5B58\u7684 Cosmos DB \u8FDE\u63A5\u3002");
+      controls();
+      return;
+    }
+    state.busy = false;
+    await action(async () => {
+      const info = await invoke("cosmos/info");
+      state.readOnly = info.readOnly;
+      $("mode").textContent = info.readOnly ? "\u53EA\u8BFB\u8FDE\u63A5" : "\u5141\u8BB8\u6587\u6863\u5199\u5165";
+      await loadDatabases();
+    });
+  }
+  controls();
+  if (host) {
+    host.onContext(contextChanged);
+    host.ready.then((context) => {
+      const syncTheme = () => document.body.classList.toggle(
+        "light",
+        host.theme?.appearance === "light"
+      );
+      syncTheme();
+      new MutationObserver(syncTheme).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["style", "class"]
+      });
+      return contextChanged(context || host.context);
+    }).catch((e) => status(e.message, true));
+  } else status("\u6B64\u5DE5\u4F5C\u53F0\u9700\u8981\u5728 DBX \u63D2\u4EF6\u5BBF\u4E3B\u4E2D\u6253\u5F00\u3002", true);
+})();
+
+    </script>
+  </body>
+</html>

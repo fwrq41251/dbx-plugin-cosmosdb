@@ -1,0 +1,14 @@
+/dist/
+/.dbx-dev/
+.dbx-repository-signing-key.env
+.DS_Store
+*.log
+/node_modules/
+/.dbx-build/
+/test-results/
+/playwright-report/
+/backend/dbx-plugin-cosmosdb
+.env
+.env.*
+*.dbxp
+*.artifact.json

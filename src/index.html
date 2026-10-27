@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cosmos DB NoSQL</title>
+    <style>
+      /* STYLE */
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="orbit">◉</span>
+        <div>
+          <strong>Cosmos DB <span class="muted">/ NoSQL</span></strong
+          ><small id="connection-name"
+            >从 DBX 打开已保存的 Cosmos DB 连接</small
+          >
+        </div>
+      </div>
+      <span id="mode" class="badge">未连接</span>
+    </header>
+    <div class="workspace">
+      <aside>
+        <div class="section-title">
+          数据库与容器 <button id="refresh" title="刷新数据库列表">↻</button>
+        </div>
+        <label
+          >数据库<select id="database" aria-label="数据库">
+            <option value="">选择数据库</option>
+          </select></label
+        ><label
+          >容器<select id="container" aria-label="容器">
+            <option value="">选择容器</option>
+          </select></label
+        >
+        <div id="container-info" class="info">连接后选择容器开始查询。</div>
+        <details>
+          <summary>容器元数据</summary>
+          <pre id="metadata">—</pre>
+        </details>
+        <div class="aside-note">
+          查询按页读取。RU 与耗时为当前页；导出仅包含当前页。
+        </div>
+      </aside>
+      <main>
+        <section class="query-panel">
+          <div class="section-title">
+            SQL 查询 <span class="muted">⌘ / Ctrl + Enter</span>
+          </div>
+          <textarea id="sql" aria-label="SQL 查询" spellcheck="false">
+SELECT * FROM c</textarea
+          >
+          <div class="query-options">
+            <label
+              >每页<select id="page-size">
+                <option>25</option>
+                <option selected>100</option>
+                <option>250</option>
+                <option>1000</option>
+              </select></label
+            ><label class="grow"
+              >分区键（可选 JSON 数组）<input
+                id="query-pk"
+                placeholder='["tenant-a"] 或留空跨分区'
+                spellcheck="false" /></label
+            ><button id="run" class="primary">运行查询</button>
+          </div>
+          <details>
+            <summary>查询参数</summary>
+            <textarea
+              id="parameters"
+              aria-label="查询参数"
+              spellcheck="false"
+              placeholder='[{"name":"@id","value":"example"}]'
+            >
+[]</textarea
+            >
+          </details>
+        </section>
+        <div id="status" role="status" aria-live="polite">等待连接</div>
+        <section class="results-panel">
+          <div class="section-title">
+            <div>查询结果 <span id="row-count" class="muted">0 条</span></div>
+            <div class="toolbar">
+              <button id="table-view" class="active">表格</button
+              ><button id="json-view">JSON</button
+              ><button id="export">导出当前页</button
+              ><button id="previous">上一页</button
+              ><span id="page-label">第 0 页</span
+              ><button id="next">下一页</button>
+            </div>
+          </div>
+          <div id="table" class="table-scroll">
+            <div class="empty">选择容器后运行查询</div>
+          </div>
+          <textarea
+            id="raw-results"
+            aria-label="JSON 查询结果"
+            readonly
+            hidden
+          ></textarea>
+        </section>
+      </main>
+      <section class="document-panel">
+        <div class="section-title">
+          文档 <span id="document-state" class="muted">未选择</span>
+        </div>
+        <div class="document-fields">
+          <label
+            >文档 id<input
+              id="document-id"
+              placeholder="文档 id"
+              spellcheck="false" /></label
+          ><label
+            >完整分区键（JSON 数组）<input
+              id="document-pk"
+              placeholder='["tenant-a"] / [null] / [{}]'
+              spellcheck="false"
+          /></label>
+          <div class="toolbar">
+            <button id="read">读取完整文档</button
+            ><button id="new">新建</button>
+          </div>
+        </div>
+        <textarea
+          id="editor"
+          aria-label="JSON 文档"
+          spellcheck="false"
+          readonly
+          placeholder="点击结果行预览，再读取完整文档进行编辑"
+        ></textarea>
+        <div class="document-footer">
+          <small id="etag">读取完整文档后才能更新或删除。</small>
+          <div class="toolbar">
+            <button id="save" class="primary">保存</button
+            ><button id="delete" class="danger">删除</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
+      <h3 id="confirm-title">确认操作</h3>
+      <p id="confirm-message"></p>
+      <div class="toolbar">
+        <button id="confirm-cancel" type="button">取消</button
+        ><button id="confirm-accept" type="button" class="primary">确认</button>
+      </div>
+    </dialog>
+    <script type="module">
+      /* SCRIPT */
+    </script>
+  </body>
+</html>

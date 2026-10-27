@@ -1,0 +1,21 @@
+{
+  "name": "dbx-plugin-cosmosdb",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-ui.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "package": "npm run build && node scripts/dbx-cli.mjs package .",
+    "dev": "npm run build && node scripts/dbx-cli.mjs dev --path .",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@dbx-app/plugin-cli": "0.1.9",
+    "@playwright/test": "1.56.1",
+    "esbuild": "^0.25.12"
+  },
+  "dependencies": {
+    "lossless-json": "^4.3.0"
+  }
+}

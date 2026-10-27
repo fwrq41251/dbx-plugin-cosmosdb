@@ -1,0 +1,74 @@
+{
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/v0.6.49/plugins/manifest.schema.json",
+  "manifest_version": 1,
+  "id": "io.local.cosmosdb",
+  "name": "Cosmos DB NoSQL",
+  "version": "0.1.0",
+  "publisher": "local",
+  "source": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
+  "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
+  "description": "Query and edit Azure Cosmos DB for NoSQL documents.",
+  "icon": "assets/plugin.svg",
+  "engines": {
+    "dbx": ">=0.6.49",
+    "host_api": "^1.0"
+  },
+  "permissions": [],
+  "entrypoints": {
+    "backend": {
+      "executable": "bin/dbx-plugin-dbx-plugin-cosmosdb"
+    },
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
+  },
+  "contributions": [
+    {
+      "type": "connection-provider",
+      "id": "io.local.cosmosdb.connection",
+      "label": "Azure Cosmos DB for NoSQL",
+      "database_type": "cosmosdb-nosql",
+      "icon": "assets/plugin.svg",
+      "fields": [
+        {
+          "key": "display_name",
+          "label": "连接名称",
+          "type": "text",
+          "binding": "name",
+          "required": true,
+          "default": "Cosmos DB"
+        },
+        {
+          "key": "host",
+          "label": "Account Endpoint",
+          "type": "text",
+          "binding": "host",
+          "required": true,
+          "placeholder": "https://account.documents.azure.com:443/"
+        },
+        {
+          "key": "account_key",
+          "label": "Account Key",
+          "type": "password",
+          "binding": "secret",
+          "required": true
+        },
+        {
+          "key": "read_only",
+          "label": "只读（关闭后允许文档增删改）",
+          "type": "boolean",
+          "binding": "config",
+          "default": true
+        }
+      ],
+      "workbench": "io.local.cosmosdb.main",
+      "capabilities": ["test", "connect", "disconnect"]
+    },
+    {
+      "type": "workbench",
+      "id": "io.local.cosmosdb.main",
+      "label": "Cosmos DB NoSQL"
+    }
+  ]
+}
