@@ -1,0 +1,19 @@
+{
+  "name": "Cosmos DB NoSQL",
+  "description": "Query and edit Azure Cosmos DB for NoSQL documents with partition-aware queries, JSON and field editors, and conditional single-document writes.",
+  "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
+  "license": "MIT",
+  "icon": "assets/plugin.svg",
+  "tags": [
+    "database",
+    "azure",
+    "cosmosdb",
+    "nosql"
+  ],
+  "localizations": {
+    "zh-CN": {
+      "name": "Cosmos DB NoSQL",
+      "description": "查询和编辑 Azure Cosmos DB for NoSQL 文档，支持分区键选择、JSON 与字段编辑及带版本条件的单文档增删改。"
+    }
+  }
+}

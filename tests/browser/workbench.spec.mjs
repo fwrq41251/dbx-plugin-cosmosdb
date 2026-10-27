@@ -32,15 +32,15 @@ test("query, paging, lossless document edit, and ETag conflict", async ({
   await expect(frame.locator("#table")).toContainText("没有匹配的结果");
   await frame.getByRole("button", { name: "上一页", exact: true }).click();
   await openDocument(frame);
-  const editor = frame.locator("#editor");
-  const original = await editor.inputValue();
+  const editor = frame.locator("#editor .cm-content");
+  const original = await editor.innerText();
   expect(original).toContain("9223372036854775807");
   await editor.fill(original.replace("pending", "paid"));
   // Dirty drafts must survive a cancelled query navigation.
   await frame.getByRole("button", { name: "运行查询", exact: true }).click();
   await expect(frame.locator("#confirm-dialog")).toBeVisible();
   await frame.getByRole("button", { name: "取消", exact: true }).click();
-  await expect(editor).toHaveValue(/paid/);
+  await expect(editor).toHaveText(/paid/);
   await activate(frame, "保存");
   await frame.getByRole("button", { name: "确认", exact: true }).click();
   await expect(frame.locator("#status")).toContainText("保存成功");
@@ -52,7 +52,7 @@ test("query, paging, lossless document edit, and ETag conflict", async ({
   expect(saved.writeCount).toBe(1);
   await request.get("http://127.0.0.1:18081/test/conflict");
   await frame.locator("#document-json-view").click();
-  await editor.fill((await editor.inputValue()).replace("paid", "shipped"));
+  await editor.fill((await editor.innerText()).replace("paid", "shipped"));
   await activate(frame, "保存");
   await frame.getByRole("button", { name: "确认", exact: true }).click();
   await expect(frame.locator("#status")).toContainText("HTTP 412");
@@ -68,7 +68,10 @@ test("read-only connection allows querying and reading but disables writes", asy
   await query(frame);
   await openDocument(frame);
   await expect(frame.locator("#mode")).toHaveText("只读连接");
-  await expect(frame.locator("#editor")).toHaveAttribute("readonly", "");
+  await expect(frame.locator("#editor .cm-content")).toHaveAttribute(
+    "contenteditable",
+    "false",
+  );
   for (const name of ["新建", "保存", "删除"])
     await expect(
       frame.getByRole("button", { name, exact: true }),
@@ -82,7 +85,7 @@ test("create and conditional delete require explicit confirmation", async ({
   await frame.getByRole("button", { name: "新建", exact: true }).click();
   await frame.locator("#document-pk").fill('["demo"]');
   await frame
-    .locator("#editor")
+    .locator("#editor .cm-content")
     .fill('{"id":"new-document","tenant":"demo","value":1}');
   await activate(frame, "保存");
   await frame.getByRole("button", { name: "确认", exact: true }).click();

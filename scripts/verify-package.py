@@ -46,9 +46,11 @@ with tempfile.TemporaryDirectory(prefix='cosmos-package-') as directory:
             assert '..' not in pathlib.PurePosixPath(name).parts and not name.startswith('/')
             assert hashlib.sha256(archive.read(name)).hexdigest() == digest, name
         manifest = json.loads(archive.read('manifest.json'))
-        assert manifest['id'] == 'io.local.cosmosdb'
+        assert manifest['id'] == 'io.github.fwrq41251.cosmosdb'
         assert manifest['permissions'] == []
         assert 'ui/licenses/DBX-Apache-2.0.txt' in checksums
+        for dependency in ['codemirror', 'codemirror-lang-json', 'codemirror-lang-sql', 'lezer-highlight']:
+            assert f'ui/licenses/{dependency}-LICENSE.txt' in checksums
         executable = pathlib.Path(directory) / pathlib.Path(manifest['entrypoints']['backend']['executable']).name
         executable.write_bytes(archive.read(manifest['entrypoints']['backend']['executable']))
         executable.chmod(0o700)

@@ -6,6 +6,8 @@
 
 - DBX 连接表单、Account Key 认证、真实连接测试、数据库与容器浏览。
 - Cosmos SQL 查询、参数化查询、可选分区键、逐页读取、上一页缓存。
+- CodeMirror 6 SQL / JSON 编辑器：高亮、行号、搜索与匹配数、撤销；JSON 折叠、精确格式化和语法错误行列定位。
+- Cosmos SQL 关键字、常用函数、查询参数与已知字段路径补全。文档面板可调整宽度或展开。
 - 分区键自动加载全部候选、关键词过滤、暂停与续读；显示加载进度与 RU。
 - 保存到容器层的连接，重开时直接进入数据库和容器；兼容原有 Account 连接。
 - 当前页 RU、耗时、Activity ID；表格 / JSON 视图；当前页 JSON 导出。
@@ -21,8 +23,10 @@
 
 兼容目标为 DBX **0.6.49+**、Host API 1.x、sidecar protocol v1。
 
-从源码运行下方构建命令后，安装包生成在 `dist/`；例如 Mac ARM64 对应 `io.local.cosmosdb-0.6.0-darwin-arm64.dbxp`。
-这是本地构建的未签名开发包。打开 DBX → 插件中心 → 设置 → 第三方与开发者选项，启用“允许安装未签名开发包”，然后选择 `.dbxp` 安装。它尚未上架官方商店。
+从源码运行下方构建命令后，安装包生成在 `dist/`；例如 Mac ARM64 对应 `io.github.fwrq41251.cosmosdb-0.8.0-darwin-arm64.dbxp`。
+正式插件 ID 为 `io.github.fwrq41251.cosmosdb`，发布者为 `fwrq41251`。首个发布目标为 macOS ARM64；其他平台暂未提供商店安装包。
+
+源码仓库的 Release 提供未签名审核候选包，正式商店包由 DBX Store 审核签名后分发。下述方式仅用于手动安装候选包：打开 DBX → 插件中心 → 设置 → 第三方与开发者选项，启用“允许安装未签名开发包”，然后选择 `.dbxp` 安装。商店审核状态见 [上架流程](docs/RELEASING.md)。
 
 新建连接时选择 **Azure Cosmos DB for NoSQL**：
 
@@ -63,6 +67,10 @@ Patch 每次最多 10 个操作，超过时会停止并提示；需要时在“�
 前后端都禁止 Patch 修改 id、分区键及其父子路径、系统字段。局部更新减少提交内容，不保证 RU 一定低于完整替换。
 
 ![字段编辑（本地模拟数据）](docs/field-editor.png)
+
+SQL 与 JSON 使用本地打包的 CodeMirror 6，不访问 CDN。SQL 输入时自动显示候选，也可按 `Ctrl + Space` 手动唤起，无需额外按钮。参数候选来自查询参数输入；字段候选只从已读取的完整文档和简单 `SELECT [TOP n] * FROM alias` 根文档查询中学习，按连接、数据库、容器隔离，仅在当前工作区内存中保留，不额外扫描容器。支持根别名、嵌套点路径、简单 `JOIN item IN c.items` 别名；特殊字段名插入方括号访问。候选不代表完整容器结构，复杂子查询与别名作用域暂不提供完整语义分析。
+
+JSON 格式错误会显示行列，点击提示可定位；无效草稿不可保存或切换至字段视图。格式化仅调整空白，保留长整数及小数原文，并支持撤销。读取另一份文档会重置编辑器撤销历史；切换字段 / JSON 视图保留草稿。`⌘ / Ctrl + Enter` 仅在查询区运行查询，避免打断 JSON 草稿。`⌘ / Ctrl + F` 搜索当前编辑器；匹配数量最多统计 10000 项，超出显示 `10000+`。拖动文档区左侧分隔条可调整宽度，聚焦分隔条后左右方向键也可调整；“放大 / 还原”按钮切换文档面板大小。JSON 工具收在“更多”菜单：格式化、折叠嵌套和展开所有层级；折叠嵌套保留根对象和顶层字段，没有嵌套内容时显示不可用原因。完整文档读出后自动收起定位表单，并在同一工作区记住所选的字段 / JSON 视图。
 
 SQL 语法错误、分区键不匹配、跨分区管线限制、索引不足、只读凭据、防火墙和并发冲突会显示对应中文说明；服务有提供 SQL 位置时会提示字符位置。不直接展示服务端原始错误中的 SQL 字面值或文档内容。无法分类的错误保留 HTTP 状态和通用说明。
 
@@ -122,6 +130,6 @@ npm run package
 
 `tests/`：本地模拟服务及模型 / 浏览器测试。
 
-本项目采用 MIT。固定引入的 DBX Go SDK 来自 `t8y2/dbx` 的 v0.6.49，采用 Apache-2.0，副本、许可证与版本说明位于 `backend/third_party/dbx-plugin-sdk/`。前端使用 MIT 许可的 lossless-json，许可证随包分发。
+本项目采用 MIT。固定引入的 DBX Go SDK 来自 `t8y2/dbx` 的 v0.6.49，采用 Apache-2.0，副本、许可证与版本说明位于 `backend/third_party/dbx-plugin-sdk/`。前端使用 MIT 许可的 lossless-json、CodeMirror 6 及相关语言和编辑扩展，全部生产依赖的许可证随包分发。
 
 协议参考：[DBX 插件开发](https://dbxio.com/en/docs/plugin-development)、[Cosmos REST 认证](https://learn.microsoft.com/en-us/rest/api/cosmos-db/access-control-on-cosmosdb-resources)、[查询](https://learn.microsoft.com/en-us/rest/api/cosmos-db/query-documents)、[文档替换](https://learn.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document)。

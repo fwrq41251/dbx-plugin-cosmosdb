@@ -98,14 +98,14 @@ test("over ten changes require explicitly selecting full replacement", async ({
   const f = await connect(page);
   await open(f);
   await f.locator("#document-json-view").click();
-  const doc = JSON.parse(await f.locator("#editor").inputValue());
+  const doc = JSON.parse(await f.locator("#editor .cm-content").innerText());
   // Keep the large untouched number exact in this test's edited JSON text.
   const additions = Array.from({ length: 11 }, (_, i) => `"f${i}":${i}`).join(
     ",",
   );
-  const original = await f.locator("#editor").inputValue();
+  const original = await f.locator("#editor .cm-content").innerText();
   await f
-    .locator("#editor")
+    .locator("#editor .cm-content")
     .fill(original.trim().slice(0, -1) + "," + additions + "}");
   await save(f);
   await expect(f.locator("#status")).toContainText("局部更新最多 10");
@@ -126,12 +126,12 @@ test("syntax and write permission errors are actionable without leaking upstream
   request,
 }) => {
   const f = await connect(page);
-  await f.locator("#sql").fill('SELECT * FROM c AND c.id = "one"');
+  await f.locator("#sql .cm-content").fill('SELECT * FROM c AND c.id = "one"');
   await f.locator("#run").click();
   await expect(f.locator("#status")).toContainText("SQL 语法错误");
   await expect(f.locator("#status")).toContainText("第 15 个字符");
   await expect(f.locator("#status")).not.toContainText("secret-upstream-value");
-  await f.locator("#sql").fill("SELECT * FROM c");
+  await f.locator("#sql .cm-content").fill("SELECT * FROM c");
   await open(f);
   await request.get(base + "deny-writes");
   await f.getByLabel("字段 /status", { exact: true }).fill("paid");

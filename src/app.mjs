@@ -1,3 +1,9 @@
+import { createCodeEditor } from "./code-editor.mjs";
+import {
+  KnownFields,
+  sqlCompletions,
+  hasRootProjection,
+} from "./sql-completion.mjs";
 import {
   keyFromDocument,
   parseArray,
@@ -38,9 +44,49 @@ const state = {
   baseline: "",
   creating: false,
   documentView: "json",
+  preferredDocumentView: "fields",
   fieldErrors: new Map(),
 };
 const host = window.dbxPlugin;
+const fieldScopes = new Map();
+function knownFields() {
+  const key = partitionScope();
+  if (!fieldScopes.has(key)) {
+    if (fieldScopes.size >= 30)
+      fieldScopes.delete(fieldScopes.keys().next().value);
+    fieldScopes.set(key, new KnownFields());
+  }
+  return fieldScopes.get(key);
+}
+let documentError = null;
+const documentEditor = createCodeEditor($("editor"), {
+  label: "JSON 文档",
+  readOnly: true,
+  hint: "点击结果行预览，再读取完整文档进行编辑",
+  diagnostics(error) {
+    documentError = error;
+    $("json-diagnostic").hidden = !error || state.documentView !== "json";
+    $("json-diagnostic").textContent = error?.message || "";
+  },
+});
+const sqlEditor = createCodeEditor($("sql"), {
+  label: "SQL 查询",
+  language: "sql",
+  value: "SELECT * FROM c",
+  completion(context) {
+    let parameters = [];
+    try {
+      parameters = parseArray($("parameters").value, "查询参数")
+        .map((x) => x?.name)
+        .filter((x) => typeof x === "string");
+    } catch {}
+    return sqlCompletions(context.state.doc.toString(), context.pos, {
+      fields: knownFields(),
+      parameters,
+      explicit: context.explicit,
+    });
+  },
+});
 const partitionScopes = new Map();
 let partitionTarget = "query-pk";
 function partitionScope() {
@@ -257,13 +303,14 @@ $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
 $("confirm-accept").onclick = () => $("confirm-dialog").close("confirm");
 function status(text, error = false) {
   $("status").textContent = text;
+  $("status").title = "";
   $("status").classList.toggle("error", error);
 }
 function dirty() {
   return (
     !state.readOnly &&
     !!(state.snapshot || state.creating) &&
-    ($("editor").value !== state.baseline || state.fieldErrors.size > 0)
+    (documentEditor.value !== state.baseline || state.fieldErrors.size > 0)
   );
 }
 function confirmAction(title, message, changes = []) {
@@ -315,7 +362,6 @@ function controls() {
     "refresh",
     "database",
     "container",
-    "sql",
     "query-pk",
     "page-size",
     "parameters",
@@ -324,6 +370,17 @@ function controls() {
   ])
     $(id).disabled = busy || !ready;
   for (const id of ["run", "read", "new"]) $(id).disabled = busy || !selected;
+  sqlEditor.readOnly = busy || !ready;
+  documentEditor.readOnly =
+    busy || state.readOnly || (!state.snapshot && !state.creating);
+  $("sql-search").disabled = busy || !ready;
+  $("document-search").disabled =
+    busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
+  $("document-more").disabled = busy || !documentEditor.value.trim();
+  if (busy) closeDocumentMenu();
+  documentActions();
+  $("document-format").disabled =
+    busy || state.readOnly || (!state.snapshot && !state.creating);
   $("previous").disabled = busy || state.page <= 0;
   $("next").disabled = busy || !state.pages[state.page]?.continuation;
   $("export").disabled = busy || state.page < 0;
@@ -332,7 +389,8 @@ function controls() {
     state.readOnly ||
     (!state.snapshot && !state.creating) ||
     (!!state.snapshot && !dirty()) ||
-    state.fieldErrors.size > 0;
+    state.fieldErrors.size > 0 ||
+    !!documentError;
   $("delete").disabled = busy || state.readOnly || !state.snapshot;
   $("new").disabled ||= state.readOnly;
   $("generate-id").hidden = !state.creating;
@@ -342,8 +400,6 @@ function controls() {
     : state.creating
       ? "已带入当前分区键；可编辑 id 或生成 UUID。保存前会显示字段预览。"
       : "读取完整文档后可修改或删除；保存前显示差异，系统字段不参与编辑。";
-  $("editor").readOnly =
-    busy || state.readOnly || (!state.snapshot && !state.creating);
   for (const id of ["fields-view", "document-json-view", "field-filter"])
     $(id).disabled = busy || !ready;
   for (const el of $("field-list").querySelectorAll(
@@ -397,16 +453,21 @@ function scope() {
   return { database: state.database, container: state.container };
 }
 function metrics(result, prefix = "") {
-  status(
-    `${prefix}${result.ru.toFixed(2)} RU · ${result.durationMs} ms${result.activityId ? " · Activity: " + result.activityId : ""}`,
-  );
+  status(`${prefix}${result.ru.toFixed(2)} RU · ${result.durationMs} ms`);
+  $("status").title = result.activityId
+    ? `Activity ID: ${result.activityId}`
+    : "";
 }
 function resetEditor() {
+  closeDocumentMenu();
+  $("document-location").open = true;
+  $("document-identity").textContent = "按 id 与分区键读取";
+  $("document-identity").title = "";
   state.fieldErrors.clear();
   state.snapshot = null;
   state.creating = false;
   state.baseline = "";
-  $("editor").value = "";
+  documentEditor.value = "";
   $("document-id").value = "";
   $("document-pk").value = "";
   $("document-state").textContent = "未选择";
@@ -534,7 +595,7 @@ function renderPage() {
         if (!(await discard())) return;
         resetEditor();
         state.baseline = encodeJSON(row, null, 2);
-        $("editor").value = state.baseline;
+        documentEditor.value = state.baseline;
         $("document-state").textContent = "查询投影（只读）";
         if (row && typeof row.id === "string") $("document-id").value = row.id;
         const paths =
@@ -588,7 +649,7 @@ async function query(next = false) {
     if ($("query-pk").value.trim()) parseArray($("query-pk").value, "分区键");
     spec = {
       ...scope(),
-      query: $("sql").value,
+      query: sqlEditor.value,
       parametersText: $("parameters").value,
       partitionKeyText: $("query-pk").value.trim(),
       pageSize: Number($("page-size").value),
@@ -597,6 +658,8 @@ async function query(next = false) {
   const result = await invoke("cosmos/query", spec);
   rememberKey(spec.partitionKeyText || "");
   learnPartitionKeys(parseJSON(result.json));
+  if (hasRootProjection(spec.query))
+    for (const doc of parseJSON(result.json)) knownFields().learn(doc);
   if (!next) state.pages = [];
   else state.pages = state.pages.slice(0, state.page + 1);
   state.pages.push({ ...result, spec });
@@ -614,11 +677,12 @@ function point() {
 function opened(result, identity) {
   const doc = parseJSON(result.json),
     etag = result.etag || doc._etag;
+  knownFields().learn(doc);
   state.snapshot = { ...identity, etag };
   state.creating = false;
   state.baseline = encodeJSON(editableDocument(doc), null, 2);
   state.fieldErrors.clear();
-  $("editor").value = state.baseline;
+  documentEditor.value = state.baseline;
   $("document-id").value = identity.id;
   $("document-pk").value = identity.partitionKeyText;
   rememberKey(identity.partitionKeyText);
@@ -629,7 +693,11 @@ function opened(result, identity) {
   metrics(result, "文档已读取 · ");
   $("save-method").value = "patch";
   $("field-filter").value = "";
-  setDocumentView("fields");
+  $("document-location").open = false;
+  $("document-identity").textContent = identity.id;
+  $("document-identity").title = identity.id;
+  $("etag").title = $("etag").textContent;
+  setDocumentView(state.preferredDocumentView);
 }
 
 function draftChanged() {
@@ -659,12 +727,18 @@ function setDocumentView(view) {
   state.documentView = view;
   $("field-editor").hidden = view !== "fields";
   $("editor").hidden = view !== "json";
+  $("json-diagnostic").hidden = !documentError || view !== "json";
+  $("document-more").hidden = view !== "json";
+  closeDocumentMenu();
+  documentEditor.measure();
   $("fields-view").classList.toggle("active", view === "fields");
+  $("fields-view").setAttribute("aria-pressed", String(view === "fields"));
+  $("document-json-view").setAttribute("aria-pressed", String(view === "json"));
   $("document-json-view").classList.toggle("active", view === "json");
   controls();
 }
 function renderFields() {
-  const doc = parseJSON($("editor").value),
+  const doc = parseJSON(documentEditor.value),
     rows = documentFields(doc, partitionPaths()),
     target = $("field-list"),
     needle = $("field-filter").value.trim().toLowerCase();
@@ -701,12 +775,12 @@ function renderFields() {
       try {
         const value = parseFieldInput(input.value, row.kind),
           next = editDocumentField(
-            parseJSON($("editor").value),
+            parseJSON(documentEditor.value),
             row.path,
             value,
             partitionPaths(),
           );
-        $("editor").value = encodeJSON(next, null, 2);
+        documentEditor.value = encodeJSON(next, null, 2);
         state.fieldErrors.delete(row.path);
         error.textContent = "";
         input.removeAttribute("aria-invalid");
@@ -731,9 +805,9 @@ function renderFields() {
         return;
       }
       try {
-        $("editor").value = encodeJSON(
+        documentEditor.value = encodeJSON(
           editDocumentField(
-            parseJSON($("editor").value),
+            parseJSON(documentEditor.value),
             row.path,
             null,
             partitionPaths(),
@@ -760,8 +834,147 @@ function renderFields() {
     target.append(empty);
   }
 }
-$("fields-view").onclick = () => setDocumentView("fields");
-$("document-json-view").onclick = () => setDocumentView("json");
+$("document-search").onclick = () => {
+  if (state.fieldErrors.size) {
+    status("请先修正字段值格式，再搜索 JSON。", true);
+    return;
+  }
+  setDocumentView("json");
+  documentEditor.search();
+};
+function closeDocumentMenu(focus = false) {
+  $("document-menu").hidden = true;
+  $("document-more").setAttribute("aria-expanded", "false");
+  if (focus) $("document-more").focus();
+}
+function documentActions() {
+  const invalid = !!documentError || !documentEditor.value.trim();
+  $("document-fold").disabled =
+    state.busy || invalid || !documentEditor.nestedFoldCount;
+  $("document-fold").title = invalid
+    ? "请先修正 JSON"
+    : documentEditor.nestedFoldCount
+      ? "收起嵌套对象与数组，保留顶层字段"
+      : "当前文档没有可折叠的嵌套对象或数组";
+  $("document-unfold").disabled = state.busy || !documentEditor.foldedCount;
+}
+function openDocumentMenu(last = false) {
+  if ($("document-more").disabled) return;
+  documentActions();
+  $("document-menu").hidden = false;
+  $("document-more").setAttribute("aria-expanded", "true");
+  const items = [
+    ...$("document-menu").querySelectorAll("button:not(:disabled)"),
+  ];
+  (last ? items.at(-1) : items[0])?.focus();
+}
+$("document-more").onclick = () =>
+  $("document-menu").hidden ? openDocumentMenu() : closeDocumentMenu(true);
+$("document-more").onkeydown = (event) => {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    openDocumentMenu(event.key === "ArrowUp");
+  }
+};
+$("document-menu").onkeydown = (event) => {
+  const items = [
+    ...$("document-menu").querySelectorAll("button:not(:disabled)"),
+  ];
+  const index = items.indexOf(document.activeElement);
+  if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+    event.preventDefault();
+    items[
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? items.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+            items.length
+    ]?.focus();
+  }
+};
+for (const [id, method] of [
+  ["document-format", "format"],
+  ["document-fold", "fold"],
+  ["document-unfold", "unfold"],
+]) {
+  $(id).onclick = () => {
+    closeDocumentMenu(true);
+    documentEditor[method]();
+  };
+}
+document.addEventListener("pointerdown", (event) => {
+  if (!event.target.closest(".menu-anchor")) closeDocumentMenu();
+});
+document.addEventListener("focusin", (event) => {
+  if (!event.target.closest(".menu-anchor")) closeDocumentMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !$("document-menu").hidden) {
+    event.preventDefault();
+    closeDocumentMenu(true);
+  }
+});
+$("document-location").addEventListener("toggle", () =>
+  documentEditor.measure(),
+);
+$("json-diagnostic").onclick = () => documentEditor.focusError();
+$("sql-search").onclick = () => sqlEditor.search();
+const workspace = document.querySelector(".workspace"),
+  separator = $("document-resize");
+function resizeDocument(width) {
+  const max = Math.max(290, Math.min(900, workspace.clientWidth - 540));
+  width = Math.round(Math.max(290, Math.min(max, width)));
+  workspace.style.setProperty("--document-width", `${width}px`);
+  separator.setAttribute("aria-valuemax", String(max));
+  separator.setAttribute("aria-valuenow", String(width));
+  documentEditor.measure();
+  sqlEditor.measure();
+}
+separator.onpointerdown = (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  separator.setPointerCapture(e.pointerId);
+};
+separator.onpointermove = (e) => {
+  if (separator.hasPointerCapture(e.pointerId))
+    resizeDocument(workspace.getBoundingClientRect().right - e.clientX);
+};
+separator.onpointerup = (e) => {
+  if (separator.hasPointerCapture(e.pointerId))
+    separator.releasePointerCapture(e.pointerId);
+};
+separator.onkeydown = (e) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  const width = Number(separator.getAttribute("aria-valuenow"));
+  resizeDocument(
+    e.key === "Home"
+      ? 290
+      : e.key === "End"
+        ? 900
+        : width + (e.key === "ArrowLeft" ? 30 : -30),
+  );
+};
+$("document-expand").onclick = () => {
+  const expanded = workspace.classList.toggle("document-expanded");
+  $("document-expand").textContent = expanded ? "还原" : "放大";
+  $("document-expand").title = expanded ? "还原文档面板" : "放大文档面板";
+  $("document-expand").setAttribute("aria-pressed", String(expanded));
+  documentEditor.measure();
+  sqlEditor.measure();
+};
+window.addEventListener("resize", () =>
+  resizeDocument(Number(separator.getAttribute("aria-valuenow"))),
+);
+$("fields-view").onclick = () => {
+  setDocumentView("fields");
+  if (state.documentView === "fields") state.preferredDocumentView = "fields";
+};
+$("document-json-view").onclick = () => {
+  setDocumentView("json");
+  if (state.documentView === "json") state.preferredDocumentView = "json";
+};
 $("field-filter").oninput = () => {
   if (state.fieldErrors.size) {
     status("请先修正无效字段值，再筛选。", true);
@@ -780,10 +993,10 @@ $("add-field").onclick = () => {
   try {
     if (state.fieldErrors.size) throw new Error("请先修正无效字段值。");
     const path = $("add-field-path").value.trim(),
-      doc = parseJSON($("editor").value);
+      doc = parseJSON(documentEditor.value);
     if (documentPathExists(doc, path))
       throw new Error("字段已存在，请直接编辑对应字段。");
-    $("editor").value = encodeJSON(
+    documentEditor.value = encodeJSON(
       editDocumentField(
         doc,
         path,
@@ -805,11 +1018,11 @@ function syncDraftPartition() {
   if (!state.creating) return;
   try {
     const doc = applyDocumentPartition(
-      editableDocument(parseJSON($("editor").value)),
+      editableDocument(parseJSON(documentEditor.value)),
       $("document-pk").value,
       partitionPaths(),
     );
-    $("editor").value = encodeJSON(doc, null, 2);
+    documentEditor.value = encodeJSON(doc, null, 2);
     $("document-id").value = doc.id || "";
     controls();
   } catch (error) {
@@ -868,6 +1081,8 @@ function view(json) {
   $("table").hidden = json;
   $("raw-results").hidden = !json;
   $("table-view").classList.toggle("active", !json);
+  $("table-view").setAttribute("aria-pressed", String(!json));
+  $("json-view").setAttribute("aria-pressed", String(json));
   $("json-view").classList.toggle("active", json);
 }
 const bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
@@ -979,7 +1194,7 @@ bind("new", async () => {
   resetEditor();
   state.creating = true;
   state.baseline = encodeJSON(doc, null, 2);
-  $("editor").value = state.baseline;
+  documentEditor.value = state.baseline;
   $("document-id").value = doc.id;
   $("document-pk").value = key;
   $("document-state").textContent = "新文档";
@@ -989,7 +1204,7 @@ bind("new", async () => {
 });
 bind("save", async () => {
   if (state.fieldErrors.size) throw new Error("请先修正字段值格式。");
-  const text = $("editor").value;
+  const text = documentEditor.value;
   const prepared = prepareDocument(
     text,
     $("document-pk").value,
@@ -1073,7 +1288,7 @@ bind("export", async () => {
 });
 $("table-view").onclick = () => view(false);
 $("json-view").onclick = () => view(true);
-$("editor").addEventListener("input", () => {
+documentEditor.onChange(() => {
   $("document-state").textContent = dirty()
     ? "未保存"
     : state.creating
@@ -1081,7 +1296,7 @@ $("editor").addEventListener("input", () => {
       : "完整文档";
   if (state.creating) {
     try {
-      $("document-id").value = parseJSON($("editor").value).id || "";
+      $("document-id").value = parseJSON(documentEditor.value).id || "";
     } catch {}
   }
   controls();
@@ -1097,16 +1312,16 @@ $("document-pk").addEventListener("input", () => {
 $("document-id").addEventListener("input", () => {
   if (!state.creating) return;
   try {
-    const doc = editableDocument(parseJSON($("editor").value));
+    const doc = editableDocument(parseJSON(documentEditor.value));
     doc.id = $("document-id").value;
-    $("editor").value = encodeJSON(doc, null, 2);
+    documentEditor.value = encodeJSON(doc, null, 2);
     controls();
   } catch (error) {
     status(error.message, true);
   }
 });
 bind("generate-id", async () => {
-  const doc = editableDocument(parseJSON($("editor").value));
+  const doc = editableDocument(parseJSON(documentEditor.value));
   doc.id = crypto.randomUUID();
   const paths = partitionPaths();
   if (paths.includes("/id")) {
@@ -1114,12 +1329,18 @@ bind("generate-id", async () => {
     values[paths.indexOf("/id")] = doc.id;
     $("document-pk").value = encodeJSON(values);
   }
-  $("editor").value = encodeJSON(doc, null, 2);
+  documentEditor.value = encodeJSON(doc, null, 2);
   $("document-id").value = doc.id;
   status("已生成新的文档 UUID。");
 });
 document.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+  if (
+    (e.metaKey || e.ctrlKey) &&
+    e.key === "Enter" &&
+    !e.isComposing &&
+    e.target.closest(".query-panel") &&
+    !$("confirm-dialog").open
+  ) {
     e.preventDefault();
     if (!$("run").disabled) $("run").click();
   }
@@ -1129,6 +1350,7 @@ async function contextChanged(context) {
   if (id === state.connectionId) return;
   for (const cache of partitionScopes.values()) cache.loader?.stop();
   partitionScopes.clear();
+  fieldScopes.clear();
   if ($("confirm-dialog").open) $("confirm-dialog").close("cancel");
   state.epoch++;
   state.connectionId = id;

@@ -46,22 +46,37 @@
       </aside>
       <main>
         <section class="query-panel">
-          <div class="section-title">
-            SQL 查询 <span class="muted">⌘ / Ctrl + Enter</span>
+          <div class="section-title query-heading">
+            <span>SQL 查询</span>
+            <div class="toolbar">
+              <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
+              <button
+                id="sql-search"
+                type="button"
+                class="icon-button"
+                aria-label="搜索 SQL"
+                title="搜索 SQL（⌘ / Ctrl + F）"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d="m16 16 4.5 4.5" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <textarea id="sql" aria-label="SQL 查询" spellcheck="false">
-SELECT * FROM c</textarea
-          >
+          <div id="sql" class="code-editor"></div>
           <div class="query-options">
             <label
-              >每页<select id="page-size">
+              >每页<select id="page-size" aria-label="每页条数">
                 <option>25</option>
                 <option selected>100</option>
                 <option>250</option>
                 <option>1000</option>
               </select></label
             ><label class="grow"
-              >分区键（可选 JSON 数组）<span class="pk-input"
+              ><span
+                >分区键 <span class="label-hint">可选 · JSON 数组</span></span
+              ><span class="pk-input"
                 ><input
                   id="query-pk"
                   placeholder='["tenant-a"] 或留空跨分区'
@@ -95,12 +110,21 @@ SELECT * FROM c</textarea
           <div class="section-title">
             <div>查询结果 <span id="row-count" class="muted">0 条</span></div>
             <div class="toolbar">
-              <button id="table-view" class="active">表格</button
-              ><button id="json-view">JSON</button
-              ><button id="export">导出当前页</button
-              ><button id="previous">上一页</button
-              ><span id="page-label">第 0 页</span
-              ><button id="next">下一页</button>
+              <div class="segmented" role="group" aria-label="查询结果视图">
+                <button id="table-view" class="active" aria-pressed="true">
+                  表格
+                </button>
+                <button id="json-view" aria-pressed="false">JSON</button>
+              </div>
+              <button id="export">导出当前页</button>
+            </div>
+          </div>
+          <div class="results-navigation">
+            <span class="muted">当前页结果</span>
+            <div class="toolbar pagination" aria-label="查询结果分页">
+              <button id="previous">上一页</button>
+              <span id="page-label">第 0 页</span>
+              <button id="next">下一页</button>
             </div>
           </div>
           <div id="table" class="table-scroll">
@@ -114,46 +138,138 @@ SELECT * FROM c</textarea
           ></textarea>
         </section>
       </main>
+      <div
+        id="document-resize"
+        role="separator"
+        aria-label="调整文档面板宽度"
+        aria-orientation="vertical"
+        tabindex="0"
+        aria-valuemin="290"
+        aria-valuemax="900"
+        aria-valuenow="400"
+      ></div>
       <section class="document-panel">
         <div class="section-title">
-          文档 <span id="document-state" class="muted">未选择</span>
-        </div>
-        <div class="document-fields">
-          <label
-            >文档 id<input
-              id="document-id"
-              placeholder="文档 id"
-              spellcheck="false" /></label
-          ><label
-            >完整分区键（JSON 数组）<span class="pk-input"
-              ><input
-                id="document-pk"
-                placeholder='["tenant-a"] / [null] / [{}]'
-                spellcheck="false"
-              /><button
-                id="document-pk-choose"
-                type="button"
-                aria-label="选择文档分区键"
-                aria-expanded="false"
-                aria-controls="pk-picker"
-              >
-                选择 ▾
-              </button></span
-            ></label
-          >
+          <div>文档 <span id="document-state" class="muted">未选择</span></div>
           <div class="toolbar">
-            <button id="read">读取完整文档</button
-            ><button id="new">新建</button>
-            <button id="generate-id" hidden>生成 UUID</button>
+            <button id="new" class="compact" type="button">新建</button>
+            <button
+              id="document-expand"
+              class="compact"
+              type="button"
+              aria-pressed="false"
+              title="放大文档面板"
+            >
+              放大
+            </button>
           </div>
-          <small id="write-hint">连接后可查看文档操作权限。</small>
         </div>
-        <div class="document-view-toolbar toolbar">
-          <button id="fields-view" type="button">字段</button>
-          <button id="document-json-view" type="button" class="active">
-            JSON
-          </button>
+        <details id="document-location" open>
+          <summary>
+            <span>文档定位</span
+            ><span id="document-identity" class="muted"
+              >按 id 与分区键读取</span
+            >
+          </summary>
+          <div class="document-fields">
+            <label
+              >文档 id<input
+                id="document-id"
+                placeholder="文档 id"
+                spellcheck="false" /></label
+            ><label
+              >完整分区键（JSON 数组）<span class="pk-input"
+                ><input
+                  id="document-pk"
+                  placeholder='["tenant-a"] / [null] / [{}]'
+                  spellcheck="false"
+                /><button
+                  id="document-pk-choose"
+                  type="button"
+                  aria-label="选择文档分区键"
+                  aria-expanded="false"
+                  aria-controls="pk-picker"
+                >
+                  选择 ▾
+                </button></span
+              ></label
+            >
+            <div class="toolbar">
+              <button id="read">读取完整文档</button>
+              <button id="generate-id" hidden>生成 UUID</button>
+            </div>
+            <small id="write-hint">连接后可查看文档操作权限。</small>
+          </div>
+        </details>
+        <div class="document-view-toolbar">
+          <div class="segmented" role="group" aria-label="文档视图">
+            <button id="fields-view" type="button" aria-pressed="false">
+              字段
+            </button>
+            <button
+              id="document-json-view"
+              type="button"
+              class="active"
+              aria-pressed="true"
+            >
+              JSON
+            </button>
+          </div>
+          <div class="toolbar document-tools">
+            <button
+              id="document-search"
+              type="button"
+              class="icon-button"
+              aria-label="搜索文档"
+              title="搜索文档（⌘ / Ctrl + F）"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="m16 16 4.5 4.5" />
+              </svg>
+            </button>
+            <div class="menu-anchor">
+              <button
+                id="document-more"
+                type="button"
+                class="icon-button"
+                aria-label="JSON 更多操作"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="document-menu"
+                title="JSON 更多操作"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1" />
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                </svg>
+              </button>
+              <div id="document-menu" role="menu" aria-label="JSON 操作" hidden>
+                <button id="document-format" type="button" role="menuitem">
+                  格式化 JSON
+                </button>
+                <button
+                  id="document-fold"
+                  type="button"
+                  role="menuitem"
+                  title="收起嵌套对象与数组，保留顶层字段"
+                >
+                  折叠嵌套
+                </button>
+                <button id="document-unfold" type="button" role="menuitem">
+                  展开所有层级
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
+        <button
+          id="json-diagnostic"
+          class="json-diagnostic"
+          type="button"
+          hidden
+        ></button>
         <section id="field-editor" hidden aria-label="文档字段编辑">
           <input
             id="field-filter"
@@ -179,13 +295,7 @@ SELECT * FROM c</textarea
             <button id="add-field" type="button">添加到草稿</button>
           </details>
         </section>
-        <textarea
-          id="editor"
-          aria-label="JSON 文档"
-          spellcheck="false"
-          readonly
-          placeholder="点击结果行预览，再读取完整文档进行编辑"
-        ></textarea>
+        <div id="editor" class="code-editor"></div>
         <div class="document-footer">
           <label id="save-method-row" hidden
             >保存方式<select id="save-method" aria-label="保存方式">

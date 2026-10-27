@@ -23,14 +23,14 @@ test("new documents inherit partition fields, generate UUIDs, preview changes an
   const initial = await f.locator("#document-id").inputValue();
   expect(initial).toMatch(/^[0-9a-f-]{36}$/);
   await expect(f.locator("#document-pk")).toHaveValue('["demo"]');
-  expect(JSON.parse(await f.locator("#editor").inputValue()).tenant).toBe(
-    "demo",
-  );
+  expect(
+    JSON.parse(await f.locator("#editor .cm-content").innerText()).tenant,
+  ).toBe("demo");
   await activate(f, "generate-id");
   expect(await f.locator("#document-id").inputValue()).not.toBe(initial);
   await f.locator("#document-id").fill("preview-document");
   await f
-    .locator("#editor")
+    .locator("#editor .cm-content")
     .fill(
       '{"id":"preview-document","tenant":"demo","amount":9223372036854775807,"status":"new"}',
     );
@@ -40,7 +40,7 @@ test("new documents inherit partition fields, generate UUIDs, preview changes an
   await page.screenshot({ path: "docs/cud-preview.png", fullPage: true });
   await f.locator("#confirm-cancel").click();
   expect((await state(request)).writeCount).toBe(0);
-  await expect(f.locator("#editor")).toHaveValue(/preview-document/);
+  await expect(f.locator("#editor .cm-content")).toHaveText(/preview-document/);
   await activate(f, "save");
   await f.locator("#confirm-accept").click();
   await expect(f.locator("#status")).toContainText("保存成功");
@@ -59,14 +59,14 @@ test("partition mismatches are rejected before confirmation and successful write
   await f.getByRole("cell", { name: "order-001", exact: true }).click();
   await activate(f, "read");
   await f.locator("#document-json-view").click();
-  const text = await f.locator("#editor").inputValue();
+  const text = await f.locator("#editor .cm-content").innerText();
   expect(text).not.toContain("_etag");
-  await f.locator("#editor").fill(text.replace("demo", "other"));
+  await f.locator("#editor .cm-content").fill(text.replace("demo", "other"));
   await activate(f, "save");
   await expect(f.locator("#status")).toContainText("分区键");
   await expect(f.locator("#confirm-dialog")).toBeHidden();
   expect((await state(request)).writeCount).toBe(0);
-  await f.locator("#editor").fill(text.replace("pending", "paid"));
+  await f.locator("#editor .cm-content").fill(text.replace("pending", "paid"));
   await activate(f, "save");
   await expect(f.locator("#change-rows")).toContainText("/status");
   await expect(f.locator("#change-rows")).toContainText("pending");
@@ -76,7 +76,7 @@ test("partition mismatches are rejected before confirmation and successful write
   await expect(f.locator("#status")).toContainText("保存成功");
   await expect(f.locator("#status")).toContainText("查询刷新失败");
   await expect(f.locator("#row-count")).toHaveText("0 条");
-  await expect(f.locator("#editor")).toHaveValue(/paid/);
+  await expect(f.locator("#editor .cm-content")).toHaveText(/paid/);
   expect((await state(request)).writeCount).toBe(1);
 });
 

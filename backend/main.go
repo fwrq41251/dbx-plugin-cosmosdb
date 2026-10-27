@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const pluginID = "io.local.cosmosdb"
+const pluginID = "io.github.fwrq41251.cosmosdb"
 
 type plugin struct {
 	mu          sync.RWMutex
@@ -220,7 +220,7 @@ func rpcError(err error) *sdk.PluginError {
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.6.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.8.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

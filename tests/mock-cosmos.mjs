@@ -80,6 +80,13 @@ const server = http.createServer(async (req, res) => {
     throttleDiscovery = false;
     return send({ ok: true });
   }
+  if (req.url === "/test/nested-document") {
+    const doc = parseExact(document);
+    doc.address = { city: "Tokyo", coordinates: { latitude: 35.6 } };
+    doc.items = [{ sku: "sample", quantity: 2 }];
+    document = stringifyExact(doc);
+    return send({ ok: true });
+  }
   if (req.url === "/test/conflict") {
     version++;
     return send({ ok: true });
