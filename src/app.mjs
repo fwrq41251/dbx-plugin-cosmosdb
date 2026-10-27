@@ -7,6 +7,13 @@ import {
   encodeJSON,
 } from "./model.mjs";
 import { PartitionCandidates, PartitionLoader } from "./partitions.mjs";
+import {
+  editableDocument,
+  applyDocumentPartition,
+  newDocument,
+  prepareDocument,
+  documentChanges,
+} from "./documents.mjs";
 const $ = (id) => document.getElementById(id);
 const state = {
   connectionId: "",
@@ -98,6 +105,7 @@ function renderPartitionOptions() {
       if (state.busy) return;
       $(partitionTarget).value = item.key;
       if (partitionTarget === "query-pk") cache.selected = item.key;
+      else if (state.creating) syncDraftPartition();
       closePartitionPicker();
       $(partitionTarget).focus();
     };
@@ -135,7 +143,6 @@ function renderPartitionOptions() {
 function openPartitionPicker(target) {
   if (state.busy || !state.container) return;
   partitionTarget = target;
-  rememberKey($(target).value);
   $("pk-filter").value = "";
   $("pk-title").textContent =
     target === "query-pk" ? "选择查询分区键" : "选择文档分区键";
@@ -170,7 +177,7 @@ async function startPartitionOptions(refresh = false) {
           const saved = await invoke("cosmos/partitionCache", identity);
           if (saved.found) {
             for (const value of saved.keys) cache.add(value);
-            cache.stats.seek.started = true;
+            cache.stats.seek.started = saved.complete || !!saved.continuation;
             cache.stats.seek.continuation = saved.continuation || "";
             cache.cachedAt = saved.updatedAt;
           }
@@ -250,10 +257,25 @@ function dirty() {
     $("editor").value !== state.baseline
   );
 }
-function confirmAction(title, message) {
+function confirmAction(title, message, changes = []) {
   status("等待确认：" + title);
   $("confirm-title").textContent = title;
   $("confirm-message").textContent = message;
+  const rows = $("change-rows");
+  rows.replaceChildren();
+  $("confirm-changes").hidden = !changes.length;
+  $("confirm-dialog").classList.toggle("has-changes", !!changes.length);
+  $("change-count").textContent =
+    `${changes.length} 个字段变化${changes.length > 200 ? "（仅显示前 200 项）" : ""}`;
+  for (const change of changes.slice(0, 200)) {
+    const tr = document.createElement("tr");
+    for (const value of [change.path, change.before, change.after]) {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.append(td);
+    }
+    rows.append(tr);
+  }
   return new Promise((resolve) => {
     const d = $("confirm-dialog");
     d.returnValue = "cancel";
@@ -297,9 +319,19 @@ function controls() {
   $("next").disabled = busy || !state.pages[state.page]?.continuation;
   $("export").disabled = busy || state.page < 0;
   $("save").disabled =
-    busy || state.readOnly || (!state.snapshot && !state.creating);
+    busy ||
+    state.readOnly ||
+    (!state.snapshot && !state.creating) ||
+    (!!state.snapshot && !dirty());
   $("delete").disabled = busy || state.readOnly || !state.snapshot;
   $("new").disabled ||= state.readOnly;
+  $("generate-id").hidden = !state.creating;
+  $("generate-id").disabled = busy || state.readOnly || !state.creating;
+  $("write-hint").textContent = state.readOnly
+    ? "当前连接只读。增删改需要可写凭据，并关闭保存连接中的只读设置后重新连接。"
+    : state.creating
+      ? "已带入当前分区键；可编辑 id 或生成 UUID。保存前会显示字段预览。"
+      : "读取完整文档后可修改或删除；保存前显示差异，系统字段不参与编辑。";
   $("editor").readOnly =
     busy || state.readOnly || (!state.snapshot && !state.creating);
   for (const id of ["query-pk-choose", "document-pk-choose"])
@@ -556,7 +588,7 @@ function opened(result, identity) {
     etag = result.etag || doc._etag;
   state.snapshot = { ...identity, etag };
   state.creating = false;
-  state.baseline = formatJSON(result.json);
+  state.baseline = encodeJSON(editableDocument(doc), null, 2);
   $("editor").value = state.baseline;
   $("document-id").value = identity.id;
   $("document-pk").value = identity.partitionKeyText;
@@ -566,6 +598,70 @@ function opened(result, identity) {
     ? `ETag: ${etag}`
     : "服务未提供 ETag，无法更新或删除";
   metrics(result, "文档已读取 · ");
+}
+
+function syncDraftPartition() {
+  if (!state.creating) return;
+  try {
+    const doc = applyDocumentPartition(
+      editableDocument(parseJSON($("editor").value)),
+      $("document-pk").value,
+      partitionPaths(),
+    );
+    $("editor").value = encodeJSON(doc, null, 2);
+    $("document-id").value = doc.id || "";
+    controls();
+  } catch (error) {
+    status(error.message, true);
+  }
+}
+async function pauseDiscovery() {
+  const loader = candidates().loader;
+  loader?.stop();
+  if (loader?.task) await loader.task;
+}
+async function afterMutation(result, identity, verb) {
+  const notes = [];
+  try {
+    const saved = await invoke("cosmos/partitionCache", scope());
+    if (saved.found) {
+      const old = candidates(),
+        next = new PartitionCandidates();
+      old.loader?.stop();
+      next.selected = old.selected;
+      for (const key of saved.keys) next.add(key);
+      next.hydrated = true;
+      next.cachedAt = saved.updatedAt;
+      next.stats.seek.started = saved.complete || !!saved.continuation;
+      next.stats.seek.continuation = saved.continuation || "";
+      partitionScopes.set(partitionScope(), next);
+    }
+  } catch (error) {
+    if (error.message === "STALE") throw error;
+    notes.push("分区键缓存读取失败");
+  }
+  const previous = state.pages[state.page]?.spec;
+  if (previous) {
+    const spec = { ...previous };
+    delete spec.continuation;
+    try {
+      const refreshed = await invoke("cosmos/query", spec);
+      state.pages = [{ ...refreshed, spec }];
+      state.page = 0;
+      renderPage();
+      notes.push(`上次查询已刷新至第 1 页（${refreshed.ru.toFixed(2)} RU）`);
+    } catch (error) {
+      if (error.message === "STALE") throw error;
+      state.pages = [];
+      state.page = -1;
+      renderPage();
+      notes.push(`查询刷新失败，请手动运行：${error.message}`);
+    }
+  }
+  if (result.cacheWarning) notes.push(result.cacheWarning);
+  status(
+    `${verb}成功 · ${result.ru.toFixed(2)} RU${notes.length ? " · " + notes.join("；") : ""}`,
+  );
 }
 function view(json) {
   $("table").hidden = json;
@@ -677,44 +773,61 @@ bind("read", async () => {
 });
 bind("new", async () => {
   if (!(await discard())) return;
+  const key = $("query-pk").value.trim() || $("document-pk").value.trim();
+  const doc = newDocument(partitionPaths(), key, crypto.randomUUID());
   resetEditor();
   state.creating = true;
-  state.baseline = '{\n  "id": ""\n}';
+  state.baseline = encodeJSON(doc, null, 2);
   $("editor").value = state.baseline;
+  $("document-id").value = doc.id;
+  $("document-pk").value = key;
   $("document-state").textContent = "新文档";
-  $("etag").textContent = "填写 JSON（含 id）及完整分区键后保存。";
+  $("etag").textContent =
+    "新文档使用创建操作；同 id 与分区键已存在时会报冲突，不会覆盖。";
   status("正在编辑新文档");
 });
 bind("save", async () => {
   const text = $("editor").value;
-  const doc = parseJSON(text);
-  if (!doc || Array.isArray(doc) || typeof doc.id !== "string" || !doc.id)
-    throw new Error("文档必须是包含字符串 id 的 JSON 对象");
+  const prepared = prepareDocument(
+    text,
+    $("document-pk").value,
+    partitionPaths(),
+    state.creating ? null : state.snapshot,
+  );
+  const doc = prepared.doc;
   const creating = state.creating,
     identity = creating
-      ? { ...scope(), id: doc.id, partitionKeyText: $("document-pk").value }
+      ? { ...scope(), id: doc.id, partitionKeyText: prepared.partitionKeyText }
       : state.snapshot;
   parseArray(identity.partitionKeyText, "分区键");
   if (
     !creating &&
-    (doc.id !== identity.id ||
-      $("document-pk").value !== identity.partitionKeyText ||
-      $("document-id").value !== identity.id)
+    (doc.id !== identity.id || $("document-id").value !== identity.id)
   )
     throw new Error("更新时不能更改 id 或分区键，请重新读取文档");
+  const changes = documentChanges(
+    creating ? {} : parseJSON(state.baseline),
+    doc,
+  );
+  if (!changes.length) {
+    status("没有需要保存的字段变化。");
+    return;
+  }
   if (
     !(await confirmAction(
       creating ? "创建文档？" : "替换完整文档？",
       `${identity.database} / ${identity.container}\nid: ${identity.id}\n分区键: ${identity.partitionKeyText}`,
+      changes,
     ))
   )
     return;
+  await pauseDiscovery();
   const result = await invoke(creating ? "cosmos/create" : "cosmos/replace", {
     ...identity,
-    documentText: text,
+    documentText: prepared.text,
   });
   opened(result, identity);
-  status("保存成功。查询结果为旧快照，可重新运行查询刷新。");
+  await afterMutation(result, identity, "保存");
 });
 bind("delete", async () => {
   if (dirty()) throw new Error("当前有未保存修改，请先保存或重新读取文档");
@@ -724,12 +837,14 @@ bind("delete", async () => {
     !(await confirmAction(
       "永久删除文档？",
       `${identity.database} / ${identity.container}\nid: ${identity.id}\n分区键: ${identity.partitionKeyText}\n此操作无法撤销。`,
+      documentChanges(parseJSON(state.baseline), {}),
     ))
   )
     return;
+  await pauseDiscovery();
   const result = await invoke("cosmos/delete", identity);
   resetEditor();
-  metrics(result, "删除成功。重新运行查询可刷新结果 · ");
+  await afterMutation(result, identity, "删除");
 });
 bind("export", async () => {
   const p = state.pages[state.page];
@@ -753,6 +868,44 @@ $("editor").addEventListener("input", () => {
     : state.creating
       ? "新文档"
       : "完整文档";
+  if (state.creating) {
+    try {
+      $("document-id").value = parseJSON($("editor").value).id || "";
+    } catch {}
+  }
+  controls();
+});
+$("document-pk").addEventListener("input", () => {
+  try {
+    parseArray($("document-pk").value, "分区键");
+  } catch {
+    return;
+  }
+  syncDraftPartition();
+});
+$("document-id").addEventListener("input", () => {
+  if (!state.creating) return;
+  try {
+    const doc = editableDocument(parseJSON($("editor").value));
+    doc.id = $("document-id").value;
+    $("editor").value = encodeJSON(doc, null, 2);
+    controls();
+  } catch (error) {
+    status(error.message, true);
+  }
+});
+bind("generate-id", async () => {
+  const doc = editableDocument(parseJSON($("editor").value));
+  doc.id = crypto.randomUUID();
+  const paths = partitionPaths();
+  if (paths.includes("/id")) {
+    const values = parseArray($("document-pk").value, "分区键");
+    values[paths.indexOf("/id")] = doc.id;
+    $("document-pk").value = encodeJSON(values);
+  }
+  $("editor").value = encodeJSON(doc, null, 2);
+  $("document-id").value = doc.id;
+  status("已生成新的文档 UUID。");
 });
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {

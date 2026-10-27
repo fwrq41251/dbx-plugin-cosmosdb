@@ -56,7 +56,7 @@ func (c *cosmosClient) readPartitionCache(database, container string) (partition
 		return empty, errors.New("Invalid partition cache size")
 	}
 	var cache partitionCache
-	if json.Unmarshal(data, &cache) != nil || cache.Version != 1 || len(cache.Keys) > 20000 || len(cache.Continuation) > 128*1024 || cache.Complete != (cache.Continuation == "") {
+	if json.Unmarshal(data, &cache) != nil || cache.Version != 1 || len(cache.Keys) > 20000 || len(cache.Continuation) > 128*1024 || (cache.Complete && cache.Continuation != "") {
 		return empty, errors.New("Invalid partition cache")
 	}
 	for _, key := range cache.Keys {
@@ -101,9 +101,22 @@ func (c *cosmosClient) savePartitionCache(r request, p keyPage) error {
 	sort.Strings(cache.Keys)
 	cache.Continuation = p.Continuation
 	cache.Complete = p.Continuation == ""
-	cache.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	cache.RU += p.RU
-	path, err := c.partitionCachePath(r.Database, r.Container)
+	return c.writePartitionCache(r.Database, r.Container, cache)
+}
+
+func (c *cosmosClient) writePartitionCache(database, container string, cache partitionCache) error {
+	cache.Version = 1
+	cache.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	sort.Strings(cache.Keys)
+	data, err := json.Marshal(cache)
+	if err != nil {
+		return err
+	}
+	if len(data) > 8*1024*1024 || len(cache.Keys) > 20000 {
+		return errors.New("Partition cache limit exceeded")
+	}
+	path, err := c.partitionCachePath(database, container)
 	if err != nil {
 		return err
 	}
@@ -115,7 +128,7 @@ func (c *cosmosClient) savePartitionCache(r request, p keyPage) error {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if err = json.NewEncoder(f).Encode(cache); err != nil {
+	if _, err = f.Write(data); err != nil {
 		f.Close()
 		return err
 	}

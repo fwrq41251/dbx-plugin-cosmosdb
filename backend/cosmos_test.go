@@ -105,6 +105,10 @@ func TestMetadataPagingAndParentSignature(t *testing.T) {
 }
 func TestReplacePreservesPrecisionStripsSystemFieldsAndUsesETag(t *testing.T) {
 	c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Items") {
+			fmt.Fprint(w, `{"partitionKey":{"paths":["/tenant"]}}`)
+			return
+		}
 		if r.Method != "PUT" || r.Header.Get("If-Match") != `"version-1"` {
 			t.Error("missing conditional replace")
 		}
@@ -115,7 +119,7 @@ func TestReplacePreservesPrecisionStripsSystemFieldsAndUsesETag(t *testing.T) {
 		fmt.Fprint(w, `{"id":"one","large":9223372036854775807,"_etag":"\"version-2\""}`)
 	}, false)
 	r := testRequest()
-	r.Document = json.RawMessage(`{"id":"one","large":9223372036854775807,"_etag":"old","_ts":123}`)
+	r.Document = json.RawMessage(`{"id":"one","tenant":"tenant","large":9223372036854775807,"_etag":"old","_ts":123}`)
 	if _, err := c.documents("cosmos/replace", r); err != nil {
 		t.Fatal(err)
 	}
@@ -148,6 +152,10 @@ func TestConflictAndThrottleAreNotRetried(t *testing.T) {
 		t.Run(fmt.Sprint(code), func(t *testing.T) {
 			var calls atomic.Int32
 			c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Items") {
+					fmt.Fprint(w, `{"partitionKey":{"paths":["/tenant"]}}`)
+					return
+				}
 				calls.Add(1)
 				w.Header().Set("x-ms-activity-id", "activity")
 				w.Header().Set("x-ms-retry-after-ms", "500")
@@ -170,6 +178,10 @@ func TestCreateAndDelete(t *testing.T) {
 	for _, method := range []string{"cosmos/create", "cosmos/delete"} {
 		t.Run(method, func(t *testing.T) {
 			c := clientFor(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/Items") {
+					fmt.Fprint(w, `{"partitionKey":{"paths":["/tenant"]}}`)
+					return
+				}
 				if method == "cosmos/create" {
 					if r.Method != "POST" || r.Header.Get("x-ms-documentdb-is-upsert") != "" {
 						t.Error("create must not upsert")
@@ -184,7 +196,7 @@ func TestCreateAndDelete(t *testing.T) {
 				}
 			}, false)
 			r := testRequest()
-			r.Document = json.RawMessage(`{"id":"one"}`)
+			r.Document = json.RawMessage(`{"id":"one","tenant":"tenant"}`)
 			if _, err := c.documents(method, r); err != nil {
 				t.Fatal(err)
 			}

@@ -144,7 +144,9 @@ SELECT * FROM c</textarea
           <div class="toolbar">
             <button id="read">读取完整文档</button
             ><button id="new">新建</button>
+            <button id="generate-id" hidden>生成 UUID</button>
           </div>
+          <small id="write-hint">连接后可查看文档操作权限。</small>
         </div>
         <textarea
           id="editor"
@@ -195,6 +197,21 @@ SELECT * FROM c</textarea
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
       <h3 id="confirm-title">确认操作</h3>
       <p id="confirm-message"></p>
+      <div id="confirm-changes" hidden>
+        <div id="change-count" class="info"></div>
+        <div class="changes-scroll">
+          <table aria-label="文档修改预览">
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>原值</th>
+                <th>新值</th>
+              </tr>
+            </thead>
+            <tbody id="change-rows"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="toolbar">
         <button id="confirm-cancel" type="button">取消</button
         ><button id="confirm-accept" type="button" class="primary">确认</button>

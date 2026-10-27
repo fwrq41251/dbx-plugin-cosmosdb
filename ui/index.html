@@ -354,6 +354,38 @@ dialog .toolbar {
   justify-content: flex-end;
   margin-top: 24px;
 }
+dialog.has-changes {
+  width: min(900px, calc(100vw - 32px));
+  max-width: 900px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.changes-scroll {
+  max-height: 45vh;
+  overflow: auto;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+}
+.changes-scroll th,
+.changes-scroll td {
+  min-width: 100px;
+  max-width: 350px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.changes-scroll th:first-child,
+.changes-scroll td:first-child {
+  width: 25%;
+}
+.changes-scroll td:nth-child(2) {
+  color: #b66d61;
+}
+.changes-scroll td:nth-child(3) {
+  color: var(--accent);
+}
 [hidden] {
   display: none !important;
 }
@@ -594,7 +626,9 @@ SELECT * FROM c</textarea
           <div class="toolbar">
             <button id="read">读取完整文档</button
             ><button id="new">新建</button>
+            <button id="generate-id" hidden>生成 UUID</button>
           </div>
+          <small id="write-hint">连接后可查看文档操作权限。</small>
         </div>
         <textarea
           id="editor"
@@ -645,6 +679,21 @@ SELECT * FROM c</textarea
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
       <h3 id="confirm-title">确认操作</h3>
       <p id="confirm-message"></p>
+      <div id="confirm-changes" hidden>
+        <div id="change-count" class="info"></div>
+        <div class="changes-scroll">
+          <table aria-label="文档修改预览">
+            <thead>
+              <tr>
+                <th>字段</th>
+                <th>原值</th>
+                <th>新值</th>
+              </tr>
+            </thead>
+            <tbody id="change-rows"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="toolbar">
         <button id="confirm-cancel" type="button">取消</button
         ><button id="confirm-accept" type="button" class="primary">确认</button>
@@ -810,16 +859,16 @@ SELECT * FROM c</textarea
     }
     return reviver.call(context, key, value);
   }
-  function reviveObject(object, reviver) {
-    for (const key of Object.keys(object)) {
-      const value = reviveValue(object, key, object[key], reviver);
+  function reviveObject(object2, reviver) {
+    for (const key of Object.keys(object2)) {
+      const value = reviveValue(object2, key, object2[key], reviver);
       if (value !== void 0) {
-        object[key] = value;
+        object2[key] = value;
       } else {
-        delete object[key];
+        delete object2[key];
       }
     }
-    return object;
+    return object2;
   }
   function reviveArray(array, reviver) {
     for (let i = 0; i < array.length; i++) {
@@ -844,7 +893,7 @@ SELECT * FROM c</textarea
       if (text.charCodeAt(i) === codeOpeningBrace) {
         i++;
         skipWhitespace();
-        const object = {};
+        const object2 = {};
         let initial = true;
         while (i < text.length && text.charCodeAt(i) !== codeClosingBrace) {
           if (!initial) {
@@ -866,25 +915,25 @@ SELECT * FROM c</textarea
             throwObjectValueExpected();
             return;
           }
-          if (Object.prototype.hasOwnProperty.call(object, key) && !isDeepEqual(value2, object[key])) {
+          if (Object.prototype.hasOwnProperty.call(object2, key) && !isDeepEqual(value2, object2[key])) {
             const returnedValue = onDuplicateKey({
               key,
               position: start + 1,
-              oldValue: object[key],
+              oldValue: object2[key],
               newValue: value2
             });
             if (returnedValue !== void 0) {
-              object[key] = returnedValue;
+              object2[key] = returnedValue;
             }
           } else {
-            object[key] = value2;
+            object2[key] = value2;
           }
         }
         if (text.charCodeAt(i) !== codeClosingBrace) {
           throwObjectKeyOrEndExpected();
         }
         i++;
-        return object;
+        return object2;
       }
     }
     function parseArray2() {
@@ -1201,11 +1250,11 @@ SELECT * FROM c</textarea
 ${indent}]` : "]";
       return str;
     }
-    function stringifyObject(object, indent) {
-      if (typeof object.toJSON === "function") {
-        return stringify(object.toJSON(), replacer, space, void 0);
+    function stringifyObject(object2, indent) {
+      if (typeof object2.toJSON === "function") {
+        return stringify(object2.toJSON(), replacer, space, void 0);
       }
-      const keys = Array.isArray(replacer) ? replacer.map(String) : Object.keys(object);
+      const keys = Array.isArray(replacer) ? replacer.map(String) : Object.keys(object2);
       if (keys.length === 0) {
         return "{}";
       }
@@ -1213,7 +1262,7 @@ ${indent}]` : "]";
       let first = true;
       let str = resolvedSpace ? "{\n" : "{";
       for (const key of keys) {
-        const value2 = typeof replacer === "function" ? replacer.call(object, key, object[key]) : object[key];
+        const value2 = typeof replacer === "function" ? replacer.call(object2, key, object2[key]) : object2[key];
         if (includeProperty(key, value2)) {
           if (first) {
             first = false;
@@ -1246,9 +1295,9 @@ ${indent}}` : "}";
   // src/model.mjs
   function keyFromDocument(document2, paths) {
     const values = paths.map((path) => {
-      const tokens = path.replace(/^\//, "").split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
+      const tokens2 = path.replace(/^\//, "").split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
       let value = document2;
-      for (const token of tokens) {
+      for (const token of tokens2) {
         if (value === null || typeof value !== "object" || !Object.hasOwn(value, token))
           return {};
         value = value[token];
@@ -1418,6 +1467,111 @@ ${indent}}` : "}";
     }
   };
 
+  // src/documents.mjs
+  var systemFields = /* @__PURE__ */ new Set(["_rid", "_self", "_etag", "_attachments", "_ts"]);
+  function object(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value) && !isLosslessNumber(value);
+  }
+  function editableDocument(doc) {
+    if (!object(doc)) throw new Error("\u6587\u6863\u5FC5\u987B\u662F JSON \u5BF9\u8C61");
+    return Object.fromEntries(
+      Object.entries(doc).filter(([key]) => !systemFields.has(key))
+    );
+  }
+  function tokens(path) {
+    if (!path.startsWith("/")) throw new Error("\u65E0\u6548\u7684\u5206\u533A\u952E\u8DEF\u5F84");
+    return path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
+  }
+  function applyDocumentPartition(doc, text, paths) {
+    const values = parseArray(text, "\u5206\u533A\u952E");
+    if (values.length !== (paths.length || 1))
+      throw new Error("\u5206\u533A\u952E\u7EC4\u4EF6\u6570\u91CF\u4E0E\u5BB9\u5668\u5B9A\u4E49\u4E0D\u4E00\u81F4");
+    values.forEach((value, index) => {
+      if (Array.isArray(value) || object(value) && Object.keys(value).length)
+        throw new Error("\u5206\u533A\u952E\u5FC5\u987B\u662F\u6807\u91CF\u3001null \u6216 {}");
+      if (!paths[index]) return;
+      const parts = tokens(paths[index]), undefinedKey = object(value);
+      let target = doc;
+      for (const part of parts.slice(0, -1)) {
+        if (!Object.hasOwn(target, part)) {
+          if (undefinedKey) return;
+          Object.defineProperty(target, part, {
+            value: {},
+            enumerable: true,
+            writable: true,
+            configurable: true
+          });
+        }
+        if (!object(target[part]))
+          throw new Error("\u5206\u533A\u952E\u8DEF\u5F84\u4E0E\u6587\u6863\u73B0\u6709\u5B57\u6BB5\u51B2\u7A81");
+        target = target[part];
+      }
+      const last = parts.at(-1);
+      if (undefinedKey) delete target[last];
+      else
+        Object.defineProperty(target, last, {
+          value,
+          enumerable: true,
+          writable: true,
+          configurable: true
+        });
+    });
+    return doc;
+  }
+  function newDocument(paths, partitionText, id) {
+    const doc = { id };
+    if (partitionText.trim()) applyDocumentPartition(doc, partitionText, paths);
+    return doc;
+  }
+  function prepareDocument(text, partitionText, paths, identity = null) {
+    const doc = editableDocument(parse(text));
+    if (typeof doc.id !== "string" || !doc.id)
+      throw new Error("\u6587\u6863\u5FC5\u987B\u5305\u542B\u975E\u7A7A\u5B57\u7B26\u4E32 id");
+    const values = parseArray(partitionText, "\u5206\u533A\u952E");
+    if (values.length !== (paths.length || 1))
+      throw new Error("\u5206\u533A\u952E\u7EC4\u4EF6\u6570\u91CF\u4E0E\u5BB9\u5668\u5B9A\u4E49\u4E0D\u4E00\u81F4");
+    const key = stringify(values), actual = keyFromDocument(doc, paths);
+    if (key !== actual)
+      throw new Error(
+        "\u6587\u6863\u6B63\u6587\u7684\u5206\u533A\u952E\u4E0E\u6240\u9009\u5206\u533A\u952E\u4E0D\u4E00\u81F4\uFF0C\u8BF7\u4FEE\u6B63\u6587\u6863\u6216\u91CD\u65B0\u9009\u62E9\u5206\u533A\u952E"
+      );
+    if (identity && (doc.id !== identity.id || key !== stringify(parseArray(identity.partitionKeyText, "\u5206\u533A\u952E"))))
+      throw new Error("\u66F4\u65B0\u65F6\u4E0D\u80FD\u66F4\u6539 id \u6216\u5206\u533A\u952E\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u6587\u6863");
+    return { doc, text: stringify(doc), partitionKeyText: key };
+  }
+  function documentChanges(before, after) {
+    const changes = [];
+    function visit(a, b, path, hasA = true, hasB = true) {
+      if (!hasA || !hasB) {
+        changes.push({
+          path: path || "/",
+          before: hasA ? stringify(a) : "\uFF08\u4E0D\u5B58\u5728\uFF09",
+          after: hasB ? stringify(b) : "\uFF08\u5220\u9664\uFF09"
+        });
+        return;
+      }
+      if (object(a) && object(b)) {
+        for (const key of /* @__PURE__ */ new Set([...Object.keys(a), ...Object.keys(b)])) {
+          const escaped = key.replace(/~/g, "~0").replace(/\//g, "~1");
+          visit(
+            a[key],
+            b[key],
+            path + "/" + escaped,
+            Object.hasOwn(a, key),
+            Object.hasOwn(b, key)
+          );
+        }
+      } else if (stringify(a) !== stringify(b))
+        changes.push({
+          path: path || "/",
+          before: stringify(a),
+          after: stringify(b)
+        });
+    }
+    visit(editableDocument(before), editableDocument(after), "");
+    return changes;
+  }
+
   // src/app.mjs
   var $ = (id) => document.getElementById(id);
   var state = {
@@ -1500,6 +1654,7 @@ ${indent}}` : "}";
         if (state.busy) return;
         $(partitionTarget).value = item.key;
         if (partitionTarget === "query-pk") cache.selected = item.key;
+        else if (state.creating) syncDraftPartition();
         closePartitionPicker();
         $(partitionTarget).focus();
       };
@@ -1523,7 +1678,6 @@ ${indent}}` : "}";
   function openPartitionPicker(target) {
     if (state.busy || !state.container) return;
     partitionTarget = target;
-    rememberKey($(target).value);
     $("pk-filter").value = "";
     $("pk-title").textContent = target === "query-pk" ? "\u9009\u62E9\u67E5\u8BE2\u5206\u533A\u952E" : "\u9009\u62E9\u6587\u6863\u5206\u533A\u952E";
     $("pk-picker").hidden = false;
@@ -1553,7 +1707,7 @@ ${indent}}` : "}";
             const saved = await invoke("cosmos/partitionCache", identity);
             if (saved.found) {
               for (const value of saved.keys) cache.add(value);
-              cache.stats.seek.started = true;
+              cache.stats.seek.started = saved.complete || !!saved.continuation;
               cache.stats.seek.continuation = saved.continuation || "";
               cache.cachedAt = saved.updatedAt;
             }
@@ -1613,10 +1767,24 @@ ${indent}}` : "}";
   function dirty() {
     return !state.readOnly && !!(state.snapshot || state.creating) && $("editor").value !== state.baseline;
   }
-  function confirmAction(title, message) {
+  function confirmAction(title, message, changes = []) {
     status("\u7B49\u5F85\u786E\u8BA4\uFF1A" + title);
     $("confirm-title").textContent = title;
     $("confirm-message").textContent = message;
+    const rows = $("change-rows");
+    rows.replaceChildren();
+    $("confirm-changes").hidden = !changes.length;
+    $("confirm-dialog").classList.toggle("has-changes", !!changes.length);
+    $("change-count").textContent = `${changes.length} \u4E2A\u5B57\u6BB5\u53D8\u5316${changes.length > 200 ? "\uFF08\u4EC5\u663E\u793A\u524D 200 \u9879\uFF09" : ""}`;
+    for (const change of changes.slice(0, 200)) {
+      const tr = document.createElement("tr");
+      for (const value of [change.path, change.before, change.after]) {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.append(td);
+      }
+      rows.append(tr);
+    }
     return new Promise((resolve) => {
       const d = $("confirm-dialog");
       d.returnValue = "cancel";
@@ -1654,9 +1822,12 @@ ${indent}}` : "}";
     $("previous").disabled = busy || state.page <= 0;
     $("next").disabled = busy || !state.pages[state.page]?.continuation;
     $("export").disabled = busy || state.page < 0;
-    $("save").disabled = busy || state.readOnly || !state.snapshot && !state.creating;
+    $("save").disabled = busy || state.readOnly || !state.snapshot && !state.creating || !!state.snapshot && !dirty();
     $("delete").disabled = busy || state.readOnly || !state.snapshot;
     $("new").disabled ||= state.readOnly;
+    $("generate-id").hidden = !state.creating;
+    $("generate-id").disabled = busy || state.readOnly || !state.creating;
+    $("write-hint").textContent = state.readOnly ? "\u5F53\u524D\u8FDE\u63A5\u53EA\u8BFB\u3002\u589E\u5220\u6539\u9700\u8981\u53EF\u5199\u51ED\u636E\uFF0C\u5E76\u5173\u95ED\u4FDD\u5B58\u8FDE\u63A5\u4E2D\u7684\u53EA\u8BFB\u8BBE\u7F6E\u540E\u91CD\u65B0\u8FDE\u63A5\u3002" : state.creating ? "\u5DF2\u5E26\u5165\u5F53\u524D\u5206\u533A\u952E\uFF1B\u53EF\u7F16\u8F91 id \u6216\u751F\u6210 UUID\u3002\u4FDD\u5B58\u524D\u4F1A\u663E\u793A\u5B57\u6BB5\u9884\u89C8\u3002" : "\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u540E\u53EF\u4FEE\u6539\u6216\u5220\u9664\uFF1B\u4FDD\u5B58\u524D\u663E\u793A\u5DEE\u5F02\uFF0C\u7CFB\u7EDF\u5B57\u6BB5\u4E0D\u53C2\u4E0E\u7F16\u8F91\u3002";
     $("editor").readOnly = busy || state.readOnly || !state.snapshot && !state.creating;
     for (const id of ["query-pk-choose", "document-pk-choose"])
       $(id).disabled = busy || !selected;
@@ -1887,7 +2058,7 @@ ${indent}}` : "}";
     const doc = parse(result.json), etag = result.etag || doc._etag;
     state.snapshot = { ...identity, etag };
     state.creating = false;
-    state.baseline = formatJSON(result.json);
+    state.baseline = stringify(editableDocument(doc), null, 2);
     $("editor").value = state.baseline;
     $("document-id").value = identity.id;
     $("document-pk").value = identity.partitionKeyText;
@@ -1895,6 +2066,68 @@ ${indent}}` : "}";
     $("document-state").textContent = "\u5B8C\u6574\u6587\u6863";
     $("etag").textContent = etag ? `ETag: ${etag}` : "\u670D\u52A1\u672A\u63D0\u4F9B ETag\uFF0C\u65E0\u6CD5\u66F4\u65B0\u6216\u5220\u9664";
     metrics(result, "\u6587\u6863\u5DF2\u8BFB\u53D6 \xB7 ");
+  }
+  function syncDraftPartition() {
+    if (!state.creating) return;
+    try {
+      const doc = applyDocumentPartition(
+        editableDocument(parse($("editor").value)),
+        $("document-pk").value,
+        partitionPaths()
+      );
+      $("editor").value = stringify(doc, null, 2);
+      $("document-id").value = doc.id || "";
+      controls();
+    } catch (error) {
+      status(error.message, true);
+    }
+  }
+  async function pauseDiscovery() {
+    const loader = candidates().loader;
+    loader?.stop();
+    if (loader?.task) await loader.task;
+  }
+  async function afterMutation(result, identity, verb) {
+    const notes = [];
+    try {
+      const saved = await invoke("cosmos/partitionCache", scope());
+      if (saved.found) {
+        const old = candidates(), next = new PartitionCandidates();
+        old.loader?.stop();
+        next.selected = old.selected;
+        for (const key of saved.keys) next.add(key);
+        next.hydrated = true;
+        next.cachedAt = saved.updatedAt;
+        next.stats.seek.started = saved.complete || !!saved.continuation;
+        next.stats.seek.continuation = saved.continuation || "";
+        partitionScopes.set(partitionScope(), next);
+      }
+    } catch (error) {
+      if (error.message === "STALE") throw error;
+      notes.push("\u5206\u533A\u952E\u7F13\u5B58\u8BFB\u53D6\u5931\u8D25");
+    }
+    const previous = state.pages[state.page]?.spec;
+    if (previous) {
+      const spec = { ...previous };
+      delete spec.continuation;
+      try {
+        const refreshed = await invoke("cosmos/query", spec);
+        state.pages = [{ ...refreshed, spec }];
+        state.page = 0;
+        renderPage();
+        notes.push(`\u4E0A\u6B21\u67E5\u8BE2\u5DF2\u5237\u65B0\u81F3\u7B2C 1 \u9875\uFF08${refreshed.ru.toFixed(2)} RU\uFF09`);
+      } catch (error) {
+        if (error.message === "STALE") throw error;
+        state.pages = [];
+        state.page = -1;
+        renderPage();
+        notes.push(`\u67E5\u8BE2\u5237\u65B0\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u8FD0\u884C\uFF1A${error.message}`);
+      }
+    }
+    if (result.cacheWarning) notes.push(result.cacheWarning);
+    status(
+      `${verb}\u6210\u529F \xB7 ${result.ru.toFixed(2)} RU${notes.length ? " \xB7 " + notes.join("\uFF1B") : ""}`
+    );
   }
   function view(json) {
     $("table").hidden = json;
@@ -2000,36 +2233,54 @@ ${indent}}` : "}";
   });
   bind("new", async () => {
     if (!await discard()) return;
+    const key = $("query-pk").value.trim() || $("document-pk").value.trim();
+    const doc = newDocument(partitionPaths(), key, crypto.randomUUID());
     resetEditor();
     state.creating = true;
-    state.baseline = '{\n  "id": ""\n}';
+    state.baseline = stringify(doc, null, 2);
     $("editor").value = state.baseline;
+    $("document-id").value = doc.id;
+    $("document-pk").value = key;
     $("document-state").textContent = "\u65B0\u6587\u6863";
-    $("etag").textContent = "\u586B\u5199 JSON\uFF08\u542B id\uFF09\u53CA\u5B8C\u6574\u5206\u533A\u952E\u540E\u4FDD\u5B58\u3002";
+    $("etag").textContent = "\u65B0\u6587\u6863\u4F7F\u7528\u521B\u5EFA\u64CD\u4F5C\uFF1B\u540C id \u4E0E\u5206\u533A\u952E\u5DF2\u5B58\u5728\u65F6\u4F1A\u62A5\u51B2\u7A81\uFF0C\u4E0D\u4F1A\u8986\u76D6\u3002";
     status("\u6B63\u5728\u7F16\u8F91\u65B0\u6587\u6863");
   });
   bind("save", async () => {
     const text = $("editor").value;
-    const doc = parse(text);
-    if (!doc || Array.isArray(doc) || typeof doc.id !== "string" || !doc.id)
-      throw new Error("\u6587\u6863\u5FC5\u987B\u662F\u5305\u542B\u5B57\u7B26\u4E32 id \u7684 JSON \u5BF9\u8C61");
-    const creating = state.creating, identity = creating ? { ...scope(), id: doc.id, partitionKeyText: $("document-pk").value } : state.snapshot;
+    const prepared = prepareDocument(
+      text,
+      $("document-pk").value,
+      partitionPaths(),
+      state.creating ? null : state.snapshot
+    );
+    const doc = prepared.doc;
+    const creating = state.creating, identity = creating ? { ...scope(), id: doc.id, partitionKeyText: prepared.partitionKeyText } : state.snapshot;
     parseArray(identity.partitionKeyText, "\u5206\u533A\u952E");
-    if (!creating && (doc.id !== identity.id || $("document-pk").value !== identity.partitionKeyText || $("document-id").value !== identity.id))
+    if (!creating && (doc.id !== identity.id || $("document-id").value !== identity.id))
       throw new Error("\u66F4\u65B0\u65F6\u4E0D\u80FD\u66F4\u6539 id \u6216\u5206\u533A\u952E\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u6587\u6863");
+    const changes = documentChanges(
+      creating ? {} : parse(state.baseline),
+      doc
+    );
+    if (!changes.length) {
+      status("\u6CA1\u6709\u9700\u8981\u4FDD\u5B58\u7684\u5B57\u6BB5\u53D8\u5316\u3002");
+      return;
+    }
     if (!await confirmAction(
       creating ? "\u521B\u5EFA\u6587\u6863\uFF1F" : "\u66FF\u6362\u5B8C\u6574\u6587\u6863\uFF1F",
       `${identity.database} / ${identity.container}
 id: ${identity.id}
-\u5206\u533A\u952E: ${identity.partitionKeyText}`
+\u5206\u533A\u952E: ${identity.partitionKeyText}`,
+      changes
     ))
       return;
+    await pauseDiscovery();
     const result = await invoke(creating ? "cosmos/create" : "cosmos/replace", {
       ...identity,
-      documentText: text
+      documentText: prepared.text
     });
     opened(result, identity);
-    status("\u4FDD\u5B58\u6210\u529F\u3002\u67E5\u8BE2\u7ED3\u679C\u4E3A\u65E7\u5FEB\u7167\uFF0C\u53EF\u91CD\u65B0\u8FD0\u884C\u67E5\u8BE2\u5237\u65B0\u3002");
+    await afterMutation(result, identity, "\u4FDD\u5B58");
   });
   bind("delete", async () => {
     if (dirty()) throw new Error("\u5F53\u524D\u6709\u672A\u4FDD\u5B58\u4FEE\u6539\uFF0C\u8BF7\u5148\u4FDD\u5B58\u6216\u91CD\u65B0\u8BFB\u53D6\u6587\u6863");
@@ -2040,12 +2291,14 @@ id: ${identity.id}
       `${identity.database} / ${identity.container}
 id: ${identity.id}
 \u5206\u533A\u952E: ${identity.partitionKeyText}
-\u6B64\u64CD\u4F5C\u65E0\u6CD5\u64A4\u9500\u3002`
+\u6B64\u64CD\u4F5C\u65E0\u6CD5\u64A4\u9500\u3002`,
+      documentChanges(parse(state.baseline), {})
     ))
       return;
+    await pauseDiscovery();
     const result = await invoke("cosmos/delete", identity);
     resetEditor();
-    metrics(result, "\u5220\u9664\u6210\u529F\u3002\u91CD\u65B0\u8FD0\u884C\u67E5\u8BE2\u53EF\u5237\u65B0\u7ED3\u679C \xB7 ");
+    await afterMutation(result, identity, "\u5220\u9664");
   });
   bind("export", async () => {
     const p = state.pages[state.page];
@@ -2065,6 +2318,45 @@ id: ${identity.id}
   $("json-view").onclick = () => view(true);
   $("editor").addEventListener("input", () => {
     $("document-state").textContent = dirty() ? "\u672A\u4FDD\u5B58" : state.creating ? "\u65B0\u6587\u6863" : "\u5B8C\u6574\u6587\u6863";
+    if (state.creating) {
+      try {
+        $("document-id").value = parse($("editor").value).id || "";
+      } catch {
+      }
+    }
+    controls();
+  });
+  $("document-pk").addEventListener("input", () => {
+    try {
+      parseArray($("document-pk").value, "\u5206\u533A\u952E");
+    } catch {
+      return;
+    }
+    syncDraftPartition();
+  });
+  $("document-id").addEventListener("input", () => {
+    if (!state.creating) return;
+    try {
+      const doc = editableDocument(parse($("editor").value));
+      doc.id = $("document-id").value;
+      $("editor").value = stringify(doc, null, 2);
+      controls();
+    } catch (error) {
+      status(error.message, true);
+    }
+  });
+  bind("generate-id", async () => {
+    const doc = editableDocument(parse($("editor").value));
+    doc.id = crypto.randomUUID();
+    const paths = partitionPaths();
+    if (paths.includes("/id")) {
+      const values = parseArray($("document-pk").value, "\u5206\u533A\u952E");
+      values[paths.indexOf("/id")] = doc.id;
+      $("document-pk").value = stringify(values);
+    }
+    $("editor").value = stringify(doc, null, 2);
+    $("document-id").value = doc.id;
+    status("\u5DF2\u751F\u6210\u65B0\u7684\u6587\u6863 UUID\u3002");
   });
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {

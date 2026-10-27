@@ -43,6 +43,7 @@ type page struct {
 	DurationMS   int64           `json:"durationMs"`
 	ActivityID   string          `json:"activityId"`
 	ETag         string          `json:"etag,omitempty"`
+	CacheWarning string          `json:"cacheWarning,omitempty"`
 }
 type serviceError struct {
 	status                 int
@@ -296,5 +297,18 @@ func (c *cosmosClient) documents(method string, r request) (page, error) {
 		}
 		h.Set("If-Match", r.ETag)
 	}
-	return c.request(verb, "docs", link, path, body, h, "dbs/"+r.Database+"/colls/"+r.Container)
+	metadataRU := 0.0
+	if method == "cosmos/create" || method == "cosmos/replace" {
+		meta, metaErr := c.containerMetadata(r.Database, r.Container)
+		if metaErr != nil {
+			return page{}, metaErr
+		}
+		if metaErr = validateDocumentPartition(json.RawMessage(body), r.PartitionKey, meta.Items); metaErr != nil {
+			return page{}, metaErr
+		}
+		metadataRU = meta.RU
+	}
+	p, err := c.request(verb, "docs", link, path, body, h, "dbs/"+r.Database+"/colls/"+r.Container)
+	p.RU += metadataRU
+	return p, err
 }

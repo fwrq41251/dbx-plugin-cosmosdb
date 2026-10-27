@@ -10,6 +10,7 @@ let version = 1,
   accountLists = 0,
   discoveryDelay = 0,
   unsupportedSeek = false,
+  failNextQuery = false,
   throttleDiscovery = false;
 const server = http.createServer(async (req, res) => {
   const send = (body, status = 200, headers = {}) => {
@@ -38,6 +39,10 @@ const server = http.createServer(async (req, res) => {
     unsupportedSeek = true;
     return send({ ok: true });
   }
+  if (req.url === "/test/fail-next-query") {
+    failNextQuery = true;
+    return send({ ok: true });
+  }
   if (req.url === "/test/throttle-discovery") {
     throttleDiscovery = true;
     return send({ ok: true });
@@ -52,6 +57,7 @@ const server = http.createServer(async (req, res) => {
     accountLists = 0;
     discoveryDelay = 0;
     unsupportedSeek = false;
+    failNextQuery = false;
     throttleDiscovery = false;
     return send({ ok: true });
   }
@@ -136,7 +142,10 @@ const server = http.createServer(async (req, res) => {
     req.headers["x-ms-documentdb-isquery"] === "true"
   ) {
     const query = JSON.parse(body).query;
-    if (query.startsWith("SELECT TOP 1 ")) {
+    if (
+      query.startsWith("SELECT TOP 1 ") &&
+      query !== "SELECT TOP 1 c.id FROM c"
+    ) {
       discoveryCalls++;
       if (discoveryDelay)
         await new Promise((resolve) => setTimeout(resolve, discoveryDelay));
@@ -150,11 +159,16 @@ const server = http.createServer(async (req, res) => {
       const after = JSON.parse(body).parameters?.[0]?.value;
       let raw;
       if (query.includes("IS_STRING")) {
-        const values = archive
+        let values = archive
           ? ["archive-only"]
           : second
             ? ["demo", "omega"]
             : ["42", "alpha", "beta", "demo"];
+        if (!archive && !second && !deleted) {
+          const tenant = JSON.parse(document).tenant;
+          if (typeof tenant === "string")
+            values = [...new Set([...values, tenant])].sort();
+        }
         const next = values.find(
           (value) => after === undefined || value > after,
         );
@@ -202,6 +216,14 @@ const server = http.createServer(async (req, res) => {
           "x-ms-continuation": "distinct-next",
         },
       );
+    }
+    if (query === "SELECT TOP 1 c.id FROM c")
+      return send({
+        Documents: deleted ? [] : [{ id: JSON.parse(document).id }],
+      });
+    if (failNextQuery) {
+      failNextQuery = false;
+      return send({}, 503);
     }
     if (req.headers["x-ms-continuation"]) return send('{"Documents":[]}', 200);
     if (query.includes("BAD")) return send({ message: "Invalid SQL" }, 400);

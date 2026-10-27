@@ -183,7 +183,16 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 			err = validID(r.Container)
 		}
 		if err == nil {
-			result, err = c.documents(method, r)
+			var document page
+			document, err = c.documents(method, r)
+			if err == nil && (method == "cosmos/create" || method == "cosmos/replace" || method == "cosmos/delete") {
+				ru, cacheErr := c.observeMutation(r, method == "cosmos/delete")
+				document.RU += ru
+				if cacheErr != nil {
+					document.CacheWarning = "文档写入已成功，但分区键缓存更新失败；需要时请刷新列表。"
+				}
+			}
+			result = document
 		}
 	default:
 		return nil, sdk.MethodNotFound(method)
@@ -200,7 +209,7 @@ func rpcError(err error) *sdk.PluginError {
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.4.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.5.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

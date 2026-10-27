@@ -347,6 +347,38 @@ dialog .toolbar {
   justify-content: flex-end;
   margin-top: 24px;
 }
+dialog.has-changes {
+  width: min(900px, calc(100vw - 32px));
+  max-width: 900px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.changes-scroll {
+  max-height: 45vh;
+  overflow: auto;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+}
+.changes-scroll th,
+.changes-scroll td {
+  min-width: 100px;
+  max-width: 350px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+.changes-scroll th:first-child,
+.changes-scroll td:first-child {
+  width: 25%;
+}
+.changes-scroll td:nth-child(2) {
+  color: #b66d61;
+}
+.changes-scroll td:nth-child(3) {
+  color: var(--accent);
+}
 [hidden] {
   display: none !important;
 }
