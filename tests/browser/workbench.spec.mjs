@@ -1,42 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { connect, query } from "./support.mjs";
 
-async function connect(page, readOnly = false) {
-  page.on("pageerror", (error) =>
-    console.error("Workbench page error:", error.message),
-  );
-  await page.goto("http://127.0.0.1:5191");
-  await page.getByRole("button", { name: "新建连接", exact: true }).click();
-  const name = `E2E-${Date.now()}`;
-  await page.getByRole("textbox", { name: "连接名称", exact: true }).fill(name);
-  await page
-    .getByRole("textbox", { name: "Account Endpoint", exact: true })
-    .fill("http://127.0.0.1:18081");
-  await page
-    .getByRole("textbox", { name: "Account Key", exact: true })
-    .fill("dGVzdC1hY2NvdW50LWtleQ==");
-  await page
-    .getByRole("checkbox", {
-      name: "只读（关闭后允许文档增删改）",
-      exact: true,
-    })
-    .setChecked(readOnly);
-  await page.getByRole("button", { name: "测试连接", exact: true }).click();
-  await expect(page.getByText("连接测试成功", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
-  await page.getByRole("button", { name, exact: true }).click();
-  const frame = page.frameLocator("iframe").last();
-  await frame.getByLabel("数据库", { exact: true }).selectOption("Shop");
-  await frame.getByLabel("容器", { exact: true }).selectOption("Orders");
-  return frame;
-}
 async function activate(frame, name) {
   const button = frame.getByRole("button", { name, exact: true });
   await expect(button).toBeEnabled();
   await button.press("Space");
-}
-async function query(frame) {
-  await frame.getByRole("button", { name: "运行查询", exact: true }).click();
-  await expect(frame.locator("#status")).toContainText("2.81 RU");
 }
 async function openDocument(frame) {
   await frame.getByRole("cell", { name: "order-001", exact: true }).click();

@@ -350,6 +350,76 @@ dialog .toolbar {
 [hidden] {
   display: none !important;
 }
+.pk-input {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.pk-input input {
+  flex: 1;
+  width: 0;
+}
+.pk-input button {
+  font-size: 11px;
+}
+#pk-picker {
+  position: fixed;
+  z-index: 1000;
+  width: min(460px, calc(100vw - 16px));
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px #0005;
+}
+#pk-filter {
+  flex: none;
+}
+#pk-options {
+  overflow: auto;
+  min-height: 70px;
+  max-height: 230px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+#pk-options button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 9px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#pk-options button[aria-selected="true"] {
+  background: #7cd4bf18;
+  color: var(--accent);
+}
+#pk-options code {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+#pk-options .empty {
+  min-height: 70px;
+  font-size: 11px;
+  padding: 12px;
+  text-align: center;
+}
+.pk-discovery {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
 @media (max-width: 1100px) {
   .workspace {
     grid-template-columns: 175px minmax(300px, 1fr) 290px;

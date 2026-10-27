@@ -243,3 +243,67 @@ func TestLifecycleSecretAndReadOnlyBoundary(t *testing.T) {
 		t.Fatal("disconnected connection retained")
 	}
 }
+
+func TestContainerScopedConnectionLifecycle(t *testing.T) {
+	calls := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/dbs/Shop/colls/Orders" || r.Method != "GET" {
+			t.Errorf("unexpected account-level request: %s %s", r.Method, r.URL.Path)
+		}
+		fmt.Fprint(w, `{"id":"Orders","partitionKey":{"paths":["/tenant"]}}`)
+	}))
+	defer s.Close()
+	p := &plugin{connections: make(map[string]*cosmosClient)}
+	raw := json.RawMessage(fmt.Sprintf(`{"connection":{"id":"scoped","host":%q,"connection_secrets":{"account_key":%q},"external_config":{"database_id":"Shop","container_id":"Orders"}}}`, s.URL, testKey))
+	call := func(method string, params json.RawMessage) any {
+		t.Helper()
+		result, err := p.Handle(sdk.RequestContext{}, method, params, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	for _, method := range []string{"connection/test", "connection/connect"} {
+		call(method, raw)
+	}
+	info := call("cosmos/info", json.RawMessage(`{"connectionId":"scoped"}`)).(map[string]any)
+	if info["database"] != "Shop" || info["container"] != "Orders" || info["readOnly"] != true {
+		t.Fatal(info)
+	}
+	databases := call("cosmos/databases", json.RawMessage(`{"connectionId":"scoped"}`)).(page)
+	if databases.JSON != `[{"id":"Shop"}]` {
+		t.Fatal(databases)
+	}
+	containers := call("cosmos/containers", json.RawMessage(`{"connectionId":"scoped","database":"Shop"}`)).(page)
+	if !strings.Contains(containers.JSON, `"id":"Orders"`) {
+		t.Fatal(containers)
+	}
+	if calls != 3 {
+		t.Fatalf("unexpected requests %d", calls)
+	}
+	for _, params := range []string{
+		`{"connectionId":"scoped","database":"Other","container":"Orders"}`,
+		`{"connectionId":"scoped","database":"Shop","container":"Other"}`,
+	} {
+		for _, method := range []string{"cosmos/containers", "cosmos/partitionKeys", "cosmos/query", "cosmos/create", "cosmos/delete"} {
+			if _, err := p.Handle(sdk.RequestContext{}, method, json.RawMessage(params), nil); err == nil {
+				t.Fatalf("scope escape: %s", method)
+			}
+		}
+	}
+	if calls != 3 {
+		t.Fatal("out-of-scope operation reached network")
+	}
+	call("connection/disconnect", json.RawMessage(`{"connection":{"id":"scoped"}}`))
+	call("connection/connect", raw)
+	if p.connections["scoped"].container != "Orders" {
+		t.Fatal("reconnect lost scope")
+	}
+	for _, config := range []string{`{"database_id":"Shop"}`, `{"container_id":"Orders"}`, `{"database_id":"/bad","container_id":"Orders"}`} {
+		invalid := json.RawMessage(fmt.Sprintf(`{"connection":{"id":"bad","host":%q,"connection_secrets":{"account_key":%q},"external_config":%s}}`, s.URL, testKey, config))
+		if _, err := p.Handle(sdk.RequestContext{}, "connection/connect", invalid, nil); err == nil {
+			t.Fatal("invalid scope accepted")
+		}
+	}
+}

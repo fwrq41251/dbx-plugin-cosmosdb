@@ -5,7 +5,12 @@ let document =
   '{"id":"order-001","tenant":"demo","status":"pending","total":9223372036854775807,"_etag":"\\\"v1\\\""}';
 let version = 1,
   deleted = false,
-  writeCount = 0;
+  writeCount = 0,
+  discoveryCalls = 0,
+  accountLists = 0,
+  discoveryDelay = 0,
+  unsupportedSeek = false,
+  throttleDiscovery = false;
 const server = http.createServer(async (req, res) => {
   const send = (body, status = 200, headers = {}) => {
     res.writeHead(status, {
@@ -17,13 +22,37 @@ const server = http.createServer(async (req, res) => {
     res.end(typeof body === "string" ? body : JSON.stringify(body));
   };
   if (req.url === "/health") return send({ ok: true });
-  if (req.url === "/test/state") return send({ document, writeCount, deleted });
+  if (req.url === "/test/state")
+    return send({
+      document,
+      writeCount,
+      deleted,
+      discoveryCalls,
+      accountLists,
+    });
+  if (req.url === "/test/slow-discovery") {
+    discoveryDelay = 100;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/unsupported-seek") {
+    unsupportedSeek = true;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/throttle-discovery") {
+    throttleDiscovery = true;
+    return send({ ok: true });
+  }
   if (req.url === "/test/reset") {
     document =
       '{"id":"order-001","tenant":"demo","status":"pending","total":9223372036854775807,"_etag":"\\\"v1\\\""}';
     version = 1;
     deleted = false;
     writeCount = 0;
+    discoveryCalls = 0;
+    accountLists = 0;
+    discoveryDelay = 0;
+    unsupportedSeek = false;
+    throttleDiscovery = false;
     return send({ ok: true });
   }
   if (req.url === "/test/conflict") {
@@ -34,13 +63,17 @@ const server = http.createServer(async (req, res) => {
   const kind =
     decoded.split("/").filter(Boolean).at(-1) === "dbs"
       ? "dbs"
-      : decoded.includes("/docs")
-        ? "docs"
-        : "colls";
+      : decoded.endsWith("/pkranges")
+        ? "pkranges"
+        : decoded.includes("/docs")
+          ? "docs"
+          : "colls";
   const link =
     req.method === "POST" ||
     decoded.endsWith("/dbs") ||
-    decoded.endsWith("/colls")
+    decoded.endsWith("/colls") ||
+    decoded.endsWith("/docs") ||
+    decoded.endsWith("/pkranges")
       ? decoded.slice(1).split("/").slice(0, -1).join("/")
       : decoded.slice(1);
   const payload = `${req.method.toLowerCase()}\n${kind}\n${link}\n${req.headers["x-ms-date"]?.toLowerCase()}\n\n`;
@@ -52,7 +85,10 @@ const server = http.createServer(async (req, res) => {
     `type=master&ver=1.0&sig=${sig}`
   )
     return send({ message: "Invalid signature" }, 401);
-  if (req.url === "/dbs") return send({ Databases: [{ id: "Shop" }] });
+  if (req.url === "/dbs") {
+    accountLists++;
+    return send({ Databases: [{ id: "Shop" }] });
+  }
   if (req.url === "/dbs/Shop/colls")
     return send({
       DocumentCollections: [
@@ -61,16 +97,113 @@ const server = http.createServer(async (req, res) => {
           partitionKey: { paths: ["/tenant"], kind: "Hash", version: 2 },
           indexingPolicy: { automatic: true },
         },
+        {
+          id: "Archive",
+          partitionKey: { paths: ["/tenant"], kind: "Hash", version: 2 },
+        },
       ],
     });
+  if (
+    req.method === "GET" &&
+    /^\/dbs\/Shop\/colls\/(Orders|Archive)$/.test(req.url)
+  )
+    return send({
+      id: req.url.split("/").at(-1),
+      partitionKey: { paths: ["/tenant"], kind: "Hash", version: 2 },
+    });
+  if (req.url.endsWith("/pkranges"))
+    return send({ PartitionKeyRanges: [{ id: "0" }, { id: "1" }] });
+  if (req.method === "GET" && req.url.endsWith("/docs")) {
+    discoveryCalls++;
+    if (throttleDiscovery) {
+      throttleDiscovery = false;
+      return send({}, 429, { "x-ms-retry-after-ms": "50" });
+    }
+    if (req.url.includes("/Archive/"))
+      return send({ Documents: [{ tenant: "archive-only" }] });
+    if (req.headers["x-ms-continuation"])
+      return send({ Documents: [{ tenant: "beta" }] });
+    return send(
+      '{"Documents":[{"tenant":"demo"},{"tenant":"demo"},{"tenant":42},{"tenant":"42"},{"tenant":null},{"tenant":9223372036854775807},{}]}',
+      200,
+      { "x-ms-continuation": "sample-next" },
+    );
+  }
   let body = "";
   for await (const chunk of req) body += chunk;
   if (
-    req.url === "/dbs/Shop/colls/Orders/docs" &&
+    /^\/dbs\/Shop\/colls\/(Orders|Archive)\/docs$/.test(req.url) &&
     req.headers["x-ms-documentdb-isquery"] === "true"
   ) {
-    if (req.headers["x-ms-continuation"]) return send('{"Documents":[]}', 200);
     const query = JSON.parse(body).query;
+    if (query.startsWith("SELECT TOP 1 ")) {
+      discoveryCalls++;
+      if (discoveryDelay)
+        await new Promise((resolve) => setTimeout(resolve, discoveryDelay));
+      if (unsupportedSeek) return send({}, 400);
+      if (throttleDiscovery) {
+        throttleDiscovery = false;
+        return send({}, 429, { "x-ms-retry-after-ms": "50" });
+      }
+      const archive = req.url.includes("/Archive/"),
+        second = req.headers["x-ms-documentdb-partitionkeyrangeid"] === "1";
+      const after = JSON.parse(body).parameters?.[0]?.value;
+      let raw;
+      if (query.includes("IS_STRING")) {
+        const values = archive
+          ? ["archive-only"]
+          : second
+            ? ["demo", "omega"]
+            : ["42", "alpha", "beta", "demo"];
+        const next = values.find(
+          (value) => after === undefined || value > after,
+        );
+        if (next !== undefined) raw = JSON.stringify(next);
+      } else if (!archive && !second && query.includes("IS_NUMBER")) {
+        if (after === undefined) raw = "42";
+        else if (after === 42) raw = "9223372036854775807";
+      } else if (!archive && !second && query.includes(" = false"))
+        raw = "false";
+      else if (!archive && !second && query.includes(" = true")) raw = "true";
+      else if (!archive && !second && query.includes("IS_NULL")) raw = "null";
+      else if (!archive && !second && query.includes("AS found"))
+        return send({ Documents: [{ found: 1 }] });
+      return send(
+        raw === undefined
+          ? '{"Documents":[]}'
+          : `{"Documents":[{"k0":${raw}}]}`,
+      );
+    }
+    if (
+      query.startsWith("SELECT DISTINCT ") ||
+      query.startsWith("SELECT TOP 1 1 AS found")
+    ) {
+      discoveryCalls++;
+      if (discoveryDelay)
+        await new Promise((resolve) => setTimeout(resolve, discoveryDelay));
+      if (throttleDiscovery) {
+        throttleDiscovery = false;
+        return send({}, 429, { "x-ms-retry-after-ms": "50" });
+      }
+      if (query.startsWith("SELECT TOP 1 1 AS found"))
+        return send({
+          Documents: req.url.includes("/Archive/") ? [] : [{ found: 1 }],
+        });
+      if (req.url.includes("/Archive/"))
+        return send({ Documents: [{ k0: "archive-only" }] });
+      if (req.headers["x-ms-documentdb-partitionkeyrangeid"] === "1")
+        return send({ Documents: [{ k0: "omega" }] });
+      if (req.headers["x-ms-continuation"])
+        return send({ Documents: [{ k0: "beta" }] });
+      return send(
+        '{"Documents":[{"k0":"alpha"},{"k0":"demo"},{"k0":42},{"k0":"42"},{"k0":null},{"k0":9223372036854775807}]}',
+        200,
+        {
+          "x-ms-continuation": "distinct-next",
+        },
+      );
+    }
+    if (req.headers["x-ms-continuation"]) return send('{"Documents":[]}', 200);
     if (query.includes("BAD")) return send({ message: "Invalid SQL" }, 400);
     return send(`{"Documents":[${deleted ? "" : document}]}`, 200, {
       "x-ms-continuation": "second-page",

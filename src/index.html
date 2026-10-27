@@ -61,10 +61,21 @@ SELECT * FROM c</textarea
                 <option>1000</option>
               </select></label
             ><label class="grow"
-              >分区键（可选 JSON 数组）<input
-                id="query-pk"
-                placeholder='["tenant-a"] 或留空跨分区'
-                spellcheck="false" /></label
+              >分区键（可选 JSON 数组）<span class="pk-input"
+                ><input
+                  id="query-pk"
+                  placeholder='["tenant-a"] 或留空跨分区'
+                  spellcheck="false"
+                /><button
+                  id="query-pk-choose"
+                  type="button"
+                  aria-label="选择查询分区键"
+                  aria-expanded="false"
+                  aria-controls="pk-picker"
+                >
+                  选择 ▾
+                </button></span
+              ></label
             ><button id="run" class="primary">运行查询</button>
           </div>
           <details>
@@ -114,11 +125,22 @@ SELECT * FROM c</textarea
               placeholder="文档 id"
               spellcheck="false" /></label
           ><label
-            >完整分区键（JSON 数组）<input
-              id="document-pk"
-              placeholder='["tenant-a"] / [null] / [{}]'
-              spellcheck="false"
-          /></label>
+            >完整分区键（JSON 数组）<span class="pk-input"
+              ><input
+                id="document-pk"
+                placeholder='["tenant-a"] / [null] / [{}]'
+                spellcheck="false"
+              /><button
+                id="document-pk-choose"
+                type="button"
+                aria-label="选择文档分区键"
+                aria-expanded="false"
+                aria-controls="pk-picker"
+              >
+                选择 ▾
+              </button></span
+            ></label
+          >
           <div class="toolbar">
             <button id="read">读取完整文档</button
             ><button id="new">新建</button>
@@ -140,6 +162,36 @@ SELECT * FROM c</textarea
         </div>
       </section>
     </div>
+    <section id="pk-picker" role="dialog" aria-label="分区键选择" hidden>
+      <div class="section-title">
+        <span id="pk-title">选择分区键</span
+        ><button id="pk-close" type="button" aria-label="关闭分区键选择">
+          ×
+        </button>
+      </div>
+      <input
+        id="pk-filter"
+        type="search"
+        aria-label="过滤分区键"
+        placeholder="输入关键词查找分区键…"
+        autocomplete="off"
+      />
+      <div id="pk-count" class="muted" aria-live="polite"></div>
+      <div id="pk-options" role="listbox" aria-label="分区键候选"></div>
+      <div class="pk-discovery">
+        <div id="pk-progress" class="info" aria-live="polite">
+          正在自动加载全部分区键…
+        </div>
+        <div class="toolbar">
+          <button id="pk-load" type="button">暂停加载</button
+          ><button id="pk-reload" type="button">刷新列表</button
+          ><button id="pk-clear" type="button">清除选择</button>
+        </div>
+        <small
+          >优先使用本地缓存；刷新列表才重新读取。关闭列表会停止续读。</small
+        >
+      </div>
+    </section>
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
       <h3 id="confirm-title">确认操作</h3>
       <p id="confirm-message"></p>

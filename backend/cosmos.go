@@ -19,12 +19,17 @@ import (
 )
 
 type cosmosClient struct {
-	endpoint string
-	key      []byte
-	http     *http.Client
-	readOnly bool
-	mu       sync.Mutex
-	sessions map[string]string
+	endpoint  string
+	key       []byte
+	http      *http.Client
+	readOnly  bool
+	database  string
+	container string
+	cacheID   string
+	cacheRoot string // Empty uses the operating system's user cache directory.
+	cacheMu   sync.Mutex
+	mu        sync.Mutex
+	sessions  map[string]string
 }
 type parameter struct {
 	Name  string          `json:"name"`

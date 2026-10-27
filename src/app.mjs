@@ -6,12 +6,15 @@ import {
   parseJSON,
   encodeJSON,
 } from "./model.mjs";
+import { PartitionCandidates, PartitionLoader } from "./partitions.mjs";
 const $ = (id) => document.getElementById(id);
 const state = {
   connectionId: "",
   database: "",
   container: "",
   containers: [],
+  savedDatabase: "",
+  savedContainer: "",
   readOnly: true,
   busy: false,
   epoch: 0,
@@ -22,6 +25,218 @@ const state = {
   creating: false,
 };
 const host = window.dbxPlugin;
+const partitionScopes = new Map();
+let partitionTarget = "query-pk";
+function partitionScope() {
+  return JSON.stringify([state.connectionId, state.database, state.container]);
+}
+function candidates() {
+  const key = partitionScope();
+  if (!partitionScopes.has(key))
+    partitionScopes.set(key, new PartitionCandidates());
+  return partitionScopes.get(key);
+}
+function partitionPaths() {
+  return (
+    state.containers.find((x) => x.id === state.container)?.partitionKey
+      ?.paths || []
+  );
+}
+function rememberKey(text) {
+  if (!state.container || !text.trim()) return;
+  try {
+    candidates().add(text);
+  } catch {
+    /* Invalid manual input is validated when it is used. */
+  }
+}
+function closePartitionPicker() {
+  if (state.container) candidates().loader?.stop();
+  $("pk-picker").hidden = true;
+  for (const id of ["query-pk-choose", "document-pk-choose"])
+    $(id).setAttribute("aria-expanded", "false");
+}
+function activatePartitionScope() {
+  for (const cache of partitionScopes.values()) cache.loader?.stop();
+  closePartitionPicker();
+  $("query-pk").value = state.container ? candidates().selected || "" : "";
+}
+function renderPartitionOptions() {
+  const cache = candidates(),
+    items = cache.filter($("pk-filter").value),
+    target = $("pk-options");
+  target.replaceChildren();
+  let selected = "";
+  try {
+    selected = encodeJSON(parseArray($(partitionTarget).value, "分区键"));
+  } catch {}
+  $("pk-count").textContent =
+    `匹配 ${items.length} / ${cache.keys.size} 个已知候选`;
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = cache.keys.size
+      ? "暂无匹配，仍在加载时请稍候，也可手动输入。"
+      : cache.loader?.error
+        ? "无法自动获取候选，仍可手动输入分区键。"
+        : "正在读取本地缓存或查找分区键…";
+    target.append(empty);
+  }
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(selected === item.key));
+    button.disabled = state.busy;
+    button.dataset.key = item.key;
+    const label = document.createElement("span");
+    label.textContent = item.label;
+    const json = document.createElement("code");
+    json.textContent = item.key;
+    button.append(label, json);
+    button.onclick = () => {
+      if (state.busy) return;
+      $(partitionTarget).value = item.key;
+      if (partitionTarget === "query-pk") cache.selected = item.key;
+      closePartitionPicker();
+      $(partitionTarget).focus();
+    };
+    target.append(button);
+  }
+  const loader = cache.loader,
+    stats = cache.stats.seek,
+    done = stats.started && !stats.continuation;
+  $("pk-load").textContent = done
+    ? "全部已加载"
+    : loader?.running
+      ? "暂停加载"
+      : "继续加载";
+  $("pk-load").disabled = state.busy || done || !state.container;
+  $("pk-reload").disabled = state.busy || !!loader?.task || !state.container;
+  $("pk-clear").disabled = state.busy;
+  const ru = Object.values(cache.stats).reduce((sum, s) => sum + s.ru, 0);
+  $("pk-progress").textContent = [
+    loader?.error || loader?.notice,
+    done
+      ? `全部分区键已加载 · ${cache.keys.size} 个`
+      : loader?.running
+        ? `自动加载中 · 已发现 ${cache.keys.size} 个，尚未完成`
+        : "已暂停，当前候选尚未加载完整",
+    `本次 ${ru.toFixed(2)} RU`,
+    cache.cachedAt
+      ? `本地缓存：${new Date(cache.cachedAt).toLocaleString()}`
+      : "",
+    cache.cacheWarning,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  $("pk-progress").classList.toggle("error", !!loader?.error);
+}
+function openPartitionPicker(target) {
+  if (state.busy || !state.container) return;
+  partitionTarget = target;
+  rememberKey($(target).value);
+  $("pk-filter").value = "";
+  $("pk-title").textContent =
+    target === "query-pk" ? "选择查询分区键" : "选择文档分区键";
+  $("pk-picker").hidden = false;
+  void startPartitionOptions();
+  renderPartitionOptions();
+  const rect = $(target).getBoundingClientRect(),
+    picker = $("pk-picker");
+  const width = picker.getBoundingClientRect().width,
+    height = picker.getBoundingClientRect().height;
+  picker.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`;
+  picker.style.top = `${Math.max(8, Math.min(rect.bottom + 6, innerHeight - height - 8))}px`;
+  $(target + "-choose").setAttribute("aria-expanded", "true");
+  $("pk-filter").focus();
+}
+async function startPartitionOptions(refresh = false) {
+  const key = partitionScope(),
+    identity = scope(),
+    epoch = state.epoch;
+  if (refresh) {
+    const old = candidates();
+    old.loader?.stop();
+    const next = new PartitionCandidates();
+    next.selected = old.selected;
+    partitionScopes.set(key, next);
+  }
+  const cache = candidates();
+  if (!cache.hydrated && !refresh) {
+    if (!cache.hydrating)
+      cache.hydrating = (async () => {
+        try {
+          const saved = await invoke("cosmos/partitionCache", identity);
+          if (saved.found) {
+            for (const value of saved.keys) cache.add(value);
+            cache.stats.seek.started = true;
+            cache.stats.seek.continuation = saved.continuation || "";
+            cache.cachedAt = saved.updatedAt;
+          }
+        } catch (error) {
+          if (error.message !== "STALE")
+            cache.cacheWarning = "本地缓存不可用，本次从索引重新加载。";
+        }
+        cache.hydrated = true;
+      })();
+    await cache.hydrating;
+  }
+  cache.hydrated = true;
+  if (
+    key !== partitionScope() ||
+    epoch !== state.epoch ||
+    candidates() !== cache
+  )
+    return;
+  if (!cache.loader)
+    cache.loader = new PartitionLoader(
+      cache,
+      "seek",
+      async (mode, continuation) => {
+        if (epoch !== state.epoch || key !== partitionScope())
+          throw new Error("STALE");
+        return invoke("cosmos/partitionKeys", {
+          ...identity,
+          discoveryMode: mode,
+          continuation,
+          pageSize: 1,
+        });
+      },
+      () => {
+        if (
+          key === partitionScope() &&
+          candidates() === cache &&
+          !$("pk-picker").hidden
+        )
+          renderPartitionOptions();
+      },
+    );
+  // The loader handles errors without blocking query inputs or candidate selection.
+  if (!$("pk-picker").hidden) void cache.loader.start();
+}
+function learnPartitionKeys(rows) {
+  const paths = partitionPaths();
+  for (const row of rows) {
+    const complete = paths.every((path) => {
+      let value = row;
+      for (const part of path
+        .slice(1)
+        .split("/")
+        .map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
+        if (
+          value === null ||
+          typeof value !== "object" ||
+          !Object.hasOwn(value, part)
+        )
+          return false;
+        value = value[part];
+      }
+      return true;
+    });
+    if (complete) rememberKey(keyFromDocument(row, paths));
+  }
+}
 $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
 $("confirm-accept").onclick = () => $("confirm-dialog").close("confirm");
 function status(text, error = false) {
@@ -87,6 +302,9 @@ function controls() {
   $("new").disabled ||= state.readOnly;
   $("editor").readOnly =
     busy || state.readOnly || (!state.snapshot && !state.creating);
+  for (const id of ["query-pk-choose", "document-pk-choose"])
+    $(id).disabled = busy || !selected;
+  if (!$("pk-picker").hidden) renderPartitionOptions();
 }
 async function action(fn) {
   if (state.busy) return;
@@ -168,10 +386,47 @@ async function loadDatabases() {
   state.database = "";
   state.container = "";
   state.containers = [];
+  activatePartitionScope();
   resetResults();
   $("metadata").textContent = "—";
   $("container-info").textContent = `${items.length} 个数据库`;
   status("已连接，选择数据库和容器。");
+  if (state.savedDatabase) {
+    $("database").value = state.savedDatabase;
+    await selectDatabase(state.savedDatabase);
+    $("container").value = state.savedContainer;
+    selectContainer(state.savedContainer);
+  }
+}
+
+async function selectDatabase(next) {
+  state.database = next;
+  state.container = "";
+  activatePartitionScope();
+  resetResults();
+  options("container", [], "选择容器");
+  state.containers = [];
+  $("metadata").textContent = "—";
+  if (!next) {
+    status("请选择数据库");
+    return;
+  }
+  const items = await listAll("cosmos/containers", { database: next });
+  state.containers = items;
+  options("container", items, "选择容器");
+  $("container-info").textContent = `${items.length} 个容器`;
+  status("请选择容器");
+}
+function selectContainer(next) {
+  state.container = next;
+  activatePartitionScope();
+  resetResults();
+  const item = state.containers.find((x) => x.id === next);
+  $("metadata").textContent = item ? encodeJSON(item, null, 2) : "—";
+  $("container-info").textContent = item
+    ? `分区路径：${(item.partitionKey?.paths || []).join(", ") || "无"}`
+    : "选择容器开始查询";
+  status("可以运行查询");
 }
 function renderPage() {
   const p = state.pages[state.page];
@@ -280,6 +535,8 @@ async function query(next = false) {
     };
   }
   const result = await invoke("cosmos/query", spec);
+  rememberKey(spec.partitionKeyText || "");
+  learnPartitionKeys(parseJSON(result.json));
   if (!next) state.pages = [];
   else state.pages = state.pages.slice(0, state.page + 1);
   state.pages.push({ ...result, spec });
@@ -303,6 +560,7 @@ function opened(result, identity) {
   $("editor").value = state.baseline;
   $("document-id").value = identity.id;
   $("document-pk").value = identity.partitionKeyText;
+  rememberKey(identity.partitionKeyText);
   $("document-state").textContent = "完整文档";
   $("etag").textContent = etag
     ? `ETag: ${etag}`
@@ -326,21 +584,7 @@ $("database").addEventListener("change", () =>
       $("database").value = state.database;
       return;
     }
-    state.database = next;
-    state.container = "";
-    resetResults();
-    options("container", [], "选择容器");
-    state.containers = [];
-    $("metadata").textContent = "—";
-    if (!next) {
-      status("请选择数据库");
-      return;
-    }
-    const items = await listAll("cosmos/containers", { database: next });
-    state.containers = items;
-    options("container", items, "选择容器");
-    $("container-info").textContent = `${items.length} 个容器`;
-    status("请选择容器");
+    await selectDatabase(next);
   }),
 );
 $("container").addEventListener("change", () =>
@@ -350,17 +594,72 @@ $("container").addEventListener("change", () =>
       $("container").value = state.container;
       return;
     }
-    state.container = next;
-    resetResults();
-    const item = state.containers.find((x) => x.id === next);
-    $("metadata").textContent = item ? encodeJSON(item, null, 2) : "—";
-    $("container-info").textContent = item
-      ? `分区路径：${(item.partitionKey?.paths || []).join(", ") || "无"}`
-      : "选择容器开始查询";
-    status("可以运行查询");
+    selectContainer(next);
   }),
 );
 bind("run", () => query());
+$("pk-load").onclick = () => {
+  if (state.busy) return;
+  const loader = candidates().loader;
+  if (loader?.running) loader.stop();
+  else void startPartitionOptions();
+};
+$("pk-reload").onclick = () => {
+  if (!state.busy) void startPartitionOptions(true);
+};
+$("query-pk-choose").onclick = () => openPartitionPicker("query-pk");
+$("document-pk-choose").onclick = () => openPartitionPicker("document-pk");
+$("pk-close").onclick = () => closePartitionPicker();
+$("pk-clear").onclick = () => {
+  if (!state.busy) {
+    $(partitionTarget).value = "";
+    if (partitionTarget === "query-pk") candidates().selected = "";
+    closePartitionPicker();
+    $(partitionTarget).focus();
+  }
+};
+$("pk-filter").oninput = renderPartitionOptions;
+$("pk-filter").onkeydown = (e) => {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    $("pk-options").querySelector("button:not(:disabled)")?.focus();
+  }
+};
+$("pk-options").onkeydown = (e) => {
+  const buttons = [
+      ...$("pk-options").querySelectorAll("button:not(:disabled)"),
+    ],
+    index = buttons.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    buttons[
+      (index + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) %
+        buttons.length
+    ]?.focus();
+  }
+};
+document.addEventListener("pointerdown", (e) => {
+  if (
+    !$("pk-picker").hidden &&
+    !$("pk-picker").contains(e.target) &&
+    !e.target.closest("#query-pk-choose,#document-pk-choose")
+  )
+    closePartitionPicker();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("pk-picker").hidden) {
+    e.preventDefault();
+    closePartitionPicker();
+    $(partitionTarget).focus();
+  }
+});
+window.addEventListener("resize", closePartitionPicker);
+$("query-pk").addEventListener("change", () => {
+  if (state.container) {
+    rememberKey($("query-pk").value);
+    candidates().selected = $("query-pk").value;
+  }
+});
 bind("next", () => query(true));
 bind("previous", async () => {
   if (await discard()) {
@@ -464,11 +763,14 @@ document.addEventListener("keydown", (e) => {
 async function contextChanged(context) {
   const id = context?.connectionId || context?.connection?.id || "";
   if (id === state.connectionId) return;
+  for (const cache of partitionScopes.values()) cache.loader?.stop();
+  partitionScopes.clear();
   if ($("confirm-dialog").open) $("confirm-dialog").close("cancel");
   state.epoch++;
   state.connectionId = id;
   state.database = "";
   state.container = "";
+  activatePartitionScope();
   state.readOnly = true;
   resetResults();
   options("database", [], "选择数据库");
@@ -489,6 +791,8 @@ async function contextChanged(context) {
   await action(async () => {
     const info = await invoke("cosmos/info");
     state.readOnly = info.readOnly;
+    state.savedDatabase = info.database || "";
+    state.savedContainer = info.container || "";
     $("mode").textContent = info.readOnly ? "只读连接" : "允许文档写入";
     await loadDatabases();
   });

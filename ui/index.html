@@ -357,6 +357,76 @@ dialog .toolbar {
 [hidden] {
   display: none !important;
 }
+.pk-input {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+.pk-input input {
+  flex: 1;
+  width: 0;
+}
+.pk-input button {
+  font-size: 11px;
+}
+#pk-picker {
+  position: fixed;
+  z-index: 1000;
+  width: min(460px, calc(100vw - 16px));
+  max-height: calc(100vh - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px #0005;
+}
+#pk-filter {
+  flex: none;
+}
+#pk-options {
+  overflow: auto;
+  min-height: 70px;
+  max-height: 230px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+#pk-options button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 9px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#pk-options button[aria-selected="true"] {
+  background: #7cd4bf18;
+  color: var(--accent);
+}
+#pk-options code {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+#pk-options .empty {
+  min-height: 70px;
+  font-size: 11px;
+  padding: 12px;
+  text-align: center;
+}
+.pk-discovery {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
 @media (max-width: 1100px) {
   .workspace {
     grid-template-columns: 175px minmax(300px, 1fr) 290px;
@@ -441,10 +511,21 @@ SELECT * FROM c</textarea
                 <option>1000</option>
               </select></label
             ><label class="grow"
-              >分区键（可选 JSON 数组）<input
-                id="query-pk"
-                placeholder='["tenant-a"] 或留空跨分区'
-                spellcheck="false" /></label
+              >分区键（可选 JSON 数组）<span class="pk-input"
+                ><input
+                  id="query-pk"
+                  placeholder='["tenant-a"] 或留空跨分区'
+                  spellcheck="false"
+                /><button
+                  id="query-pk-choose"
+                  type="button"
+                  aria-label="选择查询分区键"
+                  aria-expanded="false"
+                  aria-controls="pk-picker"
+                >
+                  选择 ▾
+                </button></span
+              ></label
             ><button id="run" class="primary">运行查询</button>
           </div>
           <details>
@@ -494,11 +575,22 @@ SELECT * FROM c</textarea
               placeholder="文档 id"
               spellcheck="false" /></label
           ><label
-            >完整分区键（JSON 数组）<input
-              id="document-pk"
-              placeholder='["tenant-a"] / [null] / [{}]'
-              spellcheck="false"
-          /></label>
+            >完整分区键（JSON 数组）<span class="pk-input"
+              ><input
+                id="document-pk"
+                placeholder='["tenant-a"] / [null] / [{}]'
+                spellcheck="false"
+              /><button
+                id="document-pk-choose"
+                type="button"
+                aria-label="选择文档分区键"
+                aria-expanded="false"
+                aria-controls="pk-picker"
+              >
+                选择 ▾
+              </button></span
+            ></label
+          >
           <div class="toolbar">
             <button id="read">读取完整文档</button
             ><button id="new">新建</button>
@@ -520,6 +612,36 @@ SELECT * FROM c</textarea
         </div>
       </section>
     </div>
+    <section id="pk-picker" role="dialog" aria-label="分区键选择" hidden>
+      <div class="section-title">
+        <span id="pk-title">选择分区键</span
+        ><button id="pk-close" type="button" aria-label="关闭分区键选择">
+          ×
+        </button>
+      </div>
+      <input
+        id="pk-filter"
+        type="search"
+        aria-label="过滤分区键"
+        placeholder="输入关键词查找分区键…"
+        autocomplete="off"
+      />
+      <div id="pk-count" class="muted" aria-live="polite"></div>
+      <div id="pk-options" role="listbox" aria-label="分区键候选"></div>
+      <div class="pk-discovery">
+        <div id="pk-progress" class="info" aria-live="polite">
+          正在自动加载全部分区键…
+        </div>
+        <div class="toolbar">
+          <button id="pk-load" type="button">暂停加载</button
+          ><button id="pk-reload" type="button">刷新列表</button
+          ><button id="pk-clear" type="button">清除选择</button>
+        </div>
+        <small
+          >优先使用本地缓存；刷新列表才重新读取。关闭列表会停止续读。</small
+        >
+      </div>
+    </section>
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
       <h3 id="confirm-title">确认操作</h3>
       <p id="confirm-message"></p>
@@ -1184,6 +1306,118 @@ ${indent}}` : "}";
     return out;
   }
 
+  // src/partitions.mjs
+  function partitionLabel(text) {
+    const values = parse(text);
+    return values.map(
+      (value) => typeof value === "string" ? value : value !== null && typeof value === "object" && Object.keys(value).length === 0 ? "\u672A\u5B9A\u4E49" : stringify(value)
+    ).join(" / ");
+  }
+  var PartitionCandidates = class {
+    constructor() {
+      this.keys = /* @__PURE__ */ new Map();
+      this.stats = {
+        sample: this.empty(),
+        distinct: this.empty(),
+        seek: this.empty()
+      };
+    }
+    empty() {
+      return { started: false, continuation: "", pages: 0, scanned: 0, ru: 0 };
+    }
+    add(text) {
+      const value = parse(text);
+      if (!Array.isArray(value) || value.length < 1 || value.length > 3)
+        throw new Error("\u5206\u533A\u952E\u9700\u8981 1\u20133 \u4E2A\u7EC4\u4EF6");
+      if (value.some(
+        (v) => v !== null && typeof v !== "string" && typeof v !== "boolean" && typeof v !== "number" && !isLosslessNumber(v) && !(typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0)
+      ))
+        throw new Error("\u5206\u533A\u952E\u7EC4\u4EF6\u5FC5\u987B\u662F\u6807\u91CF\u6216 {}");
+      const key = stringify(value);
+      this.keys.set(key, { key, label: partitionLabel(key) });
+    }
+    merge(page) {
+      for (const key of page.keys) this.add(key);
+      const s = this.stats[page.mode];
+      s.started = true;
+      s.continuation = page.continuation;
+      s.pages++;
+      s.scanned += page.scanned;
+      s.ru += page.ru;
+    }
+    filter(text) {
+      const needle = text.trim().toLocaleLowerCase();
+      return [...this.keys.values()].filter(
+        (item) => (item.key + " " + item.label).toLocaleLowerCase().includes(needle)
+      ).sort((a, b) => a.label.localeCompare(b.label));
+    }
+  };
+  var PartitionLoader = class {
+    constructor(cache, mode, fetchPage, changed = () => {
+    }, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))) {
+      Object.assign(this, { cache, mode, fetchPage, changed, wait });
+      this.running = false;
+      this.error = "";
+      this.notice = "";
+      this.task = null;
+      this.seen = /* @__PURE__ */ new Set();
+    }
+    start() {
+      this.running = true;
+      if (this.task) return this.task;
+      this.error = "";
+      this.task = this.run().finally(() => {
+        this.task = null;
+        this.running = false;
+        this.changed();
+      });
+      this.changed();
+      return this.task;
+    }
+    stop() {
+      this.running = false;
+      this.changed();
+    }
+    async run() {
+      let retries = 0;
+      let runRU = 0;
+      while (this.running) {
+        const stats = this.cache.stats[this.mode];
+        if (stats.started && !stats.continuation) break;
+        try {
+          const page = await this.fetchPage(this.mode, stats.continuation);
+          if (page.continuation && this.seen.has(page.continuation))
+            throw new Error("\u670D\u52A1\u8FD4\u56DE\u91CD\u590D\u5206\u9875\u4EE4\u724C\uFF0C\u8BF7\u5237\u65B0\u5217\u8868\u3002");
+          if (page.continuation) this.seen.add(page.continuation);
+          this.cache.merge(page);
+          runRU += page.ru;
+          retries = 0;
+          this.notice = page.cacheWarning || "";
+          if (runRU >= 2e3 && page.continuation) {
+            this.notice = "\u672C\u8F6E\u5DF2\u8FBE 2000 RU \u81EA\u52A8\u52A0\u8F7D\u9884\u7B97\uFF0C\u5DF2\u6682\u505C\uFF1B\u53EF\u4F7F\u7528\u5F53\u524D\u5019\u9009\u6216\u7EE7\u7EED\u52A0\u8F7D\u3002";
+            this.running = false;
+          }
+          this.changed();
+        } catch (error) {
+          if (error?.message === "STALE") break;
+          const code = error?.data?.status || Number(/HTTP (\d+)/.exec(error.message)?.[1]);
+          if (code === 429 && retries++ < 4) {
+            this.notice = "\u670D\u52A1\u9650\u6D41\uFF0C\u6B63\u5728\u7B49\u5F85\u540E\u81EA\u52A8\u7EE7\u7EED\u2026";
+            this.changed();
+            const delay = Math.min(
+              1e4,
+              Math.max(250, Number(error?.data?.retryAfterMs) || 1e3)
+            );
+            await this.wait(delay);
+            continue;
+          }
+          this.error = error.message || String(error);
+          break;
+        }
+      }
+    }
+  };
+
   // src/app.mjs
   var $ = (id) => document.getElementById(id);
   var state = {
@@ -1191,6 +1425,8 @@ ${indent}}` : "}";
     database: "",
     container: "",
     containers: [],
+    savedDatabase: "",
+    savedContainer: "",
     readOnly: true,
     busy: false,
     epoch: 0,
@@ -1201,6 +1437,173 @@ ${indent}}` : "}";
     creating: false
   };
   var host = window.dbxPlugin;
+  var partitionScopes = /* @__PURE__ */ new Map();
+  var partitionTarget = "query-pk";
+  function partitionScope() {
+    return JSON.stringify([state.connectionId, state.database, state.container]);
+  }
+  function candidates() {
+    const key = partitionScope();
+    if (!partitionScopes.has(key))
+      partitionScopes.set(key, new PartitionCandidates());
+    return partitionScopes.get(key);
+  }
+  function partitionPaths() {
+    return state.containers.find((x) => x.id === state.container)?.partitionKey?.paths || [];
+  }
+  function rememberKey(text) {
+    if (!state.container || !text.trim()) return;
+    try {
+      candidates().add(text);
+    } catch {
+    }
+  }
+  function closePartitionPicker() {
+    if (state.container) candidates().loader?.stop();
+    $("pk-picker").hidden = true;
+    for (const id of ["query-pk-choose", "document-pk-choose"])
+      $(id).setAttribute("aria-expanded", "false");
+  }
+  function activatePartitionScope() {
+    for (const cache of partitionScopes.values()) cache.loader?.stop();
+    closePartitionPicker();
+    $("query-pk").value = state.container ? candidates().selected || "" : "";
+  }
+  function renderPartitionOptions() {
+    const cache = candidates(), items = cache.filter($("pk-filter").value), target = $("pk-options");
+    target.replaceChildren();
+    let selected = "";
+    try {
+      selected = stringify(parseArray($(partitionTarget).value, "\u5206\u533A\u952E"));
+    } catch {
+    }
+    $("pk-count").textContent = `\u5339\u914D ${items.length} / ${cache.keys.size} \u4E2A\u5DF2\u77E5\u5019\u9009`;
+    if (!items.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = cache.keys.size ? "\u6682\u65E0\u5339\u914D\uFF0C\u4ECD\u5728\u52A0\u8F7D\u65F6\u8BF7\u7A0D\u5019\uFF0C\u4E5F\u53EF\u624B\u52A8\u8F93\u5165\u3002" : cache.loader?.error ? "\u65E0\u6CD5\u81EA\u52A8\u83B7\u53D6\u5019\u9009\uFF0C\u4ECD\u53EF\u624B\u52A8\u8F93\u5165\u5206\u533A\u952E\u3002" : "\u6B63\u5728\u8BFB\u53D6\u672C\u5730\u7F13\u5B58\u6216\u67E5\u627E\u5206\u533A\u952E\u2026";
+      target.append(empty);
+    }
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("role", "option");
+      button.setAttribute("aria-selected", String(selected === item.key));
+      button.disabled = state.busy;
+      button.dataset.key = item.key;
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      const json = document.createElement("code");
+      json.textContent = item.key;
+      button.append(label, json);
+      button.onclick = () => {
+        if (state.busy) return;
+        $(partitionTarget).value = item.key;
+        if (partitionTarget === "query-pk") cache.selected = item.key;
+        closePartitionPicker();
+        $(partitionTarget).focus();
+      };
+      target.append(button);
+    }
+    const loader = cache.loader, stats = cache.stats.seek, done = stats.started && !stats.continuation;
+    $("pk-load").textContent = done ? "\u5168\u90E8\u5DF2\u52A0\u8F7D" : loader?.running ? "\u6682\u505C\u52A0\u8F7D" : "\u7EE7\u7EED\u52A0\u8F7D";
+    $("pk-load").disabled = state.busy || done || !state.container;
+    $("pk-reload").disabled = state.busy || !!loader?.task || !state.container;
+    $("pk-clear").disabled = state.busy;
+    const ru = Object.values(cache.stats).reduce((sum, s) => sum + s.ru, 0);
+    $("pk-progress").textContent = [
+      loader?.error || loader?.notice,
+      done ? `\u5168\u90E8\u5206\u533A\u952E\u5DF2\u52A0\u8F7D \xB7 ${cache.keys.size} \u4E2A` : loader?.running ? `\u81EA\u52A8\u52A0\u8F7D\u4E2D \xB7 \u5DF2\u53D1\u73B0 ${cache.keys.size} \u4E2A\uFF0C\u5C1A\u672A\u5B8C\u6210` : "\u5DF2\u6682\u505C\uFF0C\u5F53\u524D\u5019\u9009\u5C1A\u672A\u52A0\u8F7D\u5B8C\u6574",
+      `\u672C\u6B21 ${ru.toFixed(2)} RU`,
+      cache.cachedAt ? `\u672C\u5730\u7F13\u5B58\uFF1A${new Date(cache.cachedAt).toLocaleString()}` : "",
+      cache.cacheWarning
+    ].filter(Boolean).join(" \xB7 ");
+    $("pk-progress").classList.toggle("error", !!loader?.error);
+  }
+  function openPartitionPicker(target) {
+    if (state.busy || !state.container) return;
+    partitionTarget = target;
+    rememberKey($(target).value);
+    $("pk-filter").value = "";
+    $("pk-title").textContent = target === "query-pk" ? "\u9009\u62E9\u67E5\u8BE2\u5206\u533A\u952E" : "\u9009\u62E9\u6587\u6863\u5206\u533A\u952E";
+    $("pk-picker").hidden = false;
+    void startPartitionOptions();
+    renderPartitionOptions();
+    const rect = $(target).getBoundingClientRect(), picker = $("pk-picker");
+    const width = picker.getBoundingClientRect().width, height = picker.getBoundingClientRect().height;
+    picker.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`;
+    picker.style.top = `${Math.max(8, Math.min(rect.bottom + 6, innerHeight - height - 8))}px`;
+    $(target + "-choose").setAttribute("aria-expanded", "true");
+    $("pk-filter").focus();
+  }
+  async function startPartitionOptions(refresh = false) {
+    const key = partitionScope(), identity = scope(), epoch = state.epoch;
+    if (refresh) {
+      const old = candidates();
+      old.loader?.stop();
+      const next = new PartitionCandidates();
+      next.selected = old.selected;
+      partitionScopes.set(key, next);
+    }
+    const cache = candidates();
+    if (!cache.hydrated && !refresh) {
+      if (!cache.hydrating)
+        cache.hydrating = (async () => {
+          try {
+            const saved = await invoke("cosmos/partitionCache", identity);
+            if (saved.found) {
+              for (const value of saved.keys) cache.add(value);
+              cache.stats.seek.started = true;
+              cache.stats.seek.continuation = saved.continuation || "";
+              cache.cachedAt = saved.updatedAt;
+            }
+          } catch (error) {
+            if (error.message !== "STALE")
+              cache.cacheWarning = "\u672C\u5730\u7F13\u5B58\u4E0D\u53EF\u7528\uFF0C\u672C\u6B21\u4ECE\u7D22\u5F15\u91CD\u65B0\u52A0\u8F7D\u3002";
+          }
+          cache.hydrated = true;
+        })();
+      await cache.hydrating;
+    }
+    cache.hydrated = true;
+    if (key !== partitionScope() || epoch !== state.epoch || candidates() !== cache)
+      return;
+    if (!cache.loader)
+      cache.loader = new PartitionLoader(
+        cache,
+        "seek",
+        async (mode, continuation) => {
+          if (epoch !== state.epoch || key !== partitionScope())
+            throw new Error("STALE");
+          return invoke("cosmos/partitionKeys", {
+            ...identity,
+            discoveryMode: mode,
+            continuation,
+            pageSize: 1
+          });
+        },
+        () => {
+          if (key === partitionScope() && candidates() === cache && !$("pk-picker").hidden)
+            renderPartitionOptions();
+        }
+      );
+    if (!$("pk-picker").hidden) void cache.loader.start();
+  }
+  function learnPartitionKeys(rows) {
+    const paths = partitionPaths();
+    for (const row of rows) {
+      const complete = paths.every((path) => {
+        let value = row;
+        for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
+          if (value === null || typeof value !== "object" || !Object.hasOwn(value, part))
+            return false;
+          value = value[part];
+        }
+        return true;
+      });
+      if (complete) rememberKey(keyFromDocument(row, paths));
+    }
+  }
   $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
   $("confirm-accept").onclick = () => $("confirm-dialog").close("confirm");
   function status(text, error = false) {
@@ -1255,6 +1658,9 @@ ${indent}}` : "}";
     $("delete").disabled = busy || state.readOnly || !state.snapshot;
     $("new").disabled ||= state.readOnly;
     $("editor").readOnly = busy || state.readOnly || !state.snapshot && !state.creating;
+    for (const id of ["query-pk-choose", "document-pk-choose"])
+      $(id).disabled = busy || !selected;
+    if (!$("pk-picker").hidden) renderPartitionOptions();
   }
   async function action(fn) {
     if (state.busy) return;
@@ -1336,10 +1742,44 @@ ${indent}}` : "}";
     state.database = "";
     state.container = "";
     state.containers = [];
+    activatePartitionScope();
     resetResults();
     $("metadata").textContent = "\u2014";
     $("container-info").textContent = `${items.length} \u4E2A\u6570\u636E\u5E93`;
     status("\u5DF2\u8FDE\u63A5\uFF0C\u9009\u62E9\u6570\u636E\u5E93\u548C\u5BB9\u5668\u3002");
+    if (state.savedDatabase) {
+      $("database").value = state.savedDatabase;
+      await selectDatabase(state.savedDatabase);
+      $("container").value = state.savedContainer;
+      selectContainer(state.savedContainer);
+    }
+  }
+  async function selectDatabase(next) {
+    state.database = next;
+    state.container = "";
+    activatePartitionScope();
+    resetResults();
+    options("container", [], "\u9009\u62E9\u5BB9\u5668");
+    state.containers = [];
+    $("metadata").textContent = "\u2014";
+    if (!next) {
+      status("\u8BF7\u9009\u62E9\u6570\u636E\u5E93");
+      return;
+    }
+    const items = await listAll("cosmos/containers", { database: next });
+    state.containers = items;
+    options("container", items, "\u9009\u62E9\u5BB9\u5668");
+    $("container-info").textContent = `${items.length} \u4E2A\u5BB9\u5668`;
+    status("\u8BF7\u9009\u62E9\u5BB9\u5668");
+  }
+  function selectContainer(next) {
+    state.container = next;
+    activatePartitionScope();
+    resetResults();
+    const item = state.containers.find((x) => x.id === next);
+    $("metadata").textContent = item ? stringify(item, null, 2) : "\u2014";
+    $("container-info").textContent = item ? `\u5206\u533A\u8DEF\u5F84\uFF1A${(item.partitionKey?.paths || []).join(", ") || "\u65E0"}` : "\u9009\u62E9\u5BB9\u5668\u5F00\u59CB\u67E5\u8BE2";
+    status("\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2");
   }
   function renderPage() {
     const p = state.pages[state.page];
@@ -1427,6 +1867,8 @@ ${indent}}` : "}";
       };
     }
     const result = await invoke("cosmos/query", spec);
+    rememberKey(spec.partitionKeyText || "");
+    learnPartitionKeys(parse(result.json));
     if (!next) state.pages = [];
     else state.pages = state.pages.slice(0, state.page + 1);
     state.pages.push({ ...result, spec });
@@ -1449,6 +1891,7 @@ ${indent}}` : "}";
     $("editor").value = state.baseline;
     $("document-id").value = identity.id;
     $("document-pk").value = identity.partitionKeyText;
+    rememberKey(identity.partitionKeyText);
     $("document-state").textContent = "\u5B8C\u6574\u6587\u6863";
     $("etag").textContent = etag ? `ETag: ${etag}` : "\u670D\u52A1\u672A\u63D0\u4F9B ETag\uFF0C\u65E0\u6CD5\u66F4\u65B0\u6216\u5220\u9664";
     metrics(result, "\u6587\u6863\u5DF2\u8BFB\u53D6 \xB7 ");
@@ -1471,21 +1914,7 @@ ${indent}}` : "}";
         $("database").value = state.database;
         return;
       }
-      state.database = next;
-      state.container = "";
-      resetResults();
-      options("container", [], "\u9009\u62E9\u5BB9\u5668");
-      state.containers = [];
-      $("metadata").textContent = "\u2014";
-      if (!next) {
-        status("\u8BF7\u9009\u62E9\u6570\u636E\u5E93");
-        return;
-      }
-      const items = await listAll("cosmos/containers", { database: next });
-      state.containers = items;
-      options("container", items, "\u9009\u62E9\u5BB9\u5668");
-      $("container-info").textContent = `${items.length} \u4E2A\u5BB9\u5668`;
-      status("\u8BF7\u9009\u62E9\u5BB9\u5668");
+      await selectDatabase(next);
     })
   );
   $("container").addEventListener(
@@ -1496,15 +1925,64 @@ ${indent}}` : "}";
         $("container").value = state.container;
         return;
       }
-      state.container = next;
-      resetResults();
-      const item = state.containers.find((x) => x.id === next);
-      $("metadata").textContent = item ? stringify(item, null, 2) : "\u2014";
-      $("container-info").textContent = item ? `\u5206\u533A\u8DEF\u5F84\uFF1A${(item.partitionKey?.paths || []).join(", ") || "\u65E0"}` : "\u9009\u62E9\u5BB9\u5668\u5F00\u59CB\u67E5\u8BE2";
-      status("\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2");
+      selectContainer(next);
     })
   );
   bind("run", () => query());
+  $("pk-load").onclick = () => {
+    if (state.busy) return;
+    const loader = candidates().loader;
+    if (loader?.running) loader.stop();
+    else void startPartitionOptions();
+  };
+  $("pk-reload").onclick = () => {
+    if (!state.busy) void startPartitionOptions(true);
+  };
+  $("query-pk-choose").onclick = () => openPartitionPicker("query-pk");
+  $("document-pk-choose").onclick = () => openPartitionPicker("document-pk");
+  $("pk-close").onclick = () => closePartitionPicker();
+  $("pk-clear").onclick = () => {
+    if (!state.busy) {
+      $(partitionTarget).value = "";
+      if (partitionTarget === "query-pk") candidates().selected = "";
+      closePartitionPicker();
+      $(partitionTarget).focus();
+    }
+  };
+  $("pk-filter").oninput = renderPartitionOptions;
+  $("pk-filter").onkeydown = (e) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      $("pk-options").querySelector("button:not(:disabled)")?.focus();
+    }
+  };
+  $("pk-options").onkeydown = (e) => {
+    const buttons = [
+      ...$("pk-options").querySelectorAll("button:not(:disabled)")
+    ], index = buttons.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      buttons[(index + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+    }
+  };
+  document.addEventListener("pointerdown", (e) => {
+    if (!$("pk-picker").hidden && !$("pk-picker").contains(e.target) && !e.target.closest("#query-pk-choose,#document-pk-choose"))
+      closePartitionPicker();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !$("pk-picker").hidden) {
+      e.preventDefault();
+      closePartitionPicker();
+      $(partitionTarget).focus();
+    }
+  });
+  window.addEventListener("resize", closePartitionPicker);
+  $("query-pk").addEventListener("change", () => {
+    if (state.container) {
+      rememberKey($("query-pk").value);
+      candidates().selected = $("query-pk").value;
+    }
+  });
   bind("next", () => query(true));
   bind("previous", async () => {
     if (await discard()) {
@@ -1597,11 +2075,14 @@ id: ${identity.id}
   async function contextChanged(context) {
     const id = context?.connectionId || context?.connection?.id || "";
     if (id === state.connectionId) return;
+    for (const cache of partitionScopes.values()) cache.loader?.stop();
+    partitionScopes.clear();
     if ($("confirm-dialog").open) $("confirm-dialog").close("cancel");
     state.epoch++;
     state.connectionId = id;
     state.database = "";
     state.container = "";
+    activatePartitionScope();
     state.readOnly = true;
     resetResults();
     options("database", [], "\u9009\u62E9\u6570\u636E\u5E93");
@@ -1617,6 +2098,8 @@ id: ${identity.id}
     await action(async () => {
       const info = await invoke("cosmos/info");
       state.readOnly = info.readOnly;
+      state.savedDatabase = info.database || "";
+      state.savedContainer = info.container || "";
       $("mode").textContent = info.readOnly ? "\u53EA\u8BFB\u8FDE\u63A5" : "\u5141\u8BB8\u6587\u6863\u5199\u5165";
       await loadDatabases();
     });
