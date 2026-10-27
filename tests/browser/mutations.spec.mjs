@@ -58,6 +58,7 @@ test("partition mismatches are rejected before confirmation and successful write
   await query(f);
   await f.getByRole("cell", { name: "order-001", exact: true }).click();
   await activate(f, "read");
+  await f.locator("#document-json-view").click();
   const text = await f.locator("#editor").inputValue();
   expect(text).not.toContain("_etag");
   await f.locator("#editor").fill(text.replace("demo", "other"));

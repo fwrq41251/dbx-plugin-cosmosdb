@@ -316,6 +316,49 @@ th:first-child {
   resize: none;
   background: var(--field);
 }
+.document-view-toolbar {
+  padding: 0 16px 10px;
+}
+#field-editor {
+  flex: 1;
+  min-height: 160px;
+  overflow: auto;
+  padding: 0 16px 12px;
+  background: var(--field);
+  border-block: 1px solid var(--line);
+}
+#field-filter {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 8px 0;
+  background: var(--field);
+}
+.field-card {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.field-title {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.field-card textarea {
+  width: 100%;
+  resize: vertical;
+}
+.field-error {
+  color: #d98274;
+}
+.remove-field {
+  font-size: 10px;
+  margin-top: 5px;
+  color: var(--muted);
+}
+#add-field-section input,
+#add-field-section textarea {
+  width: 100%;
+  margin-bottom: 8px;
+}
 .document-footer {
   padding: 12px 16px;
   display: grid;

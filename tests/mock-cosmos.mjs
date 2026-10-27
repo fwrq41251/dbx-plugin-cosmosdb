@@ -1,11 +1,19 @@
 // Local test service only. It is never included in the plugin package.
 import http from "node:http";
 import { createHmac } from "node:crypto";
+import {
+  parse as parseExact,
+  stringify as stringifyExact,
+} from "lossless-json";
 let document =
   '{"id":"order-001","tenant":"demo","status":"pending","total":9223372036854775807,"_etag":"\\\"v1\\\""}';
 let version = 1,
   deleted = false,
   writeCount = 0,
+  patchCount = 0,
+  replaceCount = 0,
+  lastPatch = null,
+  denyWrites = false,
   discoveryCalls = 0,
   accountLists = 0,
   discoveryDelay = 0,
@@ -27,6 +35,9 @@ const server = http.createServer(async (req, res) => {
     return send({
       document,
       writeCount,
+      patchCount,
+      replaceCount,
+      lastPatch,
       deleted,
       discoveryCalls,
       accountLists,
@@ -43,6 +54,10 @@ const server = http.createServer(async (req, res) => {
     failNextQuery = true;
     return send({ ok: true });
   }
+  if (req.url === "/test/deny-writes") {
+    denyWrites = true;
+    return send({ ok: true });
+  }
   if (req.url === "/test/throttle-discovery") {
     throttleDiscovery = true;
     return send({ ok: true });
@@ -53,6 +68,10 @@ const server = http.createServer(async (req, res) => {
     version = 1;
     deleted = false;
     writeCount = 0;
+    patchCount = 0;
+    replaceCount = 0;
+    lastPatch = null;
+    denyWrites = false;
     discoveryCalls = 0;
     accountLists = 0;
     discoveryDelay = 0;
@@ -137,6 +156,18 @@ const server = http.createServer(async (req, res) => {
   }
   let body = "";
   for await (const chunk of req) body += chunk;
+  if (
+    denyWrites &&
+    (req.method === "PATCH" ||
+      req.method === "PUT" ||
+      req.method === "DELETE" ||
+      (req.method === "POST" &&
+        req.headers["x-ms-documentdb-isquery"] !== "true"))
+  )
+    return send(
+      { message: "The account key is read only; secret-upstream-value" },
+      403,
+    );
   if (
     /^\/dbs\/Shop\/colls\/(Orders|Archive)\/docs$/.test(req.url) &&
     req.headers["x-ms-documentdb-isquery"] === "true"
@@ -226,7 +257,30 @@ const server = http.createServer(async (req, res) => {
       return send({}, 503);
     }
     if (req.headers["x-ms-continuation"]) return send('{"Documents":[]}', 200);
-    if (query.includes("BAD")) return send({ message: "Invalid SQL" }, 400);
+    if (query.includes("BAD") || /FROM\s+c\s+AND/i.test(query))
+      return send(
+        {
+          code: "BadRequest",
+          message: JSON.stringify({
+            errors: [
+              {
+                code: "SC1001",
+                location: { start: 14, end: 17 },
+                message: "Syntax error near secret-upstream-value",
+              },
+            ],
+          }),
+        },
+        400,
+      );
+    if (query.includes("NEEDS_PIPELINE"))
+      return send(
+        {
+          message:
+            "Cross partition query can not be directly served by the gateway",
+        },
+        400,
+      );
     return send(`{"Documents":[${deleted ? "" : document}]}`, 200, {
       "x-ms-continuation": "second-page",
     });
@@ -235,6 +289,42 @@ const server = http.createServer(async (req, res) => {
     return deleted
       ? send({}, 404)
       : send(document, 200, { ETag: `"v${version}"` });
+  if (req.method === "PATCH") {
+    const spec = parseExact(body);
+    if (
+      req.headers["if-match"] !== `"v${version}"` ||
+      spec.condition !==
+        "from c where c._etag = " + JSON.stringify(`"v${version}"`)
+    )
+      return send({}, 412);
+    if (spec.operations.length < 1 || spec.operations.length > 10)
+      return send({ message: "Patch operation limit" }, 400);
+    const next = parseExact(document);
+    for (const op of spec.operations) {
+      const parts = op.path
+        .slice(1)
+        .split("/")
+        .map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
+      let parent = next;
+      for (const part of parts.slice(0, -1)) parent = parent[part];
+      if (!parent) return send({ message: "Patch parent path missing" }, 400);
+      if (op.op === "remove") delete parent[parts.at(-1)];
+      else
+        Object.defineProperty(parent, parts.at(-1), {
+          value: op.value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+    }
+    version++;
+    writeCount++;
+    patchCount++;
+    lastPatch = JSON.parse(body);
+    next._etag = `"v${version}"`;
+    document = stringifyExact(next);
+    return send(document, 200, { ETag: `"v${version}"` });
+  }
   if (req.method === "PUT" || req.method === "DELETE") {
     if (req.headers["if-match"] !== `"v${version}"`) return send({}, 412);
     writeCount++;
@@ -243,6 +333,7 @@ const server = http.createServer(async (req, res) => {
       deleted = true;
       return send("", 204);
     }
+    replaceCount++;
     document = body.replace(/}$/, `,"_etag":"\\\"v${version}\\\""}`);
     return send(document, 200, { ETag: `"v${version}"` });
   }

@@ -46,12 +46,17 @@ type page struct {
 	CacheWarning string          `json:"cacheWarning,omitempty"`
 }
 type serviceError struct {
-	status                 int
-	activityID, retryAfter string
+	status                    int
+	activityID, retryAfter    string
+	category, hint, errorCode string
+	position                  int
 }
 
 func (e *serviceError) Error() string {
-	message := map[int]string{400: "Cosmos DB rejected the request. Check SQL syntax, parameters and partition key; some cross-partition query shapes require the SDK query pipeline.", 401: "Authentication failed. Check the account key and system clock.", 403: "Access denied. Check key permissions, firewall and network access.", 404: "Database, container or document was not found.", 409: "A document with this id and partition key already exists.", 412: "Document changed since it was opened. Reload it before editing again.", 413: "Document or request is too large.", 429: "Request throttled. Retry after the indicated delay; no write was replayed.", 503: "Cosmos DB is temporarily unavailable."}[e.status]
+	message := e.hint
+	if message == "" {
+		message = defaultServiceHint(e.status)
+	}
 	if message == "" {
 		message = "Cosmos DB request failed."
 	}
@@ -128,7 +133,11 @@ func (c *cosmosClient) request(method, kind, link, path string, body []byte, hea
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return page{}, &serviceError{status: resp.StatusCode, activityID: resp.Header.Get("x-ms-activity-id"), retryAfter: resp.Header.Get("x-ms-retry-after-ms")}
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		e := classifyServiceError(resp.StatusCode, data, resp.Header.Get("x-ms-substatus"))
+		e.activityID = resp.Header.Get("x-ms-activity-id")
+		e.retryAfter = resp.Header.Get("x-ms-retry-after-ms")
+		return page{}, e
 	}
 	const limit = 6 * 1024 * 1024
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))

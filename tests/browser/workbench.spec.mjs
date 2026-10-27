@@ -12,6 +12,7 @@ async function openDocument(frame) {
     .getByRole("button", { name: "读取完整文档", exact: true })
     .click();
   await expect(frame.locator("#document-state")).toHaveText("完整文档");
+  await frame.locator("#document-json-view").click();
 }
 test.beforeEach(async ({ request }) => {
   await request.get("http://127.0.0.1:18081/test/reset");
@@ -31,7 +32,7 @@ test("query, paging, lossless document edit, and ETag conflict", async ({
   await expect(frame.locator("#table")).toContainText("没有匹配的结果");
   await frame.getByRole("button", { name: "上一页", exact: true }).click();
   await openDocument(frame);
-  const editor = frame.getByRole("textbox", { name: "JSON 文档", exact: true });
+  const editor = frame.locator("#editor");
   const original = await editor.inputValue();
   expect(original).toContain("9223372036854775807");
   await editor.fill(original.replace("pending", "paid"));
@@ -50,6 +51,7 @@ test("query, paging, lossless document edit, and ETag conflict", async ({
   expect(saved.document).toContain("9223372036854775807");
   expect(saved.writeCount).toBe(1);
   await request.get("http://127.0.0.1:18081/test/conflict");
+  await frame.locator("#document-json-view").click();
   await editor.fill((await editor.inputValue()).replace("paid", "shipped"));
   await activate(frame, "保存");
   await frame.getByRole("button", { name: "确认", exact: true }).click();

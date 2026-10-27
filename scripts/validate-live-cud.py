@@ -56,7 +56,7 @@ def main():
             print(method + ": expected rejection PASS", flush=True)
             return None
         if "error" in response:
-            raise RuntimeError("Backend operation failed: " + method)
+            raise RuntimeError("Backend operation failed: " + method + ": " + response["error"].get("message", ""))
         result = response["result"]
         print(f"{method}: PASS" + (f" ({result['ru']:.2f} RU)" if "ru" in result else ""), flush=True)
         return result
@@ -85,6 +85,7 @@ def main():
             document = {"id": identity["id"], "tenant": "validation", "status": "created", "amount": 42}
             create = {**identity, "documentText": json.dumps(document)}
             call("cosmos/create", create, "read-only")
+            call("cosmos/patch", {**identity, "etag": '"readonly"', "operationsText": '[{"op":"set","path":"/amount","value":43}]'}, "read-only")
             connection["external_config"]["read_only"] = False
             call("connection/connect", {"connection": connection})
             created = call("cosmos/create", create)
@@ -94,11 +95,18 @@ def main():
             document["status"] = "updated"
             updated = call("cosmos/replace", {**identity, "etag": created["etag"], "documentText": json.dumps(document)})
             assert json.loads(updated["json"])["status"] == "updated"
+            patch = {**identity, "etag": updated["etag"], "operationsText": '[{"op":"set","path":"/amount","value":43},{"op":"set","path":"/note","value":"patched"}]'}
+            patched = call("cosmos/patch", patch)
+            assert json.loads(patched["json"])["amount"] == 43
+            assert json.loads(patched["json"])["note"] == "patched"
+            assert json.loads(patched["json"])["status"] == "updated"
+            call("cosmos/patch", patch, "HTTP 412")
+            call("cosmos/patch", {**identity, "etag": patched["etag"], "operationsText": '[{"op":"set","path":"/tenant","value":"other"}]'}, "不能修改")
             call("cosmos/replace", {**identity, "etag": created["etag"], "documentText": json.dumps(document)}, "HTTP 412")
             read = call("cosmos/read", identity)
             assert json.loads(read["json"])["status"] == "updated"
             call("cosmos/delete", {**identity, "etag": created["etag"]}, "HTTP 412")
-            call("cosmos/delete", {**identity, "etag": updated["etag"]})
+            call("cosmos/delete", {**identity, "etag": patched["etag"]})
             call("cosmos/read", identity, "HTTP 404")
             cache = call("cosmos/partitionCache", identity)
             assert '["validation"]' not in cache["keys"]

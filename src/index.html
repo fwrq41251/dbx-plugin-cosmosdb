@@ -148,6 +148,37 @@ SELECT * FROM c</textarea
           </div>
           <small id="write-hint">连接后可查看文档操作权限。</small>
         </div>
+        <div class="document-view-toolbar toolbar">
+          <button id="fields-view" type="button">字段</button>
+          <button id="document-json-view" type="button" class="active">
+            JSON
+          </button>
+        </div>
+        <section id="field-editor" hidden aria-label="文档字段编辑">
+          <input
+            id="field-filter"
+            type="search"
+            aria-label="筛选文档字段"
+            placeholder="按字段路径筛选…"
+          />
+          <div id="field-list"></div>
+          <details id="add-field-section">
+            <summary>添加字段</summary>
+            <input
+              id="add-field-path"
+              aria-label="新字段路径"
+              placeholder="/remark 或 /address/city"
+            />
+            <textarea
+              id="add-field-value"
+              aria-label="新字段值（JSON）"
+              rows="2"
+            >
+""</textarea
+            >
+            <button id="add-field" type="button">添加到草稿</button>
+          </details>
+        </section>
         <textarea
           id="editor"
           aria-label="JSON 文档"
@@ -156,6 +187,12 @@ SELECT * FROM c</textarea
           placeholder="点击结果行预览，再读取完整文档进行编辑"
         ></textarea>
         <div class="document-footer">
+          <label id="save-method-row" hidden
+            >保存方式<select id="save-method" aria-label="保存方式">
+              <option value="patch">局部更新（最多 10 个操作）</option>
+              <option value="replace">完整替换文档</option>
+            </select></label
+          >
           <small id="etag">读取完整文档后才能更新或删除。</small>
           <div class="toolbar">
             <button id="save" class="primary">保存</button

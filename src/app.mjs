@@ -14,6 +14,13 @@ import {
   prepareDocument,
   documentChanges,
 } from "./documents.mjs";
+import {
+  documentFields,
+  parseFieldInput,
+  editDocumentField,
+  buildDocumentPatch,
+  documentPathExists,
+} from "./fields.mjs";
 const $ = (id) => document.getElementById(id);
 const state = {
   connectionId: "",
@@ -30,6 +37,8 @@ const state = {
   snapshot: null,
   baseline: "",
   creating: false,
+  documentView: "json",
+  fieldErrors: new Map(),
 };
 const host = window.dbxPlugin;
 const partitionScopes = new Map();
@@ -254,7 +263,7 @@ function dirty() {
   return (
     !state.readOnly &&
     !!(state.snapshot || state.creating) &&
-    $("editor").value !== state.baseline
+    ($("editor").value !== state.baseline || state.fieldErrors.size > 0)
   );
 }
 function confirmAction(title, message, changes = []) {
@@ -322,7 +331,8 @@ function controls() {
     busy ||
     state.readOnly ||
     (!state.snapshot && !state.creating) ||
-    (!!state.snapshot && !dirty());
+    (!!state.snapshot && !dirty()) ||
+    state.fieldErrors.size > 0;
   $("delete").disabled = busy || state.readOnly || !state.snapshot;
   $("new").disabled ||= state.readOnly;
   $("generate-id").hidden = !state.creating;
@@ -334,6 +344,21 @@ function controls() {
       : "读取完整文档后可修改或删除；保存前显示差异，系统字段不参与编辑。";
   $("editor").readOnly =
     busy || state.readOnly || (!state.snapshot && !state.creating);
+  for (const id of ["fields-view", "document-json-view", "field-filter"])
+    $(id).disabled = busy || !ready;
+  for (const el of $("field-list").querySelectorAll(
+    "input,textarea,select,button",
+  ))
+    el.disabled =
+      busy ||
+      state.readOnly ||
+      (!state.snapshot && !state.creating) ||
+      el.dataset.locked === "true";
+  for (const id of ["add-field", "add-field-path", "add-field-value"])
+    $(id).disabled =
+      busy || state.readOnly || (!state.snapshot && !state.creating);
+  $("save-method-row").hidden = !state.snapshot;
+  $("save-method").disabled = busy || state.readOnly;
   for (const id of ["query-pk-choose", "document-pk-choose"])
     $(id).disabled = busy || !selected;
   if (!$("pk-picker").hidden) renderPartitionOptions();
@@ -377,6 +402,7 @@ function metrics(result, prefix = "") {
   );
 }
 function resetEditor() {
+  state.fieldErrors.clear();
   state.snapshot = null;
   state.creating = false;
   state.baseline = "";
@@ -385,6 +411,8 @@ function resetEditor() {
   $("document-pk").value = "";
   $("document-state").textContent = "未选择";
   $("etag").textContent = "读取完整文档后才能更新或删除。";
+  $("field-list").replaceChildren();
+  setDocumentView("json");
 }
 function resetResults() {
   state.pages = [];
@@ -589,6 +617,7 @@ function opened(result, identity) {
   state.snapshot = { ...identity, etag };
   state.creating = false;
   state.baseline = encodeJSON(editableDocument(doc), null, 2);
+  state.fieldErrors.clear();
   $("editor").value = state.baseline;
   $("document-id").value = identity.id;
   $("document-pk").value = identity.partitionKeyText;
@@ -598,7 +627,179 @@ function opened(result, identity) {
     ? `ETag: ${etag}`
     : "服务未提供 ETag，无法更新或删除";
   metrics(result, "文档已读取 · ");
+  $("save-method").value = "patch";
+  $("field-filter").value = "";
+  setDocumentView("fields");
 }
+
+function draftChanged() {
+  $("document-state").textContent = dirty()
+    ? "未保存"
+    : state.creating
+      ? "新文档"
+      : "完整文档";
+  controls();
+}
+function setDocumentView(view) {
+  if (state.fieldErrors.size && view !== state.documentView) {
+    status("请先修正字段值格式，再切换视图。", true);
+    return;
+  }
+  if (view === "fields") {
+    try {
+      renderFields();
+    } catch (error) {
+      status(
+        "JSON 文档格式不正确，请先在 JSON 视图修正：" + error.message,
+        true,
+      );
+      return;
+    }
+  }
+  state.documentView = view;
+  $("field-editor").hidden = view !== "fields";
+  $("editor").hidden = view !== "json";
+  $("fields-view").classList.toggle("active", view === "fields");
+  $("document-json-view").classList.toggle("active", view === "json");
+  controls();
+}
+function renderFields() {
+  const doc = parseJSON($("editor").value),
+    rows = documentFields(doc, partitionPaths()),
+    target = $("field-list"),
+    needle = $("field-filter").value.trim().toLowerCase();
+  target.replaceChildren();
+  for (const row of rows.filter((x) => x.path.toLowerCase().includes(needle))) {
+    const card = document.createElement("div");
+    card.className = "field-card";
+    card.dataset.path = row.path;
+    const label = document.createElement("label"),
+      title = document.createElement("span");
+    title.className = "field-title";
+    title.textContent = row.path + (row.locked ? " · 只读" : "");
+    const input =
+      row.kind === "boolean"
+        ? document.createElement("select")
+        : document.createElement(
+            row.kind === "json" ||
+              (row.kind === "string" && String(row.value).length > 80)
+              ? "textarea"
+              : "input",
+          );
+    if (row.kind === "boolean")
+      for (const value of ["true", "false"])
+        input.add(new Option(value, value));
+    if (input.tagName === "TEXTAREA") input.rows = 3;
+    input.value = row.kind === "string" ? row.value : encodeJSON(row.value);
+    input.setAttribute("aria-label", `字段 ${row.path}`);
+    input.dataset.locked = String(row.locked);
+    const error = document.createElement("small");
+    error.className = "field-error";
+    error.setAttribute("role", "status");
+    input.oninput = () => {
+      if (state.busy || state.readOnly || row.locked) return;
+      try {
+        const value = parseFieldInput(input.value, row.kind),
+          next = editDocumentField(
+            parseJSON($("editor").value),
+            row.path,
+            value,
+            partitionPaths(),
+          );
+        $("editor").value = encodeJSON(next, null, 2);
+        state.fieldErrors.delete(row.path);
+        error.textContent = "";
+        input.removeAttribute("aria-invalid");
+        draftChanged();
+      } catch (e) {
+        state.fieldErrors.set(row.path, e.message);
+        error.textContent = e.message;
+        input.setAttribute("aria-invalid", "true");
+        controls();
+      }
+    };
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "删除字段";
+    remove.className = "remove-field";
+    remove.dataset.locked = String(row.locked);
+    remove.setAttribute("aria-label", `删除字段 ${row.path}`);
+    remove.onclick = () => {
+      if (state.busy || state.readOnly || row.locked) return;
+      if ([...state.fieldErrors.keys()].some((path) => path !== row.path)) {
+        status("请先修正其他字段的无效值，再删除字段。", true);
+        return;
+      }
+      try {
+        $("editor").value = encodeJSON(
+          editDocumentField(
+            parseJSON($("editor").value),
+            row.path,
+            null,
+            partitionPaths(),
+            true,
+          ),
+          null,
+          2,
+        );
+        state.fieldErrors.delete(row.path);
+        renderFields();
+        draftChanged();
+      } catch (error) {
+        status(error.message, true);
+      }
+    };
+    label.append(title, input);
+    card.append(label, error, remove);
+    target.append(card);
+  }
+  if (!target.children.length) {
+    const empty = document.createElement("p");
+    empty.className = "info";
+    empty.textContent = "没有匹配的字段。";
+    target.append(empty);
+  }
+}
+$("fields-view").onclick = () => setDocumentView("fields");
+$("document-json-view").onclick = () => setDocumentView("json");
+$("field-filter").oninput = () => {
+  if (state.fieldErrors.size) {
+    status("请先修正无效字段值，再筛选。", true);
+    return;
+  }
+  try {
+    renderFields();
+    controls();
+  } catch (error) {
+    status(error.message, true);
+  }
+};
+$("add-field").onclick = () => {
+  if (state.busy || state.readOnly || (!state.snapshot && !state.creating))
+    return;
+  try {
+    if (state.fieldErrors.size) throw new Error("请先修正无效字段值。");
+    const path = $("add-field-path").value.trim(),
+      doc = parseJSON($("editor").value);
+    if (documentPathExists(doc, path))
+      throw new Error("字段已存在，请直接编辑对应字段。");
+    $("editor").value = encodeJSON(
+      editDocumentField(
+        doc,
+        path,
+        parseJSON($("add-field-value").value),
+        partitionPaths(),
+      ),
+      null,
+      2,
+    );
+    $("add-field-path").value = "";
+    renderFields();
+    draftChanged();
+  } catch (error) {
+    status(error.message, true);
+  }
+};
 
 function syncDraftPartition() {
   if (!state.creating) return;
@@ -787,6 +988,7 @@ bind("new", async () => {
   status("正在编辑新文档");
 });
 bind("save", async () => {
+  if (state.fieldErrors.size) throw new Error("请先修正字段值格式。");
   const text = $("editor").value;
   const prepared = prepareDocument(
     text,
@@ -813,19 +1015,28 @@ bind("save", async () => {
     status("没有需要保存的字段变化。");
     return;
   }
+  const patch = !creating && $("save-method").value === "patch";
+  const operations = patch
+    ? buildDocumentPatch(parseJSON(state.baseline), doc, partitionPaths())
+    : null;
   if (
     !(await confirmAction(
-      creating ? "创建文档？" : "替换完整文档？",
-      `${identity.database} / ${identity.container}\nid: ${identity.id}\n分区键: ${identity.partitionKeyText}`,
+      creating ? "创建文档？" : patch ? "局部更新文档？" : "替换完整文档？",
+      `${identity.database} / ${identity.container}\nid: ${identity.id}\n分区键: ${identity.partitionKeyText}${patch ? `\n仅提交 ${operations.length} 个字段操作` : ""}`,
       changes,
     ))
   )
     return;
   await pauseDiscovery();
-  const result = await invoke(creating ? "cosmos/create" : "cosmos/replace", {
-    ...identity,
-    documentText: prepared.text,
-  });
+  const result = await invoke(
+    creating ? "cosmos/create" : patch ? "cosmos/patch" : "cosmos/replace",
+    {
+      ...identity,
+      ...(patch
+        ? { operationsText: encodeJSON(operations) }
+        : { documentText: prepared.text }),
+    },
+  );
   opened(result, identity);
   await afterMutation(result, identity, "保存");
 });

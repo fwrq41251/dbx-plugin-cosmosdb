@@ -21,20 +21,22 @@ type request struct {
 		Port  int             `json:"port"`
 		Proxy json.RawMessage `json:"proxy"`
 	} `json:"runtime"`
-	Database         string          `json:"database"`
-	Container        string          `json:"container"`
-	ID               string          `json:"id"`
-	Query            string          `json:"query"`
-	Parameters       []parameter     `json:"parameters"`
-	Continuation     string          `json:"continuation"`
-	PageSize         int             `json:"pageSize"`
-	PartitionKey     json.RawMessage `json:"partitionKey"`
-	Document         json.RawMessage `json:"document"`
-	ETag             string          `json:"etag"`
-	DocumentText     string          `json:"documentText"`
-	PartitionKeyText string          `json:"partitionKeyText"`
-	ParametersText   string          `json:"parametersText"`
-	DiscoveryMode    string          `json:"discoveryMode"`
+	Database         string           `json:"database"`
+	Container        string           `json:"container"`
+	ID               string           `json:"id"`
+	Query            string           `json:"query"`
+	Parameters       []parameter      `json:"parameters"`
+	Continuation     string           `json:"continuation"`
+	PageSize         int              `json:"pageSize"`
+	PartitionKey     json.RawMessage  `json:"partitionKey"`
+	Document         json.RawMessage  `json:"document"`
+	ETag             string           `json:"etag"`
+	DocumentText     string           `json:"documentText"`
+	PartitionKeyText string           `json:"partitionKeyText"`
+	ParametersText   string           `json:"parametersText"`
+	DiscoveryMode    string           `json:"discoveryMode"`
+	OperationsText   string           `json:"operationsText"`
+	Operations       []patchOperation `json:"operations"`
 }
 type connection struct {
 	ID       string            `json:"id"`
@@ -167,7 +169,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 				result, err = c.partitionKeys(r)
 			}
 		}
-	case "cosmos/query", "cosmos/read", "cosmos/create", "cosmos/replace", "cosmos/delete":
+	case "cosmos/query", "cosmos/read", "cosmos/create", "cosmos/replace", "cosmos/patch", "cosmos/delete":
 		if r.DocumentText != "" {
 			r.Document = json.RawMessage(r.DocumentText)
 		}
@@ -179,13 +181,22 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 				return nil, sdk.NewError(-32602, "Parameters must be a JSON array")
 			}
 		}
+		if r.OperationsText != "" {
+			if json.Unmarshal([]byte(r.OperationsText), &r.Operations) != nil {
+				return nil, sdk.NewError(-32602, "局部更新操作必须是 JSON 数组")
+			}
+		}
 		if err = validID(r.Database); err == nil {
 			err = validID(r.Container)
 		}
 		if err == nil {
 			var document page
-			document, err = c.documents(method, r)
-			if err == nil && (method == "cosmos/create" || method == "cosmos/replace" || method == "cosmos/delete") {
+			if method == "cosmos/patch" {
+				document, err = c.patchDocument(r)
+			} else {
+				document, err = c.documents(method, r)
+			}
+			if err == nil && (method == "cosmos/create" || method == "cosmos/replace" || method == "cosmos/patch" || method == "cosmos/delete") {
 				ru, cacheErr := c.observeMutation(r, method == "cosmos/delete")
 				document.RU += ru
 				if cacheErr != nil {
@@ -204,12 +215,12 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 }
 func rpcError(err error) *sdk.PluginError {
 	if e, ok := err.(*serviceError); ok {
-		return &sdk.PluginError{Code: -32000, Message: e.Error(), Data: map[string]any{"status": e.status, "activityId": e.activityID, "retryAfterMs": e.retryAfter}}
+		return &sdk.PluginError{Code: -32000, Message: e.Error(), Data: map[string]any{"status": e.status, "activityId": e.activityID, "retryAfterMs": e.retryAfter, "category": e.category, "serviceCode": e.errorCode, "position": e.position}}
 	}
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.5.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.6.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }
