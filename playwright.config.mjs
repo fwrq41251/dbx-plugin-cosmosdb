@@ -17,7 +17,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "npm run dev -- --port 5191 --data-dir .dbx-dev/e2e-official",
+      command: "npm run dev -- --port 5191 --data-dir .dbx-dev/e2e-plugin-scope",
       url: "http://127.0.0.1:5191",
       reuseExistingServer: !process.env.CI,
       timeout: 120000,

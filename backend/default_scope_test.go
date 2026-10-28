@@ -11,7 +11,7 @@ import (
 	sdk "github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk"
 )
 
-func TestUIBrowseAndRequestsKeepSavedMCPDefault(t *testing.T) {
+func TestUIAndMCPSharePluginSelectedScope(t *testing.T) {
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.Method+" "+r.URL.Path)
@@ -50,16 +50,17 @@ func TestUIBrowseAndRequestsKeepSavedMCPDefault(t *testing.T) {
 	if paths[len(paths)-1] != "POST /dbs/Reports/colls/Events/docs" {
 		t.Fatal(paths)
 	}
-	// The UI request never mutates the saved client defaults used by info/reopen.
+	// Selecting a complete location updates both UI reopening and MCP.
+	call("cosmos/selectScope", `{"connectionId":"scope-test","database":"Reports","container":"Events"}`)
 	info := call("cosmos/info", `{"connectionId":"scope-test"}`).(map[string]any)
-	if info["database"] != "Shop" || info["container"] != "Orders" {
+	if info["database"] != "Reports" || info["container"] != "Events" {
 		t.Fatal(info)
 	}
 	v, bad := invokeMCP(t, p, "read_document", map[string]any{"connectionId": "scope-test", "id": "saved-document", "partition_key_text": `["one"]`}, lifecycle)
-	if bad || v["database"] != "Shop" || v["container"] != "Orders" {
+	if bad || v["database"] != "Reports" || v["container"] != "Events" {
 		t.Fatal(v)
 	}
-	if paths[len(paths)-1] != "GET /dbs/Shop/colls/Orders/docs/saved-document" {
+	if paths[len(paths)-1] != "GET /dbs/Reports/colls/Events/docs/saved-document" {
 		t.Fatal(paths)
 	}
 	before := len(paths)

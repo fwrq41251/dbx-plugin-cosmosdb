@@ -13,13 +13,56 @@ async function select(f, kind, id) {
   await f.locator("#scope-filter").press("Enter");
 }
 
-test("breadcrumb switches containers and paginated databases without changing saved defaults", async ({
+test("a fresh connection learns its position without connection-form scope fields", async ({
+  page,
+  request,
+}) => {
+  const name = `Managed location ${Date.now()}`;
+  const f = await connect(page, true, false, name);
+  await f.locator("#container").selectOption("Archive");
+  await expect(f.locator("#container")).toHaveValue("Archive");
+  await expect(f.locator("#run")).toBeEnabled();
+  await page.reload();
+  await page.getByRole("button", { name, exact: true }).click();
+  const reopened = page.frameLocator("iframe").last();
+  await expect(reopened.locator("#scope-container")).toHaveText("Archive");
+  expect((await snapshot(request)).writeCount).toBe(0);
+});
+
+test("failed position persistence leaves the active scope and document draft intact", async ({
+  page,
+  request,
+}) => {
+  const name = `Failed position ${Date.now()}`;
+  const f = await connect(page, false, true, name);
+  await query(f);
+  await f
+    .getByRole("button", { name: "读取第 1 行完整文档", exact: true })
+    .click();
+  await f.getByLabel("字段 /status", { exact: true }).fill("unsaved");
+  await page.route("**/api/bridge", async (route) => {
+    if (route.request().postDataJSON().params?.method === "cosmos/selectScope")
+      return route.fulfill({ status: 500, json: { error: { message: "位置保存失败" } } });
+    return route.continue();
+  });
+  await select(f, "container", "Archive");
+  await f.locator("#confirm-accept").click();
+  await expect(f.locator("#status")).toContainText("位置保存失败");
+  await expect(f.locator("#scope-container")).toHaveText("Orders");
+  await expect(f.getByLabel("字段 /status", { exact: true })).toHaveValue(
+    "unsaved",
+  );
+  await expect(f.locator("#document-state")).toHaveText("未保存");
+  expect((await snapshot(request)).writeCount).toBe(0);
+});
+
+test("breadcrumb switches containers and paginated databases and reopening the persisted selection", async ({
   page,
   request,
 }) => {
   const name = `Scope switching ${Date.now()}`;
   const f = await connect(page, true, true, name);
-  expect((await snapshot(request)).accountLists).toBe(0);
+  expect((await snapshot(request)).accountLists).toBe(1);
   await f.locator("#query-pk").fill('["old-key"]');
   await select(f, "container", "Archive");
   await expect(f.locator("#scope-container")).toHaveText("Archive");
@@ -46,7 +89,7 @@ test("breadcrumb switches containers and paginated databases without changing sa
   await expect(f.locator("#metadata")).toContainText("/org");
   await f.locator("#refresh").press("Escape");
   expect((await snapshot(request)).queryCalls).toBe(1);
-  expect((await snapshot(request)).accountLists).toBe(2);
+  expect((await snapshot(request)).accountLists).toBe(3);
   await f.locator("#query-pk").fill('["reports"]');
   await query(f);
   await expect(f.locator("#table")).toContainText("report-001");
@@ -61,8 +104,8 @@ test("breadcrumb switches containers and paginated databases without changing sa
   await page.reload();
   await page.getByRole("button", { name, exact: true }).click();
   const reopened = page.frameLocator("iframe").last();
-  await expect(reopened.locator("#scope-database")).toHaveText("Shop");
-  await expect(reopened.locator("#scope-container")).toHaveText("Orders");
+  await expect(reopened.locator("#scope-database")).toHaveText("Reports");
+  await expect(reopened.locator("#scope-container")).toHaveText("Events");
   expect((await snapshot(request)).writeCount).toBe(0);
 });
 

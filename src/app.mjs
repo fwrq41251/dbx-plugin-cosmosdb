@@ -622,11 +622,22 @@ async function selectDatabase(next, { container = "", browse = false } = {}) {
   status(next ? "请选择容器" : "请选择数据库");
   if (container && items.some((item) => item.id === container)) {
     $("container").value = container;
-    selectContainer(container);
+    await selectContainer(container, false);
   }
 }
 
-function selectContainer(next) {
+async function selectContainer(next, persist = true) {
+  if (next && persist) {
+    try {
+      await invoke("cosmos/selectScope", {
+        database: state.database,
+        container: next,
+      });
+    } catch (error) {
+      $("container").value = state.container;
+      throw error;
+    }
+  }
   state.container = next;
   $("container").value = next;
   $("container").title = next;
@@ -1435,7 +1446,7 @@ async function chooseScope(context, id) {
     } else {
       state.containers = context.items;
       options("container", context.items, "选择容器");
-      selectContainer(id);
+      await selectContainer(id);
     }
     switched = true;
   });
@@ -2043,7 +2054,7 @@ $("container").addEventListener("change", () =>
       $("container").value = state.container;
       return;
     }
-    selectContainer(next);
+    await selectContainer(next);
   }),
 );
 bind("run", () => query());
@@ -2369,6 +2380,7 @@ async function contextChanged(context) {
     updateScopeContext();
     $("mode").textContent = info.readOnly ? "只读连接" : "允许文档写入";
     await loadDatabases();
+    if (info.scopeWarning) status(info.scopeWarning, true);
   });
 }
 controls();

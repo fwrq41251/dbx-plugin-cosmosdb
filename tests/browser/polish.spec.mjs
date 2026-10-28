@@ -43,7 +43,7 @@ test("container context replaces the sidebar and metadata opens without extra da
     .last()
     .screenshot({ path: "/tmp/dbx-polish-scoped-dark.png" });
   const after = await snapshot(request);
-  expect(after.accountLists).toBe(0);
+  expect(after.accountLists).toBe(1);
   expect(after.queryCalls).toBe(1);
   expect(after.writeCount).toBe(0);
 });

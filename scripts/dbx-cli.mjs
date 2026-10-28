@@ -20,7 +20,17 @@ const result = spawnSync(
   {
     cwd: fileURLToPath(root),
     stdio: "inherit",
-    env: { ...process.env, DBX_PLUGIN_SDK_ROOT: fileURLToPath(sdkRoot) },
+    env: {
+      ...process.env,
+      DBX_PLUGIN_SDK_ROOT: fileURLToPath(sdkRoot),
+      ...(process.argv[2] === "dev"
+        ? {
+            DBX_PLUGIN_DATA_DIR: fileURLToPath(
+              new URL(".dbx-dev/plugin-data/", root),
+            ),
+          }
+        : {}),
+    },
   },
 );
 if (result.error) throw result.error;

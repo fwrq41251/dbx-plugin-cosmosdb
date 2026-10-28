@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { expect } from "@playwright/test";
 export async function connect(
   page,
@@ -17,14 +20,6 @@ export async function connect(
   await page
     .getByRole("textbox", { name: "Account Key", exact: true })
     .fill("dGVzdC1hY2NvdW50LWtleQ==");
-  if (scoped) {
-    await page
-      .getByRole("textbox", { name: "数据库 ID（可选）", exact: true })
-      .fill("Shop");
-    await page
-      .getByRole("textbox", { name: "容器 ID（可选）", exact: true })
-      .fill("Orders");
-  }
   await page
     .getByRole("checkbox", {
       name: "只读（关闭后允许文档增删改）",
@@ -33,7 +28,33 @@ export async function connect(
     .setChecked(readOnly);
   await page.getByRole("button", { name: "测试连接", exact: true }).click();
   await expect(page.getByText("连接测试成功", { exact: true })).toBeVisible();
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/connections/save") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "保存", exact: true }).press("Enter");
+  const savedId = (await (await saved).json()).value.id;
+  if (scoped) {
+    // Seed a plugin-owned position for tests that start with a preselected scope.
+    // Legacy connection-config migration is covered by backend lifecycle tests.
+    const directory = resolve(".dbx-dev/plugin-data/selected-scope-v1");
+    const hash = createHash("sha256")
+      .update(JSON.stringify(["http://127.0.0.1:18081", savedId]))
+      .digest("hex");
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await writeFile(
+      resolve(directory, hash + ".json"),
+      JSON.stringify({
+        version: 1,
+        database: "Shop",
+        container: "Orders",
+        revision: "fixture",
+      }),
+      { mode: 0o600 },
+    );
+  }
+
   await page.getByRole("button", { name, exact: true }).click();
   const frame = page.frameLocator("iframe").last();
   if (!scoped) {

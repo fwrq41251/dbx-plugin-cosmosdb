@@ -1967,7 +1967,7 @@ header .badge {
         aria-label="可选数据库或容器"
       ></div>
       <div id="scope-picker-status" class="muted" role="status"></div>
-      <small>仅切换当前工作台；重新打开连接时恢复保存的默认位置。</small>
+      <small>选定的数据库和容器由插件保存，重开连接及 MCP 都使用此位置。</small>
     </section>
     <div id="result-item-menu" role="menu" aria-label="结果项操作" hidden>
       <div id="result-item-summary" class="muted"></div>
@@ -29595,10 +29595,21 @@ ${indent}}` : "}";
     status(next ? "\u8BF7\u9009\u62E9\u5BB9\u5668" : "\u8BF7\u9009\u62E9\u6570\u636E\u5E93");
     if (container && items.some((item) => item.id === container)) {
       $("container").value = container;
-      selectContainer(container);
+      await selectContainer(container, false);
     }
   }
-  function selectContainer(next) {
+  async function selectContainer(next, persist = true) {
+    if (next && persist) {
+      try {
+        await invoke("cosmos/selectScope", {
+          database: state.database,
+          container: next
+        });
+      } catch (error) {
+        $("container").value = state.container;
+        throw error;
+      }
+    }
     state.container = next;
     $("container").value = next;
     $("container").title = next;
@@ -30257,7 +30268,7 @@ ${indent}}` : "}";
       } else {
         state.containers = context.items;
         options("container", context.items, "\u9009\u62E9\u5BB9\u5668");
-        selectContainer(id);
+        await selectContainer(id);
       }
       switched = true;
     });
@@ -30781,7 +30792,7 @@ ${indent}}` : "}";
         $("container").value = state.container;
         return;
       }
-      selectContainer(next);
+      await selectContainer(next);
     })
   );
   bind("run", () => query());
@@ -31073,6 +31084,7 @@ id: ${identity.id}
       updateScopeContext();
       $("mode").textContent = info.readOnly ? "\u53EA\u8BFB\u8FDE\u63A5" : "\u5141\u8BB8\u6587\u6863\u5199\u5165";
       await loadDatabases();
+      if (info.scopeWarning) status(info.scopeWarning, true);
     });
   }
   controls();

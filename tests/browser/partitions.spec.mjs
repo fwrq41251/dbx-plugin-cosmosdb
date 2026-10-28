@@ -100,7 +100,7 @@ test("container connections open directly and retain the saved scope after reope
   await expect(f.locator("#mode")).toContainText("只读");
   await expect(f.locator("#run")).toBeEnabled();
   expect((await (await request.get(base + "state")).json()).accountLists).toBe(
-    0,
+    1,
   );
   await page.reload();
   await page.getByRole("button", { name, exact: true }).click();
@@ -113,7 +113,7 @@ test("container connections open directly and retain the saved scope after reope
   );
   await expect(reopened.locator("#run")).toBeEnabled();
   expect((await (await request.get(base + "state")).json()).accountLists).toBe(
-    0,
+    1,
   );
 });
 

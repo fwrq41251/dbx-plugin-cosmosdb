@@ -1,16 +1,16 @@
 {
-  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/v0.6.58/plugins/manifest.schema.json",
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/v0.6.59/plugins/manifest.schema.json",
   "manifest_version": 1,
   "id": "io.github.fwrq41251.cosmosdb",
   "name": "Cosmos DB NoSQL",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "publisher": "fwrq41251",
   "source": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "description": "Query and edit Azure Cosmos DB for NoSQL documents.",
   "icon": "assets/plugin.svg",
   "engines": {
-    "dbx": ">=0.6.58",
+    "dbx": ">=0.6.59",
     "host_api": "^1.0"
   },
   "permissions": [],
@@ -55,20 +55,6 @@
           "required": true
         },
         {
-          "key": "database_id",
-          "label": "数据库 ID（可选）",
-          "type": "text",
-          "binding": "config",
-          "placeholder": "与容器 ID 一起填写，作为默认打开位置"
-        },
-        {
-          "key": "container_id",
-          "label": "容器 ID（可选）",
-          "type": "text",
-          "binding": "config",
-          "placeholder": "打开连接后直接进入此容器"
-        },
-        {
           "key": "read_only",
           "label": "只读（关闭后允许文档增删改）",
           "type": "boolean",
@@ -91,9 +77,23 @@
     {
       "type": "mcp",
       "id": "io.github.fwrq41251.cosmosdb.mcp",
-      "description": "Read-only container metadata, explicit-partition queries, point reads and local partition cache.",
+      "description": "Read-only access to the plugin-managed selected container, queries, point reads and local keys.",
       "external_tools": true,
-      "ai_tools": false
+      "ai_tools": false,
+      "tools": {
+        "container_info": {
+          "access": "read"
+        },
+        "query": {
+          "access": "read"
+        },
+        "read_document": {
+          "access": "read"
+        },
+        "cached_partition_keys": {
+          "access": "read"
+        }
+      }
     }
   ]
 }

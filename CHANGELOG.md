@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0 — Persistent plugin-managed location and current MCP compatibility
+
+- Remove database/container fields from the connection form; atomically persist validated selections in private plugin storage, isolated by connection and endpoint. Migrate existing defaults without rewriting credentials.
+- Reopening the workbench and MCP use the last selected location. Failed saves retain the current container and draft; corrupt/unavailable locations fail explicitly. Switching away and back invalidates old MCP cursors.
+- Require DBX 0.6.59+ and declare per-tool read access for the four MCP tools. Verified with MCP Server 0.4.134 and the desktop capability grant UI; MCP remains read-only independently of UI write permissions.
+
 ## 0.15.0 — Searchable database and container breadcrumbs
 
 - Make database/container breadcrumbs searchable selectors with lazy paginated lists, local caching, explicit refresh and keyboard navigation.

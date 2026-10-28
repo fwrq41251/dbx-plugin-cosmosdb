@@ -21,7 +21,7 @@
 
 ## 在 DBX 中安装
 
-`0.15.0` 开发候选版兼容目标为 DBX **0.6.58+**、Host API 1.x、sidecar protocol v1。当前商店版 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
+`0.16.0` 开发候选版兼容目标为 DBX **0.6.59+**、Host API 1.x、sidecar protocol v1。当前商店版 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
 
 打开 **DBX → 插件中心 → Marketplace**，搜索 **Cosmos DB NoSQL**，确认发布者为 `fwrq41251`，点击安装。官方商店自动验证安装包签名，无需开启“允许安装未签名开发包”。
 
@@ -38,7 +38,7 @@
 
 Key 由 DBX Secret Store 保存，只有连接生命周期的本地后端收到密钥。工作台不会收到密钥。插件不包含遥测、云中转或 AI 服务。
 
-默认位置在测试连接时直接验证，打开后自动进入保存的数据库和容器，无需 Account 层的数据库列表请求。0.15.0 起，界面可以临时选择其他数据库/容器；保存的范围是默认打开位置，不再是界面访问边界。Account Key 在 Azure 中原有的权限及连接只读设置保持不变。MCP 仍限定在保存的数据库和容器内。
+数据库和容器由插件按连接及 Endpoint 保存在宿主提供的私有数据目录中，连接表单不再显示这两个字段。选定完整位置并验证容器成功后原子保存；重开连接和 MCP 共用最后保存的位置。旧连接的 `database_id` / `container_id` 会在成功连接时自动迁移，无需重建连接。未选容器时不覆盖上次有效位置；保存失败保留当前容器与文档草稿。位置损坏或不可访问时提示重新选择，不静默改查其他容器。Account Key 和连接只读设置保持不变。
 
 打开保存的连接，依次选择数据库、容器并运行 `SELECT * FROM c`。双击结果行仅预览，**读取完整文档** 后才允许编辑，避免用查询投影覆盖完整文档。
 
@@ -65,7 +65,7 @@ Key 由 DBX Secret Store 保存，只有连接生命周期的本地后端收到�
 
 容器连接使用顶部“连接 / 数据库 / 容器”路径，隐藏固定侧栏；名称可悬停查看全文，宿主未提供连接名称时只显示数据库与容器。点击路径旁的“容器信息”可查看分区路径、元数据并显式刷新；打开面板只展示已有元数据，不额外访问 Azure。支持 Escape、外部点击与焦点离开关闭。Account 连接继续使用数据库、容器选择侧栏。
 
-点击面包屑中的数据库或容器名称，可打开支持本地搜索和键盘选择的列表。列表按需读取所有分页，当前工作区内缓存，刷新列表可显式重新加载；Azure 不允许列举时保留当前范围，默认容器仍可使用。切换前确认未保存草稿；新数据库的容器列表读取成功后才提交切换，失败保留原范围和草稿。切换后清除旧结果和文档定位，按新容器隔离分区候选、已选键、字段提示及列宽；不自动执行 SQL。元数据刷新保留临时位置，重新打开连接恢复保存的默认位置，不修改连接或凭据。
+点击面包屑中的数据库或容器名称，可打开支持本地搜索和键盘选择的列表。列表按需读取所有分页，当前工作区内缓存，刷新列表可显式重新加载；Azure 不允许列举时保留当前范围，默认容器仍可使用。切换前确认未保存草稿；新数据库的容器列表读取成功后才提交切换，失败保留原范围和草稿。切换后清除旧结果和文档定位，按新容器隔离分区候选、已选键、字段提示及列宽；不自动执行 SQL。元数据刷新和重新打开连接均保留最后成功选定的位置，MCP 随之更新；不修改宿主连接凭据。
 
 ![数据库与容器选择（本地模拟数据）](docs/scope-picker.png)
 
@@ -145,9 +145,9 @@ npm run package
 
 ## MCP 只读工具（0.9.0 起）
 
-通过官方 DBX MCP Server 接入，不需要单独启动 Cosmos 插件服务器，也不需要把 Account Key 配置到 AI 客户端。当前已验证的稳定组合为 **DBX 0.6.58 + `@dbx-app/mcp-server@0.4.132`**。插件 Manifest 使用该版本支持的 `external_tools` 和 MCP 只读标注。`0.4.134` 已要求新的逐工具权限声明及插件授权，与 0.6.58 的界面和 Manifest 契约不配套；此候选版暂不支持该组合，不能仅升级独立 MCP Server。后续适配需要同时升级宿主及 Manifest。
+通过官方 DBX MCP Server 接入，不需要单独启动 Cosmos 插件服务器，也不需要把 Account Key 配置到 AI 客户端。0.16.0 已验证 **DBX 0.6.59 + `@dbx-app/mcp-server@0.4.134`**，Manifest 为四个工具声明 `access: read`，适配新的集中权限模型。
 
-在 DBX 设置 → MCP → 权限管理中允许目标连接，并在工具列表添加以下四个精确工具名称。客户端只开放它们以及 `dbx_list_connections`；避免用通配符自动开放未来新增工具。
+在 DBX 设置 → MCP → Capabilities 中启用 Cosmos DB NoSQL，并选择 Read only 授权上限；四个工具均需启用。在 Permission management 中确认目标连接可见且允许读取。客户端配置添加以下四个精确工具名称。客户端只开放它们以及 `dbx_list_connections`；避免用通配符自动开放未来新增工具。
 
 | 工具 | 用途 | 主要参数 |
 | --- | --- | --- |
@@ -156,7 +156,7 @@ npm run package
 | `dbx_cosmosdb__read_document` | 按 id 和完整分区键点读 | `id`、`partition_key_text` |
 | `dbx_cosmosdb__cached_partition_keys` | 本地历史分区缓存过滤与分页 | 可选 `filter`、`offset`、`limit` |
 
-所有工具通过 `dbx_connection` 选择已保存并放行的容器连接，不能覆盖数据库、容器、Endpoint 或密钥。Account 层连接需先保存数据库和容器。MCP 只读分发器与界面写入分开，即使保存连接可写，也不提供 MCP 增删改。内置 DBX AI 工具保持关闭，仅开放外部 MCP。
+所有工具通过 `dbx_connection` 选择已保存并放行的容器连接，不能覆盖数据库、容器、Endpoint 或密钥。首次使用的连接需先在工作台选择数据库和容器。MCP 只读分发器与界面写入分开，即使保存连接可写，也不提供 MCP 增删改。内置 DBX AI 工具保持关闭，仅开放外部 MCP。
 
 分区键和查询参数使用 **JSON 文本字符串**，防止宿主解析 JSON 数字时损失精度。例如查询工具参数：
 
@@ -170,11 +170,11 @@ npm run package
 }
 ```
 
-查询返回 `documents_json`（保留数字原文）、`count`、`ru`、`metadata_ru`、`duration_ms`、`activity_id`、`has_more` 和可选的 `next_cursor`；点读和元数据返回 `document_json`。下一页保留原参数，将 `next_cursor` 填入 `cursor`。每页默认 20、最多 100 条，不自动翻页、重试或发现分区键。查询和点读使用容器元数据校验完整分区键。元数据按端点、连接、凭据身份、数据库和容器在 sidecar 内存缓存五分钟；缓存命中不请求 Azure。`metadata_source` 标明 `cache` / `live`，并返回 `metadata_cached_at`、`metadata_expires_at`。`ru` 包含实际发生的元数据读取成本，`metadata_ru` 单独列出；缓存命中为 0。容器相关的 400 / 404 会使该缓存失效，下次调用重新获取，不自动重试失败查询。显式调用 `container_info` 并传入 `refresh: true` 可立即刷新。空页可能仍有下一页。游标绑定连接、凭据身份、SQL、参数、分区键及每页大小，10 分钟或 sidecar 重启后失效；仅内存保存，最多 256 个游标。
+查询返回 `documents_json`（保留数字原文）、`count`、`ru`、`metadata_ru`、`duration_ms`、`activity_id`、`has_more` 和可选的 `next_cursor`；点读和元数据返回 `document_json`。下一页保留原参数，将 `next_cursor` 填入 `cursor`。每页默认 20、最多 100 条，不自动翻页、重试或发现分区键。查询和点读使用容器元数据校验完整分区键。元数据按端点、连接、凭据身份、数据库和容器在 sidecar 内存缓存五分钟；缓存命中不请求 Azure。`metadata_source` 标明 `cache` / `live`，并返回 `metadata_cached_at`、`metadata_expires_at`。`ru` 包含实际发生的元数据读取成本，`metadata_ru` 单独列出；缓存命中为 0。容器相关的 400 / 404 会使该缓存失效，下次调用重新获取，不自动重试失败查询。显式调用 `container_info` 并传入 `refresh: true` 可立即刷新。空页可能仍有下一页。游标绑定连接、位置版本、凭据身份、SQL、参数、分区键及每页大小（切换容器后旧游标失效，即使切回原容器），10 分钟或 sidecar 重启后失效；仅内存保存，最多 256 个游标。
 
 输出正文预算为 192 KiB，超出会明确失败并保留已知 RU，不静默截断文档或返回跳过结果的游标；查询时可减少每页数量或使用字段投影。AI 客户端仍可能施加自己的输出长度限制。分区缓存工具不发 Azure 请求，返回是否找到缓存、是否完整和缓存时间，不把已知候选当成实时完整列表。
 
-Codex 配置示例（路径改为实际安装位置；连接 ID 使用本机保存连接的 ID）：
+Codex 配置示例（路径改为 DBX 设置中生成的实际安装位置；连接范围和权限在 DBX 中管理，修改后重启客户端的 MCP Server）：
 
 ```toml
 [mcp_servers.dbx]
@@ -186,7 +186,6 @@ default_tools_approval_mode = "writes"
 
 [mcp_servers.dbx.env]
 DBX_MCP_PLUGIN_TOOLS = "flat"
-DBX_MCP_SCOPE_CONNECTION_IDS = "your-saved-connection-id"
 ```
 
 可选端到端验证：`python3 scripts/verify-mcp.py --binary /absolute/path/to/dbx-mcp --connection my-test --partition-key-text '["tenant-a"]'`。脚本通过真实 MCP 的初始化、发现和调用验证元数据、缓存、查询、点读及可用的下一页；仅输出验证结果，不打印凭据或文档内容，不写业务文档。macOS 如提示 `KEYRING_ACCESS_FAILED`，按官方说明对同一个 MCP 可执行文件运行一次 `--authorize-keychain`，不要将此参数放入客户端配置。
