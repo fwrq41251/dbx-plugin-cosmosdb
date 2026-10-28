@@ -1139,6 +1139,42 @@ body.light button.danger {
   color: var(--accent);
 }
 
+#result-item-menu {
+  position: fixed;
+  z-index: 1000;
+  width: min(290px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  box-shadow: 0 8px 28px #0005;
+}
+#result-item-menu button {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+}
+#result-item-menu button:hover:not(:disabled),
+#result-item-menu button:focus-visible {
+  background: #7cd4bf18;
+}
+#result-item-summary,
+#result-item-hint {
+  padding: 5px 7px;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#result-item-hint {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  font-size: 10px;
+}
+
     </style>
   </head>
   <body>
@@ -1508,6 +1544,21 @@ body.light button.danger {
           </div>
         </div>
       </section>
+    </div>
+    <div id="result-item-menu" role="menu" aria-label="结果项操作" hidden>
+      <div id="result-item-summary" class="muted"></div>
+      <button id="copy-result-item" type="button" role="menuitem">
+        复制此项 JSON
+      </button>
+      <button
+        id="read-result-item"
+        type="button"
+        role="menuitem"
+        aria-describedby="result-item-hint"
+      >
+        打开完整文档
+      </button>
+      <div id="result-item-hint" class="muted"></div>
     </div>
     <section id="pk-picker" role="dialog" aria-label="分区键选择" hidden>
       <div class="section-title">
@@ -21848,6 +21899,37 @@ body.light button.danger {
     return new LanguageSupport(jsonLanguage);
   }
 
+  // src/result-items.mjs
+  function jsonResultItems(text) {
+    const tree = jsonLanguage.parser.parse(text);
+    const array = tree.topNode.firstChild;
+    if (!array || array.name !== "Array" || array.nextSibling) return [];
+    let invalid = false;
+    tree.iterate({
+      enter(node) {
+        if (node.type.isError) invalid = true;
+      }
+    });
+    if (invalid) return [];
+    const items = [];
+    for (let node = array.firstChild; node; node = node.nextSibling) {
+      if (["[", "]", ","].includes(node.name)) continue;
+      items.push({ index: items.length, from: node.from, to: node.to });
+    }
+    return items;
+  }
+  function jsonResultItemAt(items, position) {
+    if (!Number.isInteger(position) || position < 0) return null;
+    let low = 0, high = items.length - 1;
+    while (low <= high) {
+      const mid = low + high >>> 1, item = items[mid];
+      if (position < item.from) high = mid - 1;
+      else if (position >= item.to) low = mid + 1;
+      else return item;
+    }
+    return null;
+  }
+
   // src/json-folding.mjs
   function nestedJSONFolds(text) {
     const ranges = [];
@@ -27808,7 +27890,8 @@ ${indent}}` : "}";
     readOnly: readOnly2 = false,
     hint = "",
     completion,
-    diagnostics
+    diagnostics,
+    contextMenu
   } = {}) {
     const access = new Compartment();
     let locked = readOnly2, onChange = () => {
@@ -27909,6 +27992,42 @@ ${indent}}` : "}";
       ]
     });
     const view2 = new EditorView({ parent, state: makeState(value) });
+    if (contextMenu) {
+      parent.addEventListener(
+        "contextmenu",
+        (event) => {
+          if (!view2.contentDOM.contains(event.target)) return;
+          const widget = event.target.closest?.(".cm-foldPlaceholder");
+          const position = widget ? view2.posAtDOM(widget) : view2.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (position === null) return;
+          let to = position;
+          if (widget)
+            foldedRanges(view2.state).between(position, position, (from, end) => {
+              if (from === position) to = end;
+            });
+          if (contextMenu({ position, to, x: event.clientX, y: event.clientY })) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        },
+        true
+      );
+      parent.addEventListener(
+        "keydown",
+        (event) => {
+          if (!view2.contentDOM.contains(event.target) || !(event.key === "ContextMenu" || event.key === "F10" && event.shiftKey))
+            return;
+          const selection = view2.state.selection.main;
+          const position = selection.empty ? selection.head : selection.from;
+          const rect = view2.coordsAtPos(position) || view2.dom.getBoundingClientRect();
+          if (contextMenu({ position, x: rect.left, y: rect.bottom })) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        },
+        true
+      );
+    }
     parent.addEventListener("input", (event) => {
       if (event.target.matches?.('.cm-search input[name="search"]'))
         event.target.dispatchEvent(new Event("change", { bubbles: true }));
@@ -27982,6 +28101,9 @@ ${indent}}` : "}";
       },
       measure() {
         view2.requestMeasure();
+      },
+      focus() {
+        view2.focus();
       },
       focusError() {
         if (!lastDiagnostic) return;
@@ -28327,7 +28449,8 @@ ${indent}}` : "}";
     return columns.includes("id") ? ["id", ...columns.filter((name2) => name2 !== "id")] : columns;
   }
   function rowIdentity(row, paths) {
-    if (!row || typeof row.id !== "string" || !paths.length) return null;
+    if (!row || typeof row.id !== "string" || !row.id || !paths.length)
+      return null;
     for (const path of paths) {
       let value = row;
       for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
@@ -28582,6 +28705,9 @@ ${indent}}` : "}";
   var resultEditor = null;
   var resultEditorPage;
   var resultEditorFilter = "";
+  var resultItemContext = null;
+  var resultItemText = "";
+  var resultItemRanges = [];
   var fieldScopes = /* @__PURE__ */ new Map();
   function knownFields() {
     const key = partitionScope();
@@ -28864,6 +28990,7 @@ ${indent}}` : "}";
     $("document-more").disabled = busy || !documentEditor.value.trim();
     if (busy) {
       closeDocumentMenu();
+      closeResultItemMenu();
     }
     documentActions();
     $("document-format").disabled = busy || state.readOnly || !state.snapshot && !state.creating;
@@ -29088,6 +29215,7 @@ ${indent}}` : "}";
     const page = state.pages[state.page], filter = $("result-filter").value.trim().toLowerCase();
     if ($("raw-results").hidden) {
       if (resultEditor && (resultEditorPage !== page || resultEditorFilter !== filter) && resultEditor.value) {
+        clearResultItemIndex();
         resultEditor.value = "";
         resultEditorPage = void 0;
         resultEditorFilter = "";
@@ -29098,10 +29226,12 @@ ${indent}}` : "}";
       resultEditor = createCodeEditor($("raw-results"), {
         label: "JSON \u67E5\u8BE2\u7ED3\u679C",
         readOnly: true,
-        hint: "\u8FD0\u884C\u67E5\u8BE2\u540E\u67E5\u770B\u5F53\u524D\u9875 JSON\uFF1B\u7B5B\u9009\u53EA\u5F71\u54CD\u5F53\u524D\u9875\u3002"
+        hint: "\u8FD0\u884C\u67E5\u8BE2\u540E\u67E5\u770B\u5F53\u524D\u9875 JSON\uFF1B\u7B5B\u9009\u53EA\u5F71\u54CD\u5F53\u524D\u9875\u3002",
+        contextMenu: openResultItemMenu
       });
     }
     if (resultEditorPage !== page || resultEditorFilter !== filter) {
+      clearResultItemIndex();
       const rows = source?.rows || pageRows().rows;
       resultEditor.value = page ? filter ? stringify(
         rows.map((x) => x.row),
@@ -29114,6 +29244,112 @@ ${indent}}` : "}";
     resultEditor.measure();
     resultReaderControls();
   }
+  function clearResultItemIndex() {
+    closeResultItemMenu();
+    resultItemText = "";
+    resultItemRanges = [];
+  }
+  function currentResultItem(context) {
+    return !!context && context.epoch === state.epoch && context.page === state.pages[state.page] && context.filter === $("result-filter").value.trim().toLowerCase() && context.target.connectionId === state.connectionId && context.target.database === state.database && context.target.container === state.container && resultEditorPage === context.page && resultEditorFilter === context.filter && !$("raw-results").hidden;
+  }
+  function closeResultItemMenu(focus = false) {
+    $("result-item-menu").hidden = true;
+    resultItemContext = null;
+    if (focus && !$("raw-results").hidden) resultEditor?.focus();
+  }
+  function openResultItemMenu({ position, to = position, x, y }) {
+    closeResultItemMenu();
+    const page = state.pages[state.page];
+    if (state.busy || !page || !resultEditor || $("raw-results").hidden)
+      return false;
+    const text = resultEditor.value;
+    if (text !== resultItemText) {
+      resultItemRanges = jsonResultItems(text);
+      resultItemText = text;
+    }
+    const item = jsonResultItemAt(resultItemRanges, position);
+    if (!item || to > item.to) return false;
+    const json2 = text.slice(item.from, item.to), row = parse(json2);
+    const paths = partitionPaths(), identity = rowIdentity(row, paths);
+    const filter = $("result-filter").value.trim().toLowerCase();
+    resultItemContext = {
+      page,
+      filter,
+      epoch: state.epoch,
+      json: json2,
+      identity,
+      index: item.index,
+      target: { connectionId: state.connectionId, ...scope() }
+    };
+    $("result-item-summary").textContent = `${filter ? "\u7B5B\u9009\u7ED3\u679C" : "\u5F53\u524D\u9875"}\u7B2C ${item.index + 1} \u9879 \xB7 \u67E5\u8BE2\u6295\u5F71`;
+    $("read-result-item").disabled = !identity;
+    $("result-item-hint").textContent = identity ? "\u590D\u5236\u7684\u662F\u67E5\u8BE2\u6295\u5F71\uFF1B\u6253\u5F00\u65F6\u6309\u6B64\u9879\u81EA\u8EAB\u7684 id \u548C\u5206\u533A\u952E\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u3002" : paths.length ? `\u7F3A\u5C11\u53EF\u7528\u7684\u5B57\u7B26\u4E32 id \u6216\u5B8C\u6574\u5206\u533A\u5B57\u6BB5\uFF08${paths.join(", ")}\uFF09\uFF0C\u4E0D\u80FD\u6253\u5F00\u5B8C\u6574\u6587\u6863\uFF1B\u4ECD\u53EF\u590D\u5236\u6B64\u9879\u3002` : "\u5BB9\u5668\u5206\u533A\u8DEF\u5F84\u4E0D\u53EF\u7528\uFF0C\u4E0D\u80FD\u6253\u5F00\u5B8C\u6574\u6587\u6863\uFF1B\u4ECD\u53EF\u590D\u5236\u6B64\u9879\u3002";
+    const menu = $("result-item-menu");
+    menu.hidden = false;
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
+    $("copy-result-item").focus();
+    return true;
+  }
+  $("copy-result-item").onclick = () => {
+    const context = resultItemContext;
+    if (state.busy || !currentResultItem(context)) {
+      closeResultItemMenu();
+      return;
+    }
+    closeResultItemMenu(true);
+    void copyResult(context.json, `\u7B2C ${context.index + 1} \u9879 JSON\uFF08\u67E5\u8BE2\u6295\u5F71\uFF09`);
+  };
+  $("read-result-item").onclick = () => {
+    const context = resultItemContext;
+    if (state.busy || !context?.identity || !currentResultItem(context)) {
+      closeResultItemMenu();
+      return;
+    }
+    closeResultItemMenu();
+    void action(async () => {
+      if (!await discard()) {
+        if (currentResultItem(context)) resultEditor.focus();
+        return;
+      }
+      if (!currentResultItem(context)) return;
+      const target = { ...context.target, ...context.identity };
+      const result = await invoke("cosmos/read", target);
+      showDocument();
+      opened(result, target);
+    });
+  };
+  $("result-item-menu").onkeydown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeResultItemMenu(true);
+      return;
+    }
+    if (event.key === "Tab") {
+      closeResultItemMenu(true);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const items = [
+      ...$("result-item-menu").querySelectorAll("button:not(:disabled)")
+    ];
+    const index = items.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("result-item-menu").contains(event.target)) closeResultItemMenu();
+  });
+  document.addEventListener(
+    "wheel",
+    (event) => {
+      if (!$("result-item-menu").contains(event.target)) closeResultItemMenu();
+    },
+    true
+  );
+  window.addEventListener("resize", () => closeResultItemMenu());
   function renderResultSummary() {
     const p = state.pages[state.page];
     $("query-metrics").title = p?.activityId ? `Activity ID: ${p.activityId}` : "";
@@ -29136,6 +29372,7 @@ ${indent}}` : "}";
     }
   }
   function renderPage() {
+    closeResultItemMenu();
     const p = state.pages[state.page];
     const { all: allRows, filter, rows } = pageRows();
     renderResultSummary();
@@ -29810,6 +30047,7 @@ ${indent}}` : "}";
     );
   }
   function view(json2) {
+    closeResultItemMenu();
     $("table").hidden = json2;
     $("raw-results").hidden = !json2;
     $("table-view").classList.toggle("active", !json2);

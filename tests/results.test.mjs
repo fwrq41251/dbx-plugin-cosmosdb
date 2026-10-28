@@ -44,4 +44,5 @@ test("copy and point-read identities preserve exact numeric values and reject in
   });
   assert.equal(rowIdentity({ id: "projection" }, ["/tenant"]), null);
   assert.equal(rowIdentity({ tenant: "a" }, ["/tenant"]), null);
+  assert.equal(rowIdentity({ id: "", tenant: "a" }, ["/tenant"]), null);
 });

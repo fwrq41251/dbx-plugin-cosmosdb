@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0 — Result JSON item actions
+
+- Add a context menu to copy one complete top-level result item, including when invoked inside nested or folded content; preserve numeric text.
+- Open the complete document using only the item’s own nonempty string id and all partition fields, preserving draft-discard confirmation; incomplete projections remain copyable.
+- Support keyboard menu activation/navigation and reject stale targets after page, filter, query or scope changes.
+- Build the item range index lazily from the complete result JSON, independently of the rendered viewport; avoid extra discovery queries.
+
 ## 0.12.0 — Read-only result JSON viewer
 
 - Reuse CodeMirror for result JSON highlighting, line numbers, gutter folding and local search with match navigation/counts.

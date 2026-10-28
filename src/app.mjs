@@ -1,4 +1,5 @@
 import { validateSQLExecution, sqlErrorDiagnostic } from "./sql-execution.mjs";
+import { jsonResultItems, jsonResultItemAt } from "./result-items.mjs";
 import { createCodeEditor } from "./code-editor.mjs";
 import {
   KnownFields,
@@ -65,6 +66,9 @@ const host = window.dbxPlugin;
 let resultEditor = null,
   resultEditorPage,
   resultEditorFilter = "";
+let resultItemContext = null,
+  resultItemText = "",
+  resultItemRanges = [];
 
 const fieldScopes = new Map();
 function knownFields() {
@@ -406,6 +410,7 @@ function controls() {
   $("document-more").disabled = busy || !documentEditor.value.trim();
   if (busy) {
     closeDocumentMenu();
+    closeResultItemMenu();
   }
   documentActions();
   $("document-format").disabled =
@@ -670,6 +675,7 @@ function syncResultReader(source) {
       (resultEditorPage !== page || resultEditorFilter !== filter) &&
       resultEditor.value
     ) {
+      clearResultItemIndex();
       resultEditor.value = "";
       resultEditorPage = undefined;
       resultEditorFilter = "";
@@ -681,9 +687,11 @@ function syncResultReader(source) {
       label: "JSON 查询结果",
       readOnly: true,
       hint: "运行查询后查看当前页 JSON；筛选只影响当前页。",
+      contextMenu: openResultItemMenu,
     });
   }
   if (resultEditorPage !== page || resultEditorFilter !== filter) {
+    clearResultItemIndex();
     const rows = source?.rows || pageRows().rows;
     resultEditor.value = page
       ? filter
@@ -700,6 +708,136 @@ function syncResultReader(source) {
   resultEditor.measure();
   resultReaderControls();
 }
+function clearResultItemIndex() {
+  closeResultItemMenu();
+  resultItemText = "";
+  resultItemRanges = [];
+}
+function currentResultItem(context) {
+  return (
+    !!context &&
+    context.epoch === state.epoch &&
+    context.page === state.pages[state.page] &&
+    context.filter === $("result-filter").value.trim().toLowerCase() &&
+    context.target.connectionId === state.connectionId &&
+    context.target.database === state.database &&
+    context.target.container === state.container &&
+    resultEditorPage === context.page &&
+    resultEditorFilter === context.filter &&
+    !$("raw-results").hidden
+  );
+}
+function closeResultItemMenu(focus = false) {
+  $("result-item-menu").hidden = true;
+  resultItemContext = null;
+  if (focus && !$("raw-results").hidden) resultEditor?.focus();
+}
+function openResultItemMenu({ position, to = position, x, y }) {
+  closeResultItemMenu();
+  const page = state.pages[state.page];
+  if (state.busy || !page || !resultEditor || $("raw-results").hidden)
+    return false;
+  const text = resultEditor.value;
+  if (text !== resultItemText) {
+    resultItemRanges = jsonResultItems(text);
+    resultItemText = text;
+  }
+  const item = jsonResultItemAt(resultItemRanges, position);
+  if (!item || to > item.to) return false;
+  const json = text.slice(item.from, item.to),
+    row = parseJSON(json);
+  const paths = partitionPaths(),
+    identity = rowIdentity(row, paths);
+  const filter = $("result-filter").value.trim().toLowerCase();
+  resultItemContext = {
+    page,
+    filter,
+    epoch: state.epoch,
+    json,
+    identity,
+    index: item.index,
+    target: { connectionId: state.connectionId, ...scope() },
+  };
+  $("result-item-summary").textContent =
+    `${filter ? "筛选结果" : "当前页"}第 ${item.index + 1} 项 · 查询投影`;
+  $("read-result-item").disabled = !identity;
+  $("result-item-hint").textContent = identity
+    ? "复制的是查询投影；打开时按此项自身的 id 和分区键读取完整文档。"
+    : paths.length
+      ? `缺少可用的字符串 id 或完整分区字段（${paths.join(", ")}），不能打开完整文档；仍可复制此项。`
+      : "容器分区路径不可用，不能打开完整文档；仍可复制此项。";
+  const menu = $("result-item-menu");
+  menu.hidden = false;
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
+  $("copy-result-item").focus();
+  return true;
+}
+$("copy-result-item").onclick = () => {
+  const context = resultItemContext;
+  if (state.busy || !currentResultItem(context)) {
+    closeResultItemMenu();
+    return;
+  }
+  closeResultItemMenu(true);
+  void copyResult(context.json, `第 ${context.index + 1} 项 JSON（查询投影）`);
+};
+$("read-result-item").onclick = () => {
+  const context = resultItemContext;
+  if (state.busy || !context?.identity || !currentResultItem(context)) {
+    closeResultItemMenu();
+    return;
+  }
+  closeResultItemMenu();
+  void action(async () => {
+    if (!(await discard())) {
+      if (currentResultItem(context)) resultEditor.focus();
+      return;
+    }
+    if (!currentResultItem(context)) return;
+    const target = { ...context.target, ...context.identity };
+    const result = await invoke("cosmos/read", target);
+    showDocument();
+    opened(result, target);
+  });
+};
+$("result-item-menu").onkeydown = (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeResultItemMenu(true);
+    return;
+  }
+  if (event.key === "Tab") {
+    closeResultItemMenu(true);
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const items = [
+    ...$("result-item-menu").querySelectorAll("button:not(:disabled)"),
+  ];
+  const index = items.indexOf(document.activeElement);
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+          items.length;
+  items[next]?.focus();
+};
+document.addEventListener("pointerdown", (event) => {
+  if (!$("result-item-menu").contains(event.target)) closeResultItemMenu();
+});
+document.addEventListener(
+  "wheel",
+  (event) => {
+    if (!$("result-item-menu").contains(event.target)) closeResultItemMenu();
+  },
+  true,
+);
+window.addEventListener("resize", () => closeResultItemMenu());
 function renderResultSummary() {
   const p = state.pages[state.page];
   $("query-metrics").title = p?.activityId
@@ -739,6 +877,7 @@ async function copyResult(text, label) {
   }
 }
 function renderPage() {
+  closeResultItemMenu();
   const p = state.pages[state.page];
   const { all: allRows, filter, rows } = pageRows();
   renderResultSummary();
@@ -1510,6 +1649,7 @@ async function afterMutation(result, identity, verb) {
   );
 }
 function view(json) {
+  closeResultItemMenu();
   $("table").hidden = json;
   $("raw-results").hidden = !json;
   $("table-view").classList.toggle("active", !json);

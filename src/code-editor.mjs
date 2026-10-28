@@ -106,6 +106,7 @@ export function createCodeEditor(
     hint = "",
     completion,
     diagnostics,
+    contextMenu,
   } = {},
 ) {
   const access = new Compartment();
@@ -233,6 +234,52 @@ export function createCodeEditor(
       ],
     });
   const view = new EditorView({ parent, state: makeState(value) });
+  if (contextMenu) {
+    // Capture before CodeMirror widgets (fold placeholders ignore normal events).
+    parent.addEventListener(
+      "contextmenu",
+      (event) => {
+        if (!view.contentDOM.contains(event.target)) return;
+        const widget = event.target.closest?.(".cm-foldPlaceholder");
+        const position = widget
+          ? view.posAtDOM(widget)
+          : view.posAtCoords({ x: event.clientX, y: event.clientY });
+        if (position === null) return;
+        let to = position;
+        if (widget)
+          foldedRanges(view.state).between(position, position, (from, end) => {
+            if (from === position) to = end;
+          });
+        if (contextMenu({ position, to, x: event.clientX, y: event.clientY })) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+      true,
+    );
+    parent.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          !view.contentDOM.contains(event.target) ||
+          !(
+            event.key === "ContextMenu" ||
+            (event.key === "F10" && event.shiftKey)
+          )
+        )
+          return;
+        const selection = view.state.selection.main;
+        const position = selection.empty ? selection.head : selection.from;
+        const rect =
+          view.coordsAtPos(position) || view.dom.getBoundingClientRect();
+        if (contextMenu({ position, x: rect.left, y: rect.bottom })) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+      true,
+    );
+  }
   // Search also commits immediately after paste (the built-in panel listens
   // to keyup/change, which otherwise waits for focus to leave the input).
   parent.addEventListener("input", (event) => {
@@ -309,6 +356,9 @@ export function createCodeEditor(
     },
     measure() {
       view.requestMeasure();
+    },
+    focus() {
+      view.focus();
     },
     focusError() {
       if (!lastDiagnostic) return;

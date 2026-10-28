@@ -23,7 +23,10 @@ let version = 1,
 let queryDelay = 0,
   queryCalls = 0,
   queryRequests = [],
-  canceledQueries = 0;
+  canceledQueries = 0,
+  readRequests = [],
+  extraDocuments = [],
+  resultOverride = null;
 const server = http.createServer(async (req, res) => {
   const send = (body, status = 200, headers = {}) => {
     res.writeHead(status, {
@@ -48,6 +51,7 @@ const server = http.createServer(async (req, res) => {
       queryCalls,
       queryRequests,
       canceledQueries,
+      readRequests,
     });
   if (req.url === "/test/slow-discovery") {
     discoveryDelay = 100;
@@ -55,6 +59,20 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.url === "/test/slow-query") {
     queryDelay = 1500;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/multi-results") {
+    extraDocuments = [
+      '{"id":"order-002","tenant":"other","status":"new","total":9223372036854775807,"details":{"id":"nested-id","tenant":"trap"},"_etag":"\\\"v1\\\""}',
+    ];
+    return send({ ok: true });
+  }
+  if (req.url === "/test/id-projection") {
+    resultOverride = '[{"id":"order-001"}]';
+    return send({ ok: true });
+  }
+  if (req.url === "/test/scalar-results") {
+    resultOverride = '[9223372036854775807,null,"text",[1,2]]';
     return send({ ok: true });
   }
   if (req.url === "/test/large-result") {
@@ -109,6 +127,9 @@ const server = http.createServer(async (req, res) => {
     queryCalls = 0;
     queryRequests = [];
     canceledQueries = 0;
+    readRequests = [];
+    extraDocuments = [];
+    resultOverride = null;
     return send({ ok: true });
   }
   if (req.url === "/test/nested-document") {
@@ -213,7 +234,7 @@ const server = http.createServer(async (req, res) => {
     const query = JSON.parse(body).query;
     if (
       query.startsWith("SELECT TOP 1 ") &&
-      query !== "SELECT TOP 1 c.id FROM c"
+      query.trim() !== "SELECT TOP 1 c.id FROM c"
     ) {
       discoveryCalls++;
       if (discoveryDelay)
@@ -286,7 +307,7 @@ const server = http.createServer(async (req, res) => {
         },
       );
     }
-    if (query === "SELECT TOP 1 c.id FROM c")
+    if (query.trim() === "SELECT TOP 1 c.id FROM c")
       return send({
         Documents: deleted ? [] : [{ id: JSON.parse(document).id }],
       });
@@ -345,14 +366,30 @@ const server = http.createServer(async (req, res) => {
         },
         400,
       );
-    return send(`{"Documents":[${deleted ? "" : document}]}`, 200, {
-      "x-ms-continuation": "second-page",
-    });
+    return send(
+      resultOverride
+        ? `{"Documents":${resultOverride}}`
+        : `{"Documents":[${deleted ? "" : [document, ...extraDocuments].join(",")}]}`,
+      200,
+      {
+        "x-ms-continuation": "second-page",
+      },
+    );
   }
-  if (req.method === "GET" && req.url.includes("/docs/"))
-    return deleted
+  if (req.method === "GET" && req.url.includes("/docs/")) {
+    const id = decodeURIComponent(req.url.split("/").at(-1));
+    readRequests.push({
+      id,
+      partitionKey: req.headers["x-ms-documentdb-partitionkey"] || "",
+      url: req.url,
+    });
+    const found = [document, ...extraDocuments].find(
+      (value) => parseExact(value).id === id,
+    );
+    return deleted || !found
       ? send({}, 404)
-      : send(document, 200, { ETag: `"v${version}"` });
+      : send(found, 200, { ETag: `"v${version}"` });
+  }
   if (req.method === "PATCH") {
     const spec = parseExact(body);
     if (

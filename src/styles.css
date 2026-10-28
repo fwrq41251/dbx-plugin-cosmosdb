@@ -1131,3 +1131,39 @@ body.light button.danger {
   font-size: 10px;
   color: var(--accent);
 }
+
+#result-item-menu {
+  position: fixed;
+  z-index: 1000;
+  width: min(290px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  box-shadow: 0 8px 28px #0005;
+}
+#result-item-menu button {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  border: 0;
+  background: transparent;
+}
+#result-item-menu button:hover:not(:disabled),
+#result-item-menu button:focus-visible {
+  background: #7cd4bf18;
+}
+#result-item-summary,
+#result-item-hint {
+  padding: 5px 7px;
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#result-item-hint {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  font-size: 10px;
+}

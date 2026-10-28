@@ -25,7 +25,8 @@ export function tableColumns(columns) {
 // A projection may omit a partition field; do not infer an undefined key or
 // borrow the key typed for a different query. Only complete rows can point-read.
 export function rowIdentity(row, paths) {
-  if (!row || typeof row.id !== "string" || !paths.length) return null;
+  if (!row || typeof row.id !== "string" || !row.id || !paths.length)
+    return null;
   for (const path of paths) {
     let value = row;
     for (const part of path

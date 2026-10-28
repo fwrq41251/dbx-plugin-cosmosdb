@@ -376,6 +376,21 @@
         </div>
       </section>
     </div>
+    <div id="result-item-menu" role="menu" aria-label="结果项操作" hidden>
+      <div id="result-item-summary" class="muted"></div>
+      <button id="copy-result-item" type="button" role="menuitem">
+        复制此项 JSON
+      </button>
+      <button
+        id="read-result-item"
+        type="button"
+        role="menuitem"
+        aria-describedby="result-item-hint"
+      >
+        打开完整文档
+      </button>
+      <div id="result-item-hint" class="muted"></div>
+    </div>
     <section id="pk-picker" role="dialog" aria-label="分区键选择" hidden>
       <div class="section-title">
         <span id="pk-title">选择分区键</span
