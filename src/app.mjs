@@ -1,3 +1,4 @@
+import { validateSQLExecution, sqlErrorDiagnostic } from "./sql-execution.mjs";
 import { createCodeEditor } from "./code-editor.mjs";
 import {
   KnownFields,
@@ -16,7 +17,7 @@ import { PartitionCandidates, PartitionLoader } from "./partitions.mjs";
 import {
   cellText,
   tablePreferences,
-  visibleColumns,
+  tableColumns,
   rowIdentity,
 } from "./results.mjs";
 import {
@@ -58,6 +59,7 @@ const state = {
   tableRevision: 0,
   selectedCell: null,
   selectedRow: null,
+  resultStale: false,
 };
 const host = window.dbxPlugin;
 const fieldScopes = new Map();
@@ -74,7 +76,7 @@ let documentError = null;
 const documentEditor = createCodeEditor($("editor"), {
   label: "JSON 文档",
   readOnly: true,
-  hint: "点击结果行预览，再读取完整文档进行编辑",
+  hint: "双击结果行预览，或点击「打开文档」进行编辑",
   diagnostics(error) {
     documentError = error;
     $("json-diagnostic").hidden = !error || state.documentView !== "json";
@@ -171,6 +173,7 @@ function renderPartitionOptions() {
     button.onclick = () => {
       if (state.busy) return;
       $(partitionTarget).value = item.key;
+      renderResultSummary();
       if (partitionTarget === "query-pk") cache.selected = item.key;
       else if (state.creating) syncDraftPartition();
       closePartitionPicker();
@@ -313,7 +316,15 @@ function learnPartitionKeys(rows) {
 }
 $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
 $("confirm-accept").onclick = () => $("confirm-dialog").close("confirm");
+let statusTimer;
 function status(text, error = false) {
+  clearTimeout(statusTimer);
+  $("status").hidden = false;
+  $("status").classList.toggle("progress", !!state.queryJob);
+  if (!error && !state.queryJob)
+    statusTimer = setTimeout(() => {
+      $("status").hidden = true;
+    }, 4000);
   $("status").textContent = text;
   $("status").title = "";
   $("status").classList.toggle("error", error);
@@ -389,14 +400,16 @@ function controls() {
   $("document-search").disabled =
     busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
   $("document-more").disabled = busy || !documentEditor.value.trim();
-  if (busy) closeDocumentMenu();
+  if (busy) {
+    closeDocumentMenu();
+  }
   documentActions();
   $("document-format").disabled =
     busy || state.readOnly || (!state.snapshot && !state.creating);
   $("previous").disabled = busy || state.page <= 0;
   $("next").disabled = busy || !state.pages[state.page]?.continuation;
+  $("run-collapsed").disabled = $("run").disabled;
   $("export").disabled = busy || state.page < 0;
-  $("choose-columns").disabled = busy || state.page < 0;
   $("result-filter").disabled = busy || state.page < 0;
   $("copy-cell").disabled = busy || state.selectedCell === null;
   $("copy-row").disabled = busy || state.selectedRow === null;
@@ -500,6 +513,8 @@ function resetEditor() {
   setDocumentView("json");
 }
 function resetResults() {
+  clearSQLError();
+  state.resultStale = false;
   state.selectedCell = null;
   state.selectedRow = null;
   $("result-filter").value = "";
@@ -512,6 +527,7 @@ function options(id, items, placeholder) {
   const el = $(id);
   el.replaceChildren(new Option(placeholder, ""));
   for (const item of items) el.add(new Option(item.id, item.id));
+  el.title = el.selectedOptions[0]?.textContent || "";
 }
 async function listAll(method, params) {
   const items = [];
@@ -549,6 +565,7 @@ async function loadDatabases() {
 
 async function selectDatabase(next) {
   state.database = next;
+  $("database").title = next;
   state.container = "";
   activatePartitionScope();
   resetResults();
@@ -567,6 +584,7 @@ async function selectDatabase(next) {
 }
 function selectContainer(next) {
   state.container = next;
+  $("container").title = next;
   activatePartitionScope();
   resetResults();
   void loadTablePreferences();
@@ -585,18 +603,13 @@ async function loadTablePreferences() {
   const key = preferenceKey(),
     revision = ++state.tableRevision;
   state.tablePrefs = tablePreferences();
-  $("column-chooser").hidden = true;
-  $("choose-columns").setAttribute("aria-expanded", "false");
   try {
     const value = await invoke("cosmos/tablePreferences", scope());
     if (key !== preferenceKey() || revision !== state.tableRevision) return;
     state.tablePrefs = tablePreferences(value);
-    $("table-preferences-status").textContent = "列设置按容器保存";
     renderPage();
   } catch {
-    if (key === preferenceKey())
-      $("table-preferences-status").textContent =
-        "列设置仅本次有效（存储不可用）";
+    if (key === preferenceKey()) status("列宽设置仅本次有效（存储不可用）");
   }
 }
 function saveTablePreferences() {
@@ -614,37 +627,54 @@ function saveTablePreferences() {
       await host.invoke("cosmos/tablePreferences", params, {
         timeoutMs: 10000,
       });
-      if (key === preferenceKey())
-        $("table-preferences-status").textContent = "列设置已保存";
     })
     .catch(() => {
-      if (key === preferenceKey())
-        $("table-preferences-status").textContent =
-          "列设置保存失败；本次仍有效";
+      if (key === preferenceKey()) status("列宽保存失败；本次仍有效", true);
     });
 }
-function renderColumnChooser(columns) {
-  $("pin-id").checked = state.tablePrefs.pinId;
-  $("column-options").replaceChildren();
-  for (const name of columns) {
-    const label = document.createElement("label"),
-      input = document.createElement("input"),
-      text = document.createElement("span");
-    input.type = "checkbox";
-    input.checked = !state.tablePrefs.hidden.includes(name);
-    input.setAttribute("aria-label", `显示列 ${name}`);
-    text.textContent = name;
-    input.onchange = () => {
-      state.tablePrefs.hidden = state.tablePrefs.hidden.filter(
-        (x) => x !== name,
-      );
-      if (!input.checked) state.tablePrefs.hidden.push(name);
-      saveTablePreferences();
-      renderPage();
-    };
-    label.append(input, text);
-    $("column-options").append(label);
-  }
+function pageRows() {
+  const p = state.pages[state.page];
+  const all = p ? parseJSON(p.json) : [];
+  const filter = $("result-filter").value.trim().toLowerCase();
+  return {
+    all,
+    filter,
+    rows: all
+      .map((row, index) => ({ row, index }))
+      .filter(
+        ({ row }) => !filter || encodeJSON(row).toLowerCase().includes(filter),
+      ),
+  };
+}
+function renderResultSummary() {
+  const p = state.pages[state.page];
+  $("query-metrics").title = p?.activityId
+    ? `Activity ID: ${p.activityId}`
+    : "";
+  $("query-metrics").textContent = p
+    ? `${p.ru.toFixed(2)} RU · ${p.durationMs} ms`
+    : "";
+  const changed =
+    p &&
+    (p.spec.query !== sqlEditor.execution.query ||
+      (p.execution?.selected && p.execution.document !== sqlEditor.value) ||
+      p.spec.partitionKeyText !== $("query-pk").value.trim() ||
+      p.spec.parametersText !== $("parameters").value ||
+      p.spec.pageSize !== Number($("page-size").value));
+  $("execution-source").hidden = !p?.execution?.selected;
+  $("execution-source").textContent = p?.execution?.selected
+    ? `选中 SQL · 第 ${p.execution.startLine}${p.execution.endLine !== p.execution.startLine ? "–" + p.execution.endLine : ""} 行`
+    : "";
+  $("result-origin").hidden = !p;
+  $("result-origin").textContent = state.resultStale
+    ? "显示上次查询结果"
+    : changed
+      ? "查询条件已修改"
+      : "当前页";
+  $("result-origin").classList.toggle("stale", state.resultStale || !!changed);
+  $("result-origin").title = p
+    ? `${p.spec.query}\n分区键：${p.spec.partitionKeyText || "跨分区"}`
+    : "";
 }
 async function copyResult(text, label) {
   try {
@@ -656,23 +686,30 @@ async function copyResult(text, label) {
 }
 function renderPage() {
   const p = state.pages[state.page];
-  const allRows = p ? parseJSON(p.json) : [];
-  const filter = $("result-filter").value.trim().toLowerCase();
-  const rows = allRows
-    .map((row, index) => ({ row, index }))
-    .filter(
-      ({ row }) => !filter || encodeJSON(row).toLowerCase().includes(filter),
-    );
+  const { all: allRows, filter, rows } = pageRows();
+  renderResultSummary();
+  $("clear-filter").hidden = !filter;
+  $("export").textContent = filter ? "导出筛选结果" : "导出当前页";
+  $("export").title = filter
+    ? "仅导出当前页匹配筛选的文档（包含所有字段）"
+    : "导出当前页所有文档（包含所有字段）";
   $("row-count").textContent = filter
     ? `${rows.length} / ${allRows.length} 条（仅当前页）`
     : `${allRows.length} 条`;
   $("page-label").textContent = `第 ${state.page + 1} 页`;
-  $("raw-results").value = p ? formatJSON(p.json) : "";
+  $("raw-results").value = p
+    ? filter
+      ? encodeJSON(
+          rows.map((x) => x.row),
+          null,
+          2,
+        )
+      : formatJSON(p.json)
+    : "";
   const target = $("table");
   const scrollLeft = target.scrollLeft,
     scrollTop = target.scrollTop;
   const allColumns = columnsFor(allRows);
-  renderColumnChooser(allColumns);
   state.selectedCell = null;
   state.selectedRow = null;
   $("copy-cell").disabled = true;
@@ -681,17 +718,27 @@ function renderPage() {
   if (!rows.length) {
     const el = document.createElement("div");
     el.className = "empty";
-    el.textContent = p
-      ? p.continuation
-        ? "当前页为空，仍可读取下一页"
-        : filter
-          ? "当前页没有匹配的结果"
-          : "没有匹配的结果"
-      : "选择容器后运行查询";
+    el.textContent = !p
+      ? "选择容器后运行查询"
+      : filter && allRows.length
+        ? `当前页没有匹配的结果，请清除筛选${p.continuation ? "或查看下一页" : ""}`
+        : p.continuation
+          ? "当前页为空，仍可读取下一页"
+          : "没有匹配的结果";
+    if (filter) {
+      const clear = document.createElement("button");
+      clear.textContent = "清除筛选";
+      clear.onclick = () => {
+        $("result-filter").value = "";
+        renderPage();
+        $("result-filter").focus();
+      };
+      el.append(clear);
+    }
     target.append(el);
     return;
   }
-  const columns = visibleColumns(allColumns, state.tablePrefs),
+  const columns = tableColumns(allColumns),
     table = document.createElement("table"),
     thead = table.createTHead(),
     tr = thead.insertRow();
@@ -704,14 +751,14 @@ function renderPage() {
       name === "#"
         ? 48
         : name === "操作"
-          ? 90
+          ? 96
           : state.tablePrefs.widths[name] || 180;
     col.style.width = `${width}px`;
     colgroup.append(col);
     const th = document.createElement("th");
     th.textContent = name;
     th.style.width = `${width}px`;
-    if (name === "id" && state.tablePrefs.pinId) th.classList.add("pinned-id");
+    if (name === "id") th.classList.add("pinned-id");
     if (name !== "#" && name !== "操作") {
       const handle = document.createElement("span");
       handle.className = "column-resize";
@@ -755,25 +802,53 @@ function renderPage() {
     tr.append(th);
   }
   const tbody = table.createTBody();
+  let selected;
+  function selectCell(td, row, column) {
+    if (selected) {
+      selected.classList.remove("cell-selected");
+      selected.tabIndex = -1;
+    }
+    for (const cell of tbody.querySelectorAll('td[tabindex="0"]'))
+      cell.tabIndex = -1;
+    selected = td;
+    td.tabIndex = 0;
+    td.classList.add("cell-selected");
+    state.selectedCell = td.textContent;
+    state.selectedRow = encodeJSON(row, null, 2);
+    $("copy-cell").title = `复制 ${column}（⌘ / Ctrl + C）`;
+    for (const tr of tbody.rows)
+      tr.classList.toggle("selected", tr === td.parentElement);
+    controls();
+  }
   rows.forEach(({ row, index }) => {
     const tr = tbody.insertRow();
-    tr.tabIndex = 0;
+
     const number = tr.insertCell();
     number.textContent = String(index + 1);
     const actions = tr.insertCell(),
       read = document.createElement("button");
     const identity = rowIdentity(row, partitionPaths());
-    read.textContent = "点读";
+    read.textContent = identity ? "打开文档" : "预览";
     read.type = "button";
     read.className = "row-read";
-    read.setAttribute("aria-label", `读取第 ${index + 1} 行完整文档`);
-    read.disabled = state.busy || !identity;
-    read.dataset.available = String(!!identity);
+    read.setAttribute(
+      "aria-label",
+      identity
+        ? `读取第 ${index + 1} 行完整文档`
+        : `预览第 ${index + 1} 行查询投影`,
+    );
+    read.disabled = state.busy;
+    read.dataset.available = "true";
     read.title = identity
       ? "按本行 id 和完整分区键读取"
-      : "查询结果需包含 id 和所有分区字段才能直接点读";
+      : `仅预览查询结果；查询需包含 id 和分区字段 ${partitionPaths().join(", ")} 才能直接打开完整文档`;
     read.onclick = (e) => {
       e.stopPropagation();
+      if (!identity) {
+        void select();
+        return;
+      }
+      showDocument();
       void action(async () => {
         if (await discard())
           opened(await invoke("cosmos/read", { ...scope(), ...identity }), {
@@ -788,15 +863,43 @@ function renderPage() {
       const td = tr.insertCell();
       td.textContent = cellText(value);
       td.title = td.textContent;
-      if (k === "id" && state.tablePrefs.pinId) td.classList.add("pinned-id");
+      if (k === "id") td.classList.add("pinned-id");
+      td.tabIndex = index === rows[0]?.index && k === columns[0] ? 0 : -1;
+      td.addEventListener("focus", () => selectCell(td, row, k));
       td.addEventListener("click", () => {
-        state.selectedCell = cellText(value);
-        state.selectedRow = encodeJSON(row, null, 2);
+        selectCell(td, row, k);
+        td.focus({ preventScroll: true });
+      });
+      td.addEventListener("keydown", (e) => {
+        if (
+          (e.metaKey || e.ctrlKey) &&
+          e.key.toLowerCase() === "c" &&
+          !e.altKey
+        ) {
+          e.preventDefault();
+          selectCell(td, row, k);
+          void copyResult(state.selectedCell, "单元格");
+        } else if (
+          ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
+        ) {
+          e.preventDefault();
+          const r = tr.sectionRowIndex,
+            c = td.cellIndex;
+          const target =
+            e.key === "ArrowLeft"
+              ? tr.cells[Math.max(2, c - 1)]
+              : e.key === "ArrowRight"
+                ? tr.cells[Math.min(tr.cells.length - 1, c + 1)]
+                : tbody.rows[r + (e.key === "ArrowUp" ? -1 : 1)]?.cells[c];
+          target?.click();
+          target?.scrollIntoView({ block: "nearest", inline: "nearest" });
+        }
       });
     }
     const select = () =>
       action(async () => {
         if (!(await discard())) return;
+        showDocument();
         resetEditor();
         state.selectedRow = encodeJSON(row, null, 2);
         state.baseline = encodeJSON(row, null, 2);
@@ -836,9 +939,14 @@ function renderPage() {
         controls();
         status("已预览查询结果。确认 id 和分区键后，点击「读取完整文档」。");
       });
-    tr.addEventListener("click", select);
+    tr.addEventListener("dblclick", (e) => {
+      if (!e.target.closest("button")) void select();
+    });
     tr.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") select();
+      if (e.key === "Enter" && !e.target.closest("button")) {
+        e.preventDefault();
+        void select();
+      }
     });
   });
   target.append(table);
@@ -846,6 +954,10 @@ function renderPage() {
   target.scrollTop = scrollTop;
 }
 async function query(next = false) {
+  const execution = next
+    ? state.pages[state.page]?.execution
+    : sqlEditor.execution;
+  if (!next) validateSQLExecution(execution);
   if (!(await discard())) return;
   let spec;
   if (next) {
@@ -857,12 +969,13 @@ async function query(next = false) {
     if ($("query-pk").value.trim()) parseArray($("query-pk").value, "分区键");
     spec = {
       ...scope(),
-      query: sqlEditor.value,
+      query: execution.query,
       parametersText: $("parameters").value,
       partitionKeyText: $("query-pk").value.trim(),
       pageSize: Number($("page-size").value),
     };
   }
+  clearSQLError();
   const job = {
     id: crypto.randomUUID(),
     connectionId: state.connectionId,
@@ -870,6 +983,8 @@ async function query(next = false) {
     canceled: false,
   };
   state.queryJob = job;
+  state.resultStale = true;
+  renderResultSummary();
   const update = () =>
     status(
       `查询执行中 · ${((performance.now() - job.started) / 1000).toFixed(1)} s · 尚未收到结果，RU 未知`,
@@ -883,6 +998,13 @@ async function query(next = false) {
     if (job.canceled || state.queryJob !== job) throw new Error("STALE");
   } catch (error) {
     if (job.canceled || error.message === "STALE") throw new Error("STALE");
+    const diagnostic = sqlErrorDiagnostic(execution, sqlEditor.value, error);
+    if (diagnostic) {
+      setSQLCollapsed(false);
+      sqlEditor.setDiagnostic(diagnostic);
+      $("sql-diagnostic").textContent = diagnostic.message;
+      $("sql-diagnostic").hidden = false;
+    }
     throw new Error(
       `查询失败 · ${((performance.now() - job.started) / 1000).toFixed(1)} s · 本次 RU 未知 · ${error.message}`,
     );
@@ -894,9 +1016,12 @@ async function query(next = false) {
   learnPartitionKeys(parseJSON(result.json));
   if (hasRootProjection(spec.query))
     for (const doc of parseJSON(result.json)) knownFields().learn(doc);
-  if (!next) state.pages = [];
-  else state.pages = state.pages.slice(0, state.page + 1);
-  state.pages.push({ ...result, spec });
+  if (!next) {
+    state.pages = [];
+    $("result-filter").value = "";
+  } else state.pages = state.pages.slice(0, state.page + 1);
+  state.resultStale = false;
+  state.pages.push({ ...result, spec, execution });
   state.page = state.pages.length - 1;
   renderPage();
   resetEditor();
@@ -1313,13 +1438,15 @@ async function afterMutation(result, identity, verb) {
     if (error.message === "STALE") throw error;
     notes.push("分区键缓存读取失败");
   }
-  const previous = state.pages[state.page]?.spec;
+  const previousPage = state.pages[state.page];
+  const previous = previousPage?.spec;
   if (previous) {
     const spec = { ...previous };
     delete spec.continuation;
     try {
       const refreshed = await invoke("cosmos/query", spec);
-      state.pages = [{ ...refreshed, spec }];
+      state.resultStale = false;
+      state.pages = [{ ...refreshed, spec, execution: previousPage.execution }];
       state.page = 0;
       renderPage();
       notes.push(`上次查询已刷新至第 1 页（${refreshed.ru.toFixed(2)} RU）`);
@@ -1343,6 +1470,7 @@ function view(json) {
   $("table-view").setAttribute("aria-pressed", String(!json));
   $("json-view").setAttribute("aria-pressed", String(json));
   $("json-view").classList.toggle("active", json);
+  $("table-tools").hidden = json;
 }
 const bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
 bind("refresh", async () => {
@@ -1369,29 +1497,13 @@ $("container").addEventListener("change", () =>
   }),
 );
 bind("run", () => query());
+bind("run-collapsed", () => query());
 $("cancel-query").onclick = cancelQuery;
 $("result-filter").oninput = renderPage;
-$("choose-columns").onclick = () => {
-  $("column-chooser").hidden = !$("column-chooser").hidden;
-  $("choose-columns").setAttribute(
-    "aria-expanded",
-    String(!$("column-chooser").hidden),
-  );
-};
-$("columns-close").onclick = () => {
-  $("column-chooser").hidden = true;
-  $("choose-columns").setAttribute("aria-expanded", "false");
-  $("choose-columns").focus();
-};
-$("columns-reset").onclick = () => {
-  state.tablePrefs = tablePreferences();
-  saveTablePreferences();
+$("clear-filter").onclick = () => {
+  $("result-filter").value = "";
   renderPage();
-};
-$("pin-id").onchange = () => {
-  state.tablePrefs.pinId = $("pin-id").checked;
-  saveTablePreferences();
-  renderPage();
+  $("result-filter").focus();
 };
 $("copy-cell").onclick = () => {
   if (state.selectedCell !== null)
@@ -1416,6 +1528,7 @@ $("pk-close").onclick = () => closePartitionPicker();
 $("pk-clear").onclick = () => {
   if (!state.busy) {
     $(partitionTarget).value = "";
+    renderResultSummary();
     if (partitionTarget === "query-pk") candidates().selected = "";
     closePartitionPicker();
     $(partitionTarget).focus();
@@ -1565,13 +1678,22 @@ bind("delete", async () => {
 });
 bind("export", async () => {
   const p = state.pages[state.page];
-  const bytes = new TextEncoder().encode(p.json);
+  const { rows, filter } = pageRows();
+  const bytes = new TextEncoder().encode(
+    filter
+      ? encodeJSON(
+          rows.map((x) => x.row),
+          null,
+          2,
+        )
+      : p.json,
+  );
   if (bytes.length > 1024 * 1024)
     throw new Error("当前页超过 1 MiB，请减小每页数量后导出");
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   const result = await host.request("host.saveFile", {
-    fileName: `${state.container}-page-${state.page + 1}.json`,
+    fileName: `${state.container}-page-${state.page + 1}${filter ? "-filtered" : ""}.json`,
     contentType: "application/json",
     dataBase64: btoa(binary),
   });
@@ -1624,18 +1746,26 @@ bind("generate-id", async () => {
   $("document-id").value = doc.id;
   status("已生成新的文档 UUID。");
 });
-document.addEventListener("keydown", (e) => {
-  if (
-    (e.metaKey || e.ctrlKey) &&
-    e.key === "Enter" &&
-    !e.isComposing &&
-    e.target.closest(".query-panel") &&
-    !$("confirm-dialog").open
-  ) {
-    e.preventDefault();
-    if (!$("run").disabled) $("run").click();
-  }
-});
+// Capture before CodeMirror's Mod-Enter binding can insert a blank line and
+// collapse the selection that the user intended to execute.
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (
+      (e.metaKey || e.ctrlKey) &&
+      e.key === "Enter" &&
+      !e.isComposing &&
+      e.target.closest(".query-panel") &&
+      !$("confirm-dialog").open
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      if (!$("run").disabled) $("run").click();
+    }
+  },
+  true,
+);
 async function contextChanged(context) {
   const id = context?.connectionId || context?.connection?.id || "";
   if (id === state.connectionId) return;
@@ -1694,3 +1824,52 @@ if (host) {
     })
     .catch((e) => status(e.message, true));
 } else status("此工作台需要在 DBX 插件宿主中打开。", true);
+
+function clearSQLError() {
+  sqlEditor.setDiagnostic(null);
+  $("sql-diagnostic").hidden = true;
+}
+function updateSQLExecution() {
+  const selected = sqlEditor.execution.selected;
+  const label = selected ? "运行选中 SQL" : "运行查询";
+  for (const id of ["run", "run-collapsed"]) {
+    $(id).textContent = label;
+    $(id).title = selected
+      ? "只执行 SQL 编辑器中的选中内容（⌘ / Ctrl + Enter）"
+      : "执行 SQL 编辑器全文（⌘ / Ctrl + Enter）";
+  }
+  renderResultSummary();
+}
+sqlEditor.onChange(() => {
+  $("sql-diagnostic").hidden = true;
+});
+sqlEditor.onSelection(updateSQLExecution);
+updateSQLExecution();
+$("sql-diagnostic").onclick = () => sqlEditor.focusError();
+for (const id of ["query-pk", "parameters", "page-size"]) {
+  $(id).addEventListener("input", renderResultSummary);
+  $(id).addEventListener("change", renderResultSummary);
+}
+function setSQLCollapsed(collapsed) {
+  $("query-body").hidden = collapsed;
+  $("run-collapsed").hidden = !collapsed;
+  $("query-collapse").textContent = collapsed ? "展开 SQL" : "收起 SQL";
+  $("query-collapse").setAttribute("aria-expanded", String(!collapsed));
+  if (!collapsed) sqlEditor.measure();
+}
+$("query-collapse").onclick = () => setSQLCollapsed(!$("query-body").hidden);
+function showDocument() {
+  workspace.classList.remove("document-hidden");
+  $("document-toggle").textContent = "收起文档";
+  $("document-toggle").setAttribute("aria-expanded", "true");
+  documentEditor.measure();
+}
+$("document-toggle").onclick = () => {
+  if (workspace.classList.contains("document-hidden")) showDocument();
+  else {
+    workspace.classList.add("document-hidden");
+    $("document-toggle").textContent = "展开文档";
+    $("document-toggle").setAttribute("aria-expanded", "false");
+  }
+  sqlEditor.measure();
+};

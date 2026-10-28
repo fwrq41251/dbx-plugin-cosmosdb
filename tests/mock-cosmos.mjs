@@ -22,6 +22,7 @@ let version = 1,
   throttleDiscovery = false;
 let queryDelay = 0,
   queryCalls = 0,
+  queryRequests = [],
   canceledQueries = 0;
 const server = http.createServer(async (req, res) => {
   const send = (body, status = 200, headers = {}) => {
@@ -45,6 +46,7 @@ const server = http.createServer(async (req, res) => {
       discoveryCalls,
       accountLists,
       queryCalls,
+      queryRequests,
       canceledQueries,
     });
   if (req.url === "/test/slow-discovery") {
@@ -95,6 +97,7 @@ const server = http.createServer(async (req, res) => {
     throttleDiscovery = false;
     queryDelay = 0;
     queryCalls = 0;
+    queryRequests = [];
     canceledQueries = 0;
     return send({ ok: true });
   }
@@ -278,6 +281,12 @@ const server = http.createServer(async (req, res) => {
         Documents: deleted ? [] : [{ id: JSON.parse(document).id }],
       });
     queryCalls++;
+    queryRequests.push({
+      query,
+      continuation: req.headers["x-ms-continuation"] || "",
+      partitionKey: req.headers["x-ms-documentdb-partitionkey"] || "",
+    });
+    if (queryRequests.length > 20) queryRequests.shift();
     if (queryDelay) {
       const delay = queryDelay;
       queryDelay = 0;
@@ -300,7 +309,17 @@ const server = http.createServer(async (req, res) => {
             errors: [
               {
                 code: "SC1001",
-                location: { start: 14, end: 17 },
+                ...(query.includes("BAD_NO_POSITION")
+                  ? {}
+                  : {
+                      location: {
+                        start: query.includes("BAD_INVALID_POSITION")
+                          ? query.length + 50
+                          : query.includes("BAD")
+                            ? query.indexOf("BAD")
+                            : 14,
+                      },
+                    }),
                 message: "Syntax error near secret-upstream-value",
               },
             ],

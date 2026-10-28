@@ -6,7 +6,7 @@ test.beforeEach(async ({ request }) => {
 });
 async function read(f) {
   await query(f);
-  await f.getByRole("cell", { name: "order-001", exact: true }).click();
+  await f.getByRole("cell", { name: "order-001", exact: true }).dblclick();
   await f.locator("#read").click();
 }
 
@@ -42,7 +42,7 @@ test("query controls align and document tools stay in a single compact row", asy
   for (const box of tools)
     expect(Math.abs(box.y - tools[0].y)).toBeLessThanOrEqual(1);
   // Opening another document keeps the user's chosen representation.
-  await f.locator("#table tbody tr").first().click();
+  await f.locator("#table tbody tr").first().dblclick();
   await f.locator("#read").click();
   await expect(f.locator("#editor")).toBeVisible();
   await expect(f.locator("#document-json-view")).toHaveAttribute(
@@ -88,19 +88,21 @@ test("flat documents explain why nested folding is unavailable and menus dismiss
   await expect(f.locator("#document-menu")).toBeHidden();
 });
 
-test("query controls reflow in narrow workspaces without horizontal page overflow", async ({
-  page,
-}) => {
-  const f = await connect(page);
-  for (const width of [1100, 900, 600]) {
+for (const width of [1100, 900, 600]) {
+  test(`query and result controls fit a ${width}px window`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 800 });
+    const f = await connect(page);
+    await query(f);
     await expect(f.locator("#run")).toBeVisible();
     expect(
       await f.locator("body").evaluate((el) => el.scrollWidth - el.clientWidth),
     ).toBeLessThanOrEqual(1);
-    const ids = ["page-size", "query-pk", "query-pk-choose", "run"];
     const boxes = await Promise.all(
-      ids.map((id) => f.locator("#" + id).boundingBox()),
+      ["page-size", "query-pk", "query-pk-choose", "run"].map((id) =>
+        f.locator("#" + id).boundingBox(),
+      ),
     );
     const panel = await f.locator(".query-panel").boundingBox();
     for (const box of boxes) {
@@ -108,8 +110,15 @@ test("query controls reflow in narrow workspaces without horizontal page overflo
       expect(box.x + box.width).toBeLessThanOrEqual(panel.x + panel.width + 1);
       expect(Math.abs(box.height - 32)).toBeLessThanOrEqual(1);
     }
-  }
-});
+    await expect(f.locator("#choose-columns")).toHaveCount(0);
+    await expect(f.locator("#table-tools #copy-cell")).toHaveCount(1);
+    if (width === 600)
+      await page
+        .locator("iframe")
+        .last()
+        .screenshot({ path: "/tmp/dbx-ux-narrow.png" });
+  });
+}
 
 test("query shortcut runs from the query panel without interrupting JSON drafts", async ({
   page,
@@ -120,7 +129,7 @@ test("query shortcut runs from the query panel without interrupting JSON drafts"
   await sql.click();
   await sql.press("ControlOrMeta+Enter");
   await expect(f.locator("#row-count")).toHaveText("1 条");
-  await f.getByRole("cell", { name: "order-001", exact: true }).click();
+  await f.getByRole("cell", { name: "order-001", exact: true }).dblclick();
   await f.locator("#read").click();
   await f.locator("#document-json-view").click();
   const editor = f.locator("#editor .cm-content");

@@ -4,11 +4,11 @@ import {
   cellText,
   rowIdentity,
   tablePreferences,
-  visibleColumns,
+  tableColumns,
 } from "../src/results.mjs";
 import { parseJSON, columnsFor } from "../src/model.mjs";
 
-test("all columns remain selectable; preferences bound widths and preserve hidden fields across pages", () => {
+test("all returned fields stay visible and id stays pinned despite legacy preferences", () => {
   const row = Object.fromEntries(
     Array.from({ length: 35 }, (_, i) => [`f${i}`, i]),
   );
@@ -17,14 +17,16 @@ test("all columns remain selectable; preferences bound widths and preserve hidde
   const prefs = tablePreferences({
     hidden: ["f0", "field-not-on-this-page"],
     widths: { id: 9999, f1: 10, f2: NaN },
-    pinId: true,
+    pinId: false,
   });
   assert.equal(prefs.widths.id, 800);
   assert.equal(prefs.widths.f1, 80);
   assert.equal(prefs.widths.f2, undefined);
-  assert.equal(visibleColumns(columns, prefs)[0], "id");
-  assert.ok(!visibleColumns(columns, prefs).includes("f0"));
-  assert.deepEqual(visibleColumns(["field-not-on-this-page", "x"], prefs), [
+  assert.equal(tableColumns(columns)[0], "id");
+  assert.ok(tableColumns(columns).includes("f0"));
+  assert.deepEqual(Object.keys(prefs), ["widths"]);
+  assert.deepEqual(tableColumns(["field-not-on-this-page", "x"]), [
+    "field-not-on-this-page",
     "x",
   ]);
 });

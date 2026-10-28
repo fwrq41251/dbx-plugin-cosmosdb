@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.11.0 — Selected SQL execution and inline syntax locations
+
+- Run the selected SQL verbatim from the existing button or query shortcut; reject blank/multiple selections without falling back to the full editor.
+- Capture execution source/line ranges; pagination and post-write refresh retain the submitted SQL snapshot.
+- Map trustworthy service syntax offsets into the editor, underline/scroll to them and offer click-to-focus; clear stale diagnostics on edits and scope changes.
+- Handle the query shortcut before CodeMirror can insert a blank line and collapse the intended selection; ignore key repeats and preserve JSON-editor shortcut scope.
+
+## 0.10.2 — Simplify result columns
+
+- Remove column selection, field search and pin toggles; display every returned field and keep id fixed on the left.
+- Keep per-container column widths, cell selection/copy and local result filtering.
+- Migrate legacy layouts by discarding hidden/pin settings while retaining saved widths.
+
+## 0.10.1 — Workbench interaction refinements
+
+- Compact result controls, persistent RU/time and result provenance; collapsible SQL and document panels.
+- Explicit cell selection with keyboard navigation/copy, independent of document drafts; double-click/Enter previews and per-row Open Document reads.
+- Consistent current-page filtering across table, JSON and export; clear action, accurate empty states and reset after a successful new query.
+- Searchable column popover with show-all, counts, stable checkbox focus and Escape/outside dismissal; table-only controls hidden in JSON mode.
+
 ## 0.10.0 — Result tools, query cancellation and metadata caching
 
 - Remove the 20-column display limit; add column selection, remembered widths, pinned id, current-page filtering, exact cell copy and projected row JSON copy.

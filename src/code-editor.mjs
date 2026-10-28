@@ -10,7 +10,8 @@ import { EditorView, keymap, placeholder } from "@codemirror/view";
 import { indentWithTab, isolateHistory } from "@codemirror/commands";
 import { json, jsonLanguage } from "@codemirror/lang-json";
 import { sql, SQLDialect } from "@codemirror/lang-sql";
-import { linter } from "@codemirror/lint";
+import { linter, setDiagnostics, setDiagnosticsEffect } from "@codemirror/lint";
+import { sqlExecution } from "./sql-execution.mjs";
 import { openSearchPanel, getSearchQuery } from "@codemirror/search";
 import { autocompletion } from "@codemirror/autocomplete";
 import {
@@ -106,6 +107,7 @@ export function createCodeEditor(
   const access = new Compartment();
   let locked = readOnly,
     onChange = () => {},
+    onSelection = () => {},
     lastDiagnostic;
   const status = document.createElement("div");
   status.className = "editor-status";
@@ -150,6 +152,9 @@ export function createCodeEditor(
       `第 ${line.number} 行，第 ${selection.head - line.from + 1} 列${state.readOnly ? " · 只读" : ""}${count ? ` · 已折叠 ${count} 处` : ""}` +
       (query.search
         ? ` · 匹配 ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} 项`
+        : "") +
+      (language === "sql" && !selection.empty
+        ? ` · 已选 ${selection.to - selection.from} 字符 · 执行选区`
         : "");
   }
   const report = () => {
@@ -160,6 +165,13 @@ export function createCodeEditor(
   };
   const extensions = [
     basicSetup,
+    ...(language === "sql"
+      ? [
+          EditorState.transactionExtender.of((tr) =>
+            tr.docChanged ? { effects: setDiagnosticsEffect.of([]) } : null,
+          ),
+        ]
+      : []),
     EditorState.phrases.of(phrases),
     EditorView.contentAttributes.of({
       "aria-label": label,
@@ -172,9 +184,11 @@ export function createCodeEditor(
     EditorView.updateListener.of((update) => {
       updateStatus(update.state);
       if (update.docChanged) {
+        if (language === "sql") lastDiagnostic = null;
         report();
         onChange();
       }
+      if (update.docChanged || update.selectionSet) onSelection();
     }),
     placeholder(hint),
     language === "sql" ? sql({ dialect: cosmosDialect }) : json(),
@@ -224,6 +238,7 @@ export function createCodeEditor(
     },
     set value(text) {
       // Loading a different document must discard its predecessor's undo history.
+      if (language === "sql") lastDiagnostic = null;
       view.setState(makeState(text));
       updateStatus(view.state);
       report();
@@ -246,6 +261,20 @@ export function createCodeEditor(
     },
     onChange(fn) {
       onChange = fn;
+    },
+    onSelection(fn) {
+      onSelection = fn;
+    },
+    get execution() {
+      return sqlExecution(view.state.doc.toString(), view.state.selection);
+    },
+    setDiagnostic(diagnostic) {
+      lastDiagnostic = diagnostic;
+      view.dispatch(setDiagnostics(view.state, diagnostic ? [diagnostic] : []));
+      if (diagnostic)
+        view.dispatch({
+          effects: EditorView.scrollIntoView(diagnostic.from, { y: "center" }),
+        });
     },
     search() {
       openSearchPanel(view);

@@ -7,7 +7,7 @@ async function activate(frame, name) {
   await button.press("Space");
 }
 async function openDocument(frame) {
-  await frame.getByRole("cell", { name: "order-001", exact: true }).click();
+  await frame.getByRole("cell", { name: "order-001", exact: true }).dblclick();
   await frame
     .getByRole("button", { name: "读取完整文档", exact: true })
     .click();

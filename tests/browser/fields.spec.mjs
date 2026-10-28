@@ -6,7 +6,7 @@ test.beforeEach(async ({ request }) => {
 });
 async function open(f) {
   await query(f);
-  await f.getByRole("cell", { name: "order-001", exact: true }).click();
+  await f.getByRole("cell", { name: "order-001", exact: true }).dblclick();
   await f.locator("#read").click();
   await expect(f.locator("#field-editor")).toBeVisible();
 }

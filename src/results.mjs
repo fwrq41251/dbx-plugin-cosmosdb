@@ -11,20 +11,15 @@ export function tablePreferences(value) {
   for (const [key, size] of Object.entries(value?.widths || {}).slice(0, 500)) {
     if (Number.isFinite(size)) widths[key] = Math.max(80, Math.min(800, size));
   }
-  return {
-    hidden: Array.isArray(value?.hidden)
-      ? value.hidden.filter((x) => typeof x === "string").slice(0, 500)
-      : [],
-    widths,
-    pinId: value?.pinId !== false,
-  };
+  // Older versions stored hidden columns and an optional pin setting. Ignore
+  // them so every returned field is visible and id stays fixed at the left.
+  return { widths };
 }
 
-export function visibleColumns(columns, preferences) {
-  const visible = columns.filter((name) => !preferences.hidden.includes(name));
-  if (preferences.pinId && visible.includes("id"))
-    return ["id", ...visible.filter((name) => name !== "id")];
-  return visible;
+export function tableColumns(columns) {
+  return columns.includes("id")
+    ? ["id", ...columns.filter((name) => name !== "id")]
+    : columns;
 }
 
 // A projection may omit a partition field; do not infer an undefined key or

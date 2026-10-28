@@ -56,7 +56,7 @@ test("partition mismatches are rejected before confirmation and successful write
 }) => {
   const f = await connect(page);
   await query(f);
-  await f.getByRole("cell", { name: "order-001", exact: true }).click();
+  await f.getByRole("cell", { name: "order-001", exact: true }).dblclick();
   await activate(f, "read");
   await f.locator("#document-json-view").click();
   const text = await f.locator("#editor .cm-content").innerText();

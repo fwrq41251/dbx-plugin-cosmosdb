@@ -206,6 +206,7 @@ pre {
   line-height: 1.6;
 }
 main {
+  position: relative;
   container: query-workspace / inline-size;
   display: flex;
   flex-direction: column;
@@ -265,19 +266,34 @@ main {
   flex-wrap: wrap;
 }
 #status {
-  flex: none;
-  min-height: 36px;
-  padding: 10px 16px;
-  color: var(--muted);
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  z-index: 35;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 4px 18px #0003;
+  color: var(--text);
   font-size: 11px;
-  border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
+  pointer-events: none;
+}
+#status.error,
+#status.progress {
+  position: static;
+  flex: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 #status.error {
   color: #edac9e;
   background: #be543412;
 }
 .results-panel {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 160px;
@@ -286,7 +302,7 @@ main {
 }
 .results-panel > .section-title {
   flex: none;
-  padding: 10px 16px;
+  padding: 6px 12px;
   flex-wrap: wrap;
 }
 .table-scroll {
@@ -298,54 +314,54 @@ main {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 8px 16px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
 }
-.result-tools input {
-  min-width: 140px;
+.result-filter {
+  display: flex;
+  position: relative;
   flex: 1;
-  height: 32px;
+  min-width: 150px;
 }
-.result-tools button {
-  height: 32px;
+.result-filter input {
+  padding-right: 26px;
+}
+#clear-filter {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 26px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.result-tools button,
+.results-panel > .section-title button {
+  min-height: 28px;
+  height: 28px;
   padding: 0 8px;
   white-space: nowrap;
 }
-#table-preferences-status {
-  font-size: 10px;
-  flex-basis: 100%;
+.result-tools .pagination {
+  margin-left: auto;
 }
-#column-chooser {
-  max-height: 210px;
-  overflow: auto;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  margin: 0 16px;
-}
-#column-options {
+.result-heading {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
-  padding-top: 10px;
-}
-#column-options label {
-  max-width: 100%;
-  overflow: hidden;
-}
-#column-options label span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#column-chooser label {
-  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin: 0;
+  gap: 6px 10px;
 }
-#column-chooser input {
-  width: 14px;
-  height: 14px;
+#query-metrics {
+  font-size: 11px;
+}
+#result-origin {
+  font-size: 10px;
+}
+#result-origin.stale {
+  color: var(--accent);
 }
 .result-table {
   table-layout: fixed;
@@ -384,7 +400,8 @@ main {
   z-index: 3;
 }
 .row-read {
-  height: 26px;
+  min-height: 28px;
+  height: 28px;
   padding: 0 6px;
   font-size: 11px;
 }
@@ -425,7 +442,10 @@ th:first-child {
 .empty {
   display: grid;
   place-content: center;
-  min-height: 170px;
+  min-height: 130px;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
   color: var(--muted);
 }
 #raw-results {
@@ -1029,4 +1049,85 @@ body.light button.danger {
   .results-navigation {
     justify-content: flex-end;
   }
+}
+
+.result-table td {
+  height: 36px;
+  padding-block: 4px;
+}
+.result-table td.cell-selected,
+.result-table td.cell-selected.pinned-id {
+  background: var(--panel);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.result-table td:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.workspace.document-hidden {
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+.workspace.document-hidden > .document-panel,
+.workspace.document-hidden > #document-resize {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .workspace.document-hidden {
+    grid-template-columns: 175px minmax(0, 1fr);
+  }
+}
+@media (max-width: 800px) {
+  .workspace.document-hidden {
+    grid-template-columns: 155px minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .workspace.document-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Keep narrow workspaces scrollable inside DBX's fixed-height webview. */
+@media (max-width: 800px) {
+  .workspace {
+    display: block;
+    height: calc(100vh - 60px);
+    min-height: 0;
+    overflow: auto;
+  }
+  aside {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+  aside > .section-title,
+  aside > .info,
+  aside > details {
+    grid-column: 1/-1;
+  }
+  aside > .aside-note {
+    display: none;
+  }
+  main {
+    height: 700px;
+    min-height: 700px;
+  }
+}
+
+.sql-diagnostic {
+  width: 100%;
+  padding: 6px 8px;
+  margin-top: 6px;
+  color: #d98274;
+  text-align: left;
+  justify-content: flex-start;
+  white-space: normal;
+  font-size: 11px;
+}
+#execution-source {
+  font-size: 10px;
+  color: var(--accent);
 }

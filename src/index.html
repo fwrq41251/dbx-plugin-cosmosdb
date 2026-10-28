@@ -50,6 +50,23 @@
             <span>SQL 查询</span>
             <div class="toolbar">
               <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
+              <button
+                id="query-collapse"
+                type="button"
+                class="compact"
+                aria-expanded="true"
+                aria-controls="query-body"
+              >
+                收起 SQL
+              </button>
+              <button
+                id="run-collapsed"
+                type="button"
+                class="primary compact"
+                hidden
+              >
+                运行查询
+              </button>
               <button id="cancel-query" type="button" hidden>取消查询</button>
               <button
                 id="sql-search"
@@ -65,51 +82,64 @@
               </button>
             </div>
           </div>
-          <div id="sql" class="code-editor"></div>
-          <div class="query-options">
-            <label
-              >每页<select id="page-size" aria-label="每页条数">
-                <option>25</option>
-                <option selected>100</option>
-                <option>250</option>
-                <option>1000</option>
-              </select></label
-            ><label class="grow"
-              ><span
-                >分区键 <span class="label-hint">可选 · JSON 数组</span></span
-              ><span class="pk-input"
-                ><input
-                  id="query-pk"
-                  placeholder='["tenant-a"] 或留空跨分区'
-                  spellcheck="false"
-                /><button
-                  id="query-pk-choose"
-                  type="button"
-                  aria-label="选择查询分区键"
-                  aria-expanded="false"
-                  aria-controls="pk-picker"
-                >
-                  选择 ▾
-                </button></span
-              ></label
-            ><button id="run" class="primary">运行查询</button>
-          </div>
-          <details>
-            <summary>查询参数</summary>
-            <textarea
-              id="parameters"
-              aria-label="查询参数"
-              spellcheck="false"
-              placeholder='[{"name":"@id","value":"example"}]'
-            >
+          <div id="query-body">
+            <div id="sql" class="code-editor"></div>
+            <button
+              id="sql-diagnostic"
+              class="sql-diagnostic"
+              type="button"
+              hidden
+            ></button>
+            <div class="query-options">
+              <label
+                >每页<select id="page-size" aria-label="每页条数">
+                  <option>25</option>
+                  <option selected>100</option>
+                  <option>250</option>
+                  <option>1000</option>
+                </select></label
+              ><label class="grow"
+                ><span
+                  >分区键 <span class="label-hint">可选 · JSON 数组</span></span
+                ><span class="pk-input"
+                  ><input
+                    id="query-pk"
+                    placeholder='["tenant-a"] 或留空跨分区'
+                    spellcheck="false"
+                  /><button
+                    id="query-pk-choose"
+                    type="button"
+                    aria-label="选择查询分区键"
+                    aria-expanded="false"
+                    aria-controls="pk-picker"
+                  >
+                    选择 ▾
+                  </button></span
+                ></label
+              ><button id="run" class="primary">运行查询</button>
+            </div>
+            <details>
+              <summary>查询参数</summary>
+              <textarea
+                id="parameters"
+                aria-label="查询参数"
+                spellcheck="false"
+                placeholder='[{"name":"@id","value":"example"}]'
+              >
 []</textarea
-            >
-          </details>
+              >
+            </details>
+          </div>
         </section>
         <div id="status" role="status" aria-live="polite">等待连接</div>
         <section class="results-panel">
           <div class="section-title">
-            <div>查询结果 <span id="row-count" class="muted">0 条</span></div>
+            <div class="result-heading">
+              查询结果 <span id="row-count" class="muted">0 条</span
+              ><span id="query-metrics" class="muted"></span
+              ><span id="execution-source" class="muted" hidden></span
+              ><span id="result-origin" class="muted" hidden></span>
+            </div>
             <div class="toolbar">
               <div class="segmented" role="group" aria-label="查询结果视图">
                 <button id="table-view" class="active" aria-pressed="true">
@@ -118,35 +148,31 @@
                 <button id="json-view" aria-pressed="false">JSON</button>
               </div>
               <button id="export">导出当前页</button>
+              <button id="document-toggle" type="button" aria-expanded="true">
+                收起文档
+              </button>
             </div>
           </div>
           <div class="result-tools">
-            <input
-              id="result-filter"
-              aria-label="筛选当前页"
-              placeholder="筛选当前页（不查询数据库）"
-            />
-            <button id="choose-columns" type="button" aria-expanded="false">
-              显示列
-            </button>
-            <button id="copy-cell" type="button" disabled>复制单元格</button>
-            <button id="copy-row" type="button" disabled>复制行 JSON</button>
-            <span
-              id="table-preferences-status"
-              class="muted"
-              role="status"
-            ></span>
-          </div>
-          <div id="column-chooser" hidden>
-            <label
-              ><input id="pin-id" type="checkbox" checked />固定 id 列</label
-            >
-            <button id="columns-reset" type="button">重置列设置</button>
-            <button id="columns-close" type="button">完成</button>
-            <div id="column-options"></div>
-          </div>
-          <div class="results-navigation">
-            <span class="muted">当前页结果</span>
+            <div class="result-filter">
+              <input
+                type="search"
+                id="result-filter"
+                aria-label="筛选当前页"
+                placeholder="筛选当前页（不查询数据库）"
+              /><button
+                id="clear-filter"
+                type="button"
+                aria-label="清除结果筛选"
+                hidden
+              >
+                ×
+              </button>
+            </div>
+            <div id="table-tools" class="toolbar">
+              <button id="copy-cell" type="button" disabled>复制单元格</button>
+              <button id="copy-row" type="button" disabled>复制行 JSON</button>
+            </div>
             <div class="toolbar pagination" aria-label="查询结果分页">
               <button id="previous">上一页</button>
               <span id="page-label">第 0 页</span>

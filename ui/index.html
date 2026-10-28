@@ -213,6 +213,7 @@ pre {
   line-height: 1.6;
 }
 main {
+  position: relative;
   container: query-workspace / inline-size;
   display: flex;
   flex-direction: column;
@@ -272,19 +273,34 @@ main {
   flex-wrap: wrap;
 }
 #status {
-  flex: none;
-  min-height: 36px;
-  padding: 10px 16px;
-  color: var(--muted);
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  z-index: 35;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 4px 18px #0003;
+  color: var(--text);
   font-size: 11px;
-  border-bottom: 1px solid var(--line);
   overflow-wrap: anywhere;
+  pointer-events: none;
+}
+#status.error,
+#status.progress {
+  position: static;
+  flex: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 #status.error {
   color: #edac9e;
   background: #be543412;
 }
 .results-panel {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 160px;
@@ -293,7 +309,7 @@ main {
 }
 .results-panel > .section-title {
   flex: none;
-  padding: 10px 16px;
+  padding: 6px 12px;
   flex-wrap: wrap;
 }
 .table-scroll {
@@ -305,54 +321,54 @@ main {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
-  padding: 8px 16px;
+  padding: 4px 12px 8px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
 }
-.result-tools input {
-  min-width: 140px;
+.result-filter {
+  display: flex;
+  position: relative;
   flex: 1;
-  height: 32px;
+  min-width: 150px;
 }
-.result-tools button {
-  height: 32px;
+.result-filter input {
+  padding-right: 26px;
+}
+#clear-filter {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 26px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.result-tools button,
+.results-panel > .section-title button {
+  min-height: 28px;
+  height: 28px;
   padding: 0 8px;
   white-space: nowrap;
 }
-#table-preferences-status {
-  font-size: 10px;
-  flex-basis: 100%;
+.result-tools .pagination {
+  margin-left: auto;
 }
-#column-chooser {
-  max-height: 210px;
-  overflow: auto;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  margin: 0 16px;
-}
-#column-options {
+.result-heading {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
-  padding-top: 10px;
-}
-#column-options label {
-  max-width: 100%;
-  overflow: hidden;
-}
-#column-options label span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#column-chooser label {
-  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin: 0;
+  gap: 6px 10px;
 }
-#column-chooser input {
-  width: 14px;
-  height: 14px;
+#query-metrics {
+  font-size: 11px;
+}
+#result-origin {
+  font-size: 10px;
+}
+#result-origin.stale {
+  color: var(--accent);
 }
 .result-table {
   table-layout: fixed;
@@ -391,7 +407,8 @@ main {
   z-index: 3;
 }
 .row-read {
-  height: 26px;
+  min-height: 28px;
+  height: 28px;
   padding: 0 6px;
   font-size: 11px;
 }
@@ -432,7 +449,10 @@ th:first-child {
 .empty {
   display: grid;
   place-content: center;
-  min-height: 170px;
+  min-height: 130px;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
   color: var(--muted);
 }
 #raw-results {
@@ -1038,6 +1058,87 @@ body.light button.danger {
   }
 }
 
+.result-table td {
+  height: 36px;
+  padding-block: 4px;
+}
+.result-table td.cell-selected,
+.result-table td.cell-selected.pinned-id {
+  background: var(--panel);
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.result-table td:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.workspace.document-hidden {
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+.workspace.document-hidden > .document-panel,
+.workspace.document-hidden > #document-resize {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .workspace.document-hidden {
+    grid-template-columns: 175px minmax(0, 1fr);
+  }
+}
+@media (max-width: 800px) {
+  .workspace.document-hidden {
+    grid-template-columns: 155px minmax(0, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .workspace.document-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Keep narrow workspaces scrollable inside DBX's fixed-height webview. */
+@media (max-width: 800px) {
+  .workspace {
+    display: block;
+    height: calc(100vh - 60px);
+    min-height: 0;
+    overflow: auto;
+  }
+  aside {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+  aside > .section-title,
+  aside > .info,
+  aside > details {
+    grid-column: 1/-1;
+  }
+  aside > .aside-note {
+    display: none;
+  }
+  main {
+    height: 700px;
+    min-height: 700px;
+  }
+}
+
+.sql-diagnostic {
+  width: 100%;
+  padding: 6px 8px;
+  margin-top: 6px;
+  color: #d98274;
+  text-align: left;
+  justify-content: flex-start;
+  white-space: normal;
+  font-size: 11px;
+}
+#execution-source {
+  font-size: 10px;
+  color: var(--accent);
+}
+
     </style>
   </head>
   <body>
@@ -1082,6 +1183,23 @@ body.light button.danger {
             <span>SQL 查询</span>
             <div class="toolbar">
               <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
+              <button
+                id="query-collapse"
+                type="button"
+                class="compact"
+                aria-expanded="true"
+                aria-controls="query-body"
+              >
+                收起 SQL
+              </button>
+              <button
+                id="run-collapsed"
+                type="button"
+                class="primary compact"
+                hidden
+              >
+                运行查询
+              </button>
               <button id="cancel-query" type="button" hidden>取消查询</button>
               <button
                 id="sql-search"
@@ -1097,51 +1215,64 @@ body.light button.danger {
               </button>
             </div>
           </div>
-          <div id="sql" class="code-editor"></div>
-          <div class="query-options">
-            <label
-              >每页<select id="page-size" aria-label="每页条数">
-                <option>25</option>
-                <option selected>100</option>
-                <option>250</option>
-                <option>1000</option>
-              </select></label
-            ><label class="grow"
-              ><span
-                >分区键 <span class="label-hint">可选 · JSON 数组</span></span
-              ><span class="pk-input"
-                ><input
-                  id="query-pk"
-                  placeholder='["tenant-a"] 或留空跨分区'
-                  spellcheck="false"
-                /><button
-                  id="query-pk-choose"
-                  type="button"
-                  aria-label="选择查询分区键"
-                  aria-expanded="false"
-                  aria-controls="pk-picker"
-                >
-                  选择 ▾
-                </button></span
-              ></label
-            ><button id="run" class="primary">运行查询</button>
-          </div>
-          <details>
-            <summary>查询参数</summary>
-            <textarea
-              id="parameters"
-              aria-label="查询参数"
-              spellcheck="false"
-              placeholder='[{"name":"@id","value":"example"}]'
-            >
+          <div id="query-body">
+            <div id="sql" class="code-editor"></div>
+            <button
+              id="sql-diagnostic"
+              class="sql-diagnostic"
+              type="button"
+              hidden
+            ></button>
+            <div class="query-options">
+              <label
+                >每页<select id="page-size" aria-label="每页条数">
+                  <option>25</option>
+                  <option selected>100</option>
+                  <option>250</option>
+                  <option>1000</option>
+                </select></label
+              ><label class="grow"
+                ><span
+                  >分区键 <span class="label-hint">可选 · JSON 数组</span></span
+                ><span class="pk-input"
+                  ><input
+                    id="query-pk"
+                    placeholder='["tenant-a"] 或留空跨分区'
+                    spellcheck="false"
+                  /><button
+                    id="query-pk-choose"
+                    type="button"
+                    aria-label="选择查询分区键"
+                    aria-expanded="false"
+                    aria-controls="pk-picker"
+                  >
+                    选择 ▾
+                  </button></span
+                ></label
+              ><button id="run" class="primary">运行查询</button>
+            </div>
+            <details>
+              <summary>查询参数</summary>
+              <textarea
+                id="parameters"
+                aria-label="查询参数"
+                spellcheck="false"
+                placeholder='[{"name":"@id","value":"example"}]'
+              >
 []</textarea
-            >
-          </details>
+              >
+            </details>
+          </div>
         </section>
         <div id="status" role="status" aria-live="polite">等待连接</div>
         <section class="results-panel">
           <div class="section-title">
-            <div>查询结果 <span id="row-count" class="muted">0 条</span></div>
+            <div class="result-heading">
+              查询结果 <span id="row-count" class="muted">0 条</span
+              ><span id="query-metrics" class="muted"></span
+              ><span id="execution-source" class="muted" hidden></span
+              ><span id="result-origin" class="muted" hidden></span>
+            </div>
             <div class="toolbar">
               <div class="segmented" role="group" aria-label="查询结果视图">
                 <button id="table-view" class="active" aria-pressed="true">
@@ -1150,35 +1281,31 @@ body.light button.danger {
                 <button id="json-view" aria-pressed="false">JSON</button>
               </div>
               <button id="export">导出当前页</button>
+              <button id="document-toggle" type="button" aria-expanded="true">
+                收起文档
+              </button>
             </div>
           </div>
           <div class="result-tools">
-            <input
-              id="result-filter"
-              aria-label="筛选当前页"
-              placeholder="筛选当前页（不查询数据库）"
-            />
-            <button id="choose-columns" type="button" aria-expanded="false">
-              显示列
-            </button>
-            <button id="copy-cell" type="button" disabled>复制单元格</button>
-            <button id="copy-row" type="button" disabled>复制行 JSON</button>
-            <span
-              id="table-preferences-status"
-              class="muted"
-              role="status"
-            ></span>
-          </div>
-          <div id="column-chooser" hidden>
-            <label
-              ><input id="pin-id" type="checkbox" checked />固定 id 列</label
-            >
-            <button id="columns-reset" type="button">重置列设置</button>
-            <button id="columns-close" type="button">完成</button>
-            <div id="column-options"></div>
-          </div>
-          <div class="results-navigation">
-            <span class="muted">当前页结果</span>
+            <div class="result-filter">
+              <input
+                type="search"
+                id="result-filter"
+                aria-label="筛选当前页"
+                placeholder="筛选当前页（不查询数据库）"
+              /><button
+                id="clear-filter"
+                type="button"
+                aria-label="清除结果筛选"
+                hidden
+              >
+                ×
+              </button>
+            </div>
+            <div id="table-tools" class="toolbar">
+              <button id="copy-cell" type="button" disabled>复制单元格</button>
+              <button id="copy-row" type="button" disabled>复制行 JSON</button>
+            </div>
             <div class="toolbar pagination" aria-label="查询结果分页">
               <button id="previous">上一页</button>
               <span id="page-label">第 0 页</span>
@@ -1424,6 +1551,56 @@ body.light button.danger {
     </dialog>
     <script type="module">
       (() => {
+  // src/sql-execution.mjs
+  function sqlExecution(document2, selection) {
+    const range = selection.main;
+    const selected = !range.empty;
+    const from = selected ? range.from : 0;
+    const to = selected ? range.to : document2.length;
+    return {
+      document: document2,
+      query: document2.slice(from, to),
+      from,
+      to,
+      selected,
+      rangeCount: selection.ranges.length,
+      startLine: document2.slice(0, from).split("\n").length,
+      endLine: document2.slice(0, Math.max(from, to - 1)).split("\n").length
+    };
+  }
+  function validateSQLExecution(execution) {
+    if (execution.rangeCount > 1)
+      throw new Error("\u8BF7\u53EA\u4FDD\u7559\u4E00\u4E2A SQL \u9009\u533A\u540E\u8FD0\u884C\uFF1B\u4E0D\u4F1A\u81EA\u52A8\u5408\u5E76\u591A\u4E2A\u9009\u533A\u3002");
+    if (!execution.query.trim())
+      throw new Error(
+        execution.selected ? "\u9009\u4E2D\u7684 SQL \u53EA\u6709\u7A7A\u767D\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9\uFF1B\u672A\u6267\u884C\u5168\u6587\u3002" : "\u8BF7\u8F93\u5165 SQL \u540E\u8FD0\u884C\u3002"
+      );
+  }
+  function sqlErrorDiagnostic(execution, currentDocument, error) {
+    if (!execution || execution.document !== currentDocument) return null;
+    let position;
+    const data = error?.data;
+    if (data?.status === 400 && data?.category === "sql-syntax") {
+      position = data.position;
+    } else if (!data) {
+      const match = /HTTP 400: SQL 语法错误：第 (\d+) 个字符附近/.exec(
+        error?.message || ""
+      );
+      if (match) position = Number(match[1]) - 1;
+    }
+    if (!Number.isInteger(position) || position < 0 || position > execution.query.length)
+      return null;
+    const from = execution.from + position;
+    const prefix = currentDocument.slice(0, from).split("\n");
+    const line = prefix.length, column = prefix.at(-1).length + 1;
+    return {
+      from,
+      to: Math.min(from + 1, execution.to),
+      severity: "error",
+      message: `SQL \u8BED\u6CD5\u9519\u8BEF\uFF1A\u7B2C ${line} \u884C\uFF0C\u7B2C ${column} \u5217\u9644\u8FD1\uFF08\u70B9\u51FB\u5B9A\u4F4D\uFF09`
+    };
+  }
+
   // node_modules/@lezer/common/dist/index.js
   var DefaultBufferLength = 1024;
   var nextPropID = 0;
@@ -27618,6 +27795,7 @@ ${indent}}` : "}";
   } = {}) {
     const access = new Compartment();
     let locked = readOnly2, onChange = () => {
+    }, onSelection = () => {
     }, lastDiagnostic;
     const status2 = document.createElement("div");
     status2.className = "editor-status";
@@ -27653,7 +27831,7 @@ ${indent}}` : "}";
         (m) => m.from === selection.from && m.to === selection.to
       );
       const count = foldedRanges(state2).size;
-      status2.textContent = `\u7B2C ${line.number} \u884C\uFF0C\u7B2C ${selection.head - line.from + 1} \u5217${state2.readOnly ? " \xB7 \u53EA\u8BFB" : ""}${count ? ` \xB7 \u5DF2\u6298\u53E0 ${count} \u5904` : ""}` + (query2.search ? ` \xB7 \u5339\u914D ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} \u9879` : "");
+      status2.textContent = `\u7B2C ${line.number} \u884C\uFF0C\u7B2C ${selection.head - line.from + 1} \u5217${state2.readOnly ? " \xB7 \u53EA\u8BFB" : ""}${count ? ` \xB7 \u5DF2\u6298\u53E0 ${count} \u5904` : ""}` + (query2.search ? ` \xB7 \u5339\u914D ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} \u9879` : "") + (language2 === "sql" && !selection.empty ? ` \xB7 \u5DF2\u9009 ${selection.to - selection.from} \u5B57\u7B26 \xB7 \u6267\u884C\u9009\u533A` : "");
     }
     const report = () => {
       if (!diagnostics) return;
@@ -27663,6 +27841,11 @@ ${indent}}` : "}";
     };
     const extensions = [
       basicSetup,
+      ...language2 === "sql" ? [
+        EditorState.transactionExtender.of(
+          (tr) => tr.docChanged ? { effects: setDiagnosticsEffect.of([]) } : null
+        )
+      ] : [],
       EditorState.phrases.of(phrases),
       EditorView.contentAttributes.of({
         "aria-label": label,
@@ -27675,9 +27858,11 @@ ${indent}}` : "}";
       EditorView.updateListener.of((update) => {
         updateStatus(update.state);
         if (update.docChanged) {
+          if (language2 === "sql") lastDiagnostic = null;
           report();
           onChange();
         }
+        if (update.docChanged || update.selectionSet) onSelection();
       }),
       placeholder(hint),
       language2 === "sql" ? sql({ dialect: cosmosDialect }) : json(),
@@ -27718,6 +27903,7 @@ ${indent}}` : "}";
         return view2.state.doc.toString();
       },
       set value(text) {
+        if (language2 === "sql") lastDiagnostic = null;
         view2.setState(makeState(text));
         updateStatus(view2.state);
         report();
@@ -27740,6 +27926,20 @@ ${indent}}` : "}";
       },
       onChange(fn) {
         onChange = fn;
+      },
+      onSelection(fn) {
+        onSelection = fn;
+      },
+      get execution() {
+        return sqlExecution(view2.state.doc.toString(), view2.state.selection);
+      },
+      setDiagnostic(diagnostic) {
+        lastDiagnostic = diagnostic;
+        view2.dispatch(setDiagnostics(view2.state, diagnostic ? [diagnostic] : []));
+        if (diagnostic)
+          view2.dispatch({
+            effects: EditorView.scrollIntoView(diagnostic.from, { y: "center" })
+          });
       },
       search() {
         openSearchPanel(view2);
@@ -28101,17 +28301,10 @@ ${indent}}` : "}";
     for (const [key, size] of Object.entries(value?.widths || {}).slice(0, 500)) {
       if (Number.isFinite(size)) widths[key] = Math.max(80, Math.min(800, size));
     }
-    return {
-      hidden: Array.isArray(value?.hidden) ? value.hidden.filter((x) => typeof x === "string").slice(0, 500) : [],
-      widths,
-      pinId: value?.pinId !== false
-    };
+    return { widths };
   }
-  function visibleColumns(columns, preferences) {
-    const visible = columns.filter((name2) => !preferences.hidden.includes(name2));
-    if (preferences.pinId && visible.includes("id"))
-      return ["id", ...visible.filter((name2) => name2 !== "id")];
-    return visible;
+  function tableColumns(columns) {
+    return columns.includes("id") ? ["id", ...columns.filter((name2) => name2 !== "id")] : columns;
   }
   function rowIdentity(row, paths) {
     if (!row || typeof row.id !== "string" || !paths.length) return null;
@@ -28362,7 +28555,8 @@ ${indent}}` : "}";
     tablePrefs: tablePreferences(),
     tableRevision: 0,
     selectedCell: null,
-    selectedRow: null
+    selectedRow: null,
+    resultStale: false
   };
   var host = window.dbxPlugin;
   var fieldScopes = /* @__PURE__ */ new Map();
@@ -28379,7 +28573,7 @@ ${indent}}` : "}";
   var documentEditor = createCodeEditor($("editor"), {
     label: "JSON \u6587\u6863",
     readOnly: true,
-    hint: "\u70B9\u51FB\u7ED3\u679C\u884C\u9884\u89C8\uFF0C\u518D\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u8FDB\u884C\u7F16\u8F91",
+    hint: "\u53CC\u51FB\u7ED3\u679C\u884C\u9884\u89C8\uFF0C\u6216\u70B9\u51FB\u300C\u6253\u5F00\u6587\u6863\u300D\u8FDB\u884C\u7F16\u8F91",
     diagnostics(error) {
       documentError = error;
       $("json-diagnostic").hidden = !error || state.documentView !== "json";
@@ -28465,6 +28659,7 @@ ${indent}}` : "}";
       button.onclick = () => {
         if (state.busy) return;
         $(partitionTarget).value = item.key;
+        renderResultSummary();
         if (partitionTarget === "query-pk") cache.selected = item.key;
         else if (state.creating) syncDraftPartition();
         closePartitionPicker();
@@ -28572,7 +28767,15 @@ ${indent}}` : "}";
   }
   $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
   $("confirm-accept").onclick = () => $("confirm-dialog").close("confirm");
+  var statusTimer;
   function status(text, error = false) {
+    clearTimeout(statusTimer);
+    $("status").hidden = false;
+    $("status").classList.toggle("progress", !!state.queryJob);
+    if (!error && !state.queryJob)
+      statusTimer = setTimeout(() => {
+        $("status").hidden = true;
+      }, 4e3);
     $("status").textContent = text;
     $("status").title = "";
     $("status").classList.toggle("error", error);
@@ -28636,13 +28839,15 @@ ${indent}}` : "}";
     $("sql-search").disabled = busy || !ready;
     $("document-search").disabled = busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
     $("document-more").disabled = busy || !documentEditor.value.trim();
-    if (busy) closeDocumentMenu();
+    if (busy) {
+      closeDocumentMenu();
+    }
     documentActions();
     $("document-format").disabled = busy || state.readOnly || !state.snapshot && !state.creating;
     $("previous").disabled = busy || state.page <= 0;
     $("next").disabled = busy || !state.pages[state.page]?.continuation;
+    $("run-collapsed").disabled = $("run").disabled;
     $("export").disabled = busy || state.page < 0;
-    $("choose-columns").disabled = busy || state.page < 0;
     $("result-filter").disabled = busy || state.page < 0;
     $("copy-cell").disabled = busy || state.selectedCell === null;
     $("copy-row").disabled = busy || state.selectedRow === null;
@@ -28725,6 +28930,8 @@ ${indent}}` : "}";
     setDocumentView("json");
   }
   function resetResults() {
+    clearSQLError();
+    state.resultStale = false;
     state.selectedCell = null;
     state.selectedRow = null;
     $("result-filter").value = "";
@@ -28737,6 +28944,7 @@ ${indent}}` : "}";
     const el = $(id);
     el.replaceChildren(new Option(placeholder2, ""));
     for (const item of items) el.add(new Option(item.id, item.id));
+    el.title = el.selectedOptions[0]?.textContent || "";
   }
   async function listAll(method, params) {
     const items = [];
@@ -28773,6 +28981,7 @@ ${indent}}` : "}";
   }
   async function selectDatabase(next) {
     state.database = next;
+    $("database").title = next;
     state.container = "";
     activatePartitionScope();
     resetResults();
@@ -28791,6 +29000,7 @@ ${indent}}` : "}";
   }
   function selectContainer(next) {
     state.container = next;
+    $("container").title = next;
     activatePartitionScope();
     resetResults();
     void loadTablePreferences();
@@ -28806,17 +29016,13 @@ ${indent}}` : "}";
   async function loadTablePreferences() {
     const key = preferenceKey(), revision = ++state.tableRevision;
     state.tablePrefs = tablePreferences();
-    $("column-chooser").hidden = true;
-    $("choose-columns").setAttribute("aria-expanded", "false");
     try {
       const value = await invoke("cosmos/tablePreferences", scope());
       if (key !== preferenceKey() || revision !== state.tableRevision) return;
       state.tablePrefs = tablePreferences(value);
-      $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u6309\u5BB9\u5668\u4FDD\u5B58";
       renderPage();
     } catch {
-      if (key === preferenceKey())
-        $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u4EC5\u672C\u6B21\u6709\u6548\uFF08\u5B58\u50A8\u4E0D\u53EF\u7528\uFF09";
+      if (key === preferenceKey()) status("\u5217\u5BBD\u8BBE\u7F6E\u4EC5\u672C\u6B21\u6709\u6548\uFF08\u5B58\u50A8\u4E0D\u53EF\u7528\uFF09");
     }
   }
   function saveTablePreferences() {
@@ -28832,33 +29038,34 @@ ${indent}}` : "}";
       await host.invoke("cosmos/tablePreferences", params, {
         timeoutMs: 1e4
       });
-      if (key === preferenceKey())
-        $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u5DF2\u4FDD\u5B58";
     }).catch(() => {
-      if (key === preferenceKey())
-        $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u4FDD\u5B58\u5931\u8D25\uFF1B\u672C\u6B21\u4ECD\u6709\u6548";
+      if (key === preferenceKey()) status("\u5217\u5BBD\u4FDD\u5B58\u5931\u8D25\uFF1B\u672C\u6B21\u4ECD\u6709\u6548", true);
     });
   }
-  function renderColumnChooser(columns) {
-    $("pin-id").checked = state.tablePrefs.pinId;
-    $("column-options").replaceChildren();
-    for (const name2 of columns) {
-      const label = document.createElement("label"), input = document.createElement("input"), text = document.createElement("span");
-      input.type = "checkbox";
-      input.checked = !state.tablePrefs.hidden.includes(name2);
-      input.setAttribute("aria-label", `\u663E\u793A\u5217 ${name2}`);
-      text.textContent = name2;
-      input.onchange = () => {
-        state.tablePrefs.hidden = state.tablePrefs.hidden.filter(
-          (x) => x !== name2
-        );
-        if (!input.checked) state.tablePrefs.hidden.push(name2);
-        saveTablePreferences();
-        renderPage();
-      };
-      label.append(input, text);
-      $("column-options").append(label);
-    }
+  function pageRows() {
+    const p = state.pages[state.page];
+    const all = p ? parse(p.json) : [];
+    const filter = $("result-filter").value.trim().toLowerCase();
+    return {
+      all,
+      filter,
+      rows: all.map((row, index) => ({ row, index })).filter(
+        ({ row }) => !filter || stringify(row).toLowerCase().includes(filter)
+      )
+    };
+  }
+  function renderResultSummary() {
+    const p = state.pages[state.page];
+    $("query-metrics").title = p?.activityId ? `Activity ID: ${p.activityId}` : "";
+    $("query-metrics").textContent = p ? `${p.ru.toFixed(2)} RU \xB7 ${p.durationMs} ms` : "";
+    const changed = p && (p.spec.query !== sqlEditor.execution.query || p.execution?.selected && p.execution.document !== sqlEditor.value || p.spec.partitionKeyText !== $("query-pk").value.trim() || p.spec.parametersText !== $("parameters").value || p.spec.pageSize !== Number($("page-size").value));
+    $("execution-source").hidden = !p?.execution?.selected;
+    $("execution-source").textContent = p?.execution?.selected ? `\u9009\u4E2D SQL \xB7 \u7B2C ${p.execution.startLine}${p.execution.endLine !== p.execution.startLine ? "\u2013" + p.execution.endLine : ""} \u884C` : "";
+    $("result-origin").hidden = !p;
+    $("result-origin").textContent = state.resultStale ? "\u663E\u793A\u4E0A\u6B21\u67E5\u8BE2\u7ED3\u679C" : changed ? "\u67E5\u8BE2\u6761\u4EF6\u5DF2\u4FEE\u6539" : "\u5F53\u524D\u9875";
+    $("result-origin").classList.toggle("stale", state.resultStale || !!changed);
+    $("result-origin").title = p ? `${p.spec.query}
+\u5206\u533A\u952E\uFF1A${p.spec.partitionKeyText || "\u8DE8\u5206\u533A"}` : "";
   }
   async function copyResult(text, label) {
     try {
@@ -28870,18 +29077,21 @@ ${indent}}` : "}";
   }
   function renderPage() {
     const p = state.pages[state.page];
-    const allRows = p ? parse(p.json) : [];
-    const filter = $("result-filter").value.trim().toLowerCase();
-    const rows = allRows.map((row, index) => ({ row, index })).filter(
-      ({ row }) => !filter || stringify(row).toLowerCase().includes(filter)
-    );
+    const { all: allRows, filter, rows } = pageRows();
+    renderResultSummary();
+    $("clear-filter").hidden = !filter;
+    $("export").textContent = filter ? "\u5BFC\u51FA\u7B5B\u9009\u7ED3\u679C" : "\u5BFC\u51FA\u5F53\u524D\u9875";
+    $("export").title = filter ? "\u4EC5\u5BFC\u51FA\u5F53\u524D\u9875\u5339\u914D\u7B5B\u9009\u7684\u6587\u6863\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09" : "\u5BFC\u51FA\u5F53\u524D\u9875\u6240\u6709\u6587\u6863\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09";
     $("row-count").textContent = filter ? `${rows.length} / ${allRows.length} \u6761\uFF08\u4EC5\u5F53\u524D\u9875\uFF09` : `${allRows.length} \u6761`;
     $("page-label").textContent = `\u7B2C ${state.page + 1} \u9875`;
-    $("raw-results").value = p ? formatJSON(p.json) : "";
+    $("raw-results").value = p ? filter ? stringify(
+      rows.map((x) => x.row),
+      null,
+      2
+    ) : formatJSON(p.json) : "";
     const target = $("table");
     const scrollLeft = target.scrollLeft, scrollTop = target.scrollTop;
     const allColumns = columnsFor(allRows);
-    renderColumnChooser(allColumns);
     state.selectedCell = null;
     state.selectedRow = null;
     $("copy-cell").disabled = true;
@@ -28890,23 +29100,33 @@ ${indent}}` : "}";
     if (!rows.length) {
       const el = document.createElement("div");
       el.className = "empty";
-      el.textContent = p ? p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : filter ? "\u5F53\u524D\u9875\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C" : "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2";
+      el.textContent = !p ? "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2" : filter && allRows.length ? `\u5F53\u524D\u9875\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C\uFF0C\u8BF7\u6E05\u9664\u7B5B\u9009${p.continuation ? "\u6216\u67E5\u770B\u4E0B\u4E00\u9875" : ""}` : p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C";
+      if (filter) {
+        const clear = document.createElement("button");
+        clear.textContent = "\u6E05\u9664\u7B5B\u9009";
+        clear.onclick = () => {
+          $("result-filter").value = "";
+          renderPage();
+          $("result-filter").focus();
+        };
+        el.append(clear);
+      }
       target.append(el);
       return;
     }
-    const columns = visibleColumns(allColumns, state.tablePrefs), table = document.createElement("table"), thead = table.createTHead(), tr = thead.insertRow();
+    const columns = tableColumns(allColumns), table = document.createElement("table"), thead = table.createTHead(), tr = thead.insertRow();
     table.className = "result-table";
     const colgroup = document.createElement("colgroup");
     table.prepend(colgroup);
     for (const name2 of ["#", "\u64CD\u4F5C", ...columns]) {
       const col = document.createElement("col");
-      const width = name2 === "#" ? 48 : name2 === "\u64CD\u4F5C" ? 90 : state.tablePrefs.widths[name2] || 180;
+      const width = name2 === "#" ? 48 : name2 === "\u64CD\u4F5C" ? 96 : state.tablePrefs.widths[name2] || 180;
       col.style.width = `${width}px`;
       colgroup.append(col);
       const th = document.createElement("th");
       th.textContent = name2;
       th.style.width = `${width}px`;
-      if (name2 === "id" && state.tablePrefs.pinId) th.classList.add("pinned-id");
+      if (name2 === "id") th.classList.add("pinned-id");
       if (name2 !== "#" && name2 !== "\u64CD\u4F5C") {
         const handle = document.createElement("span");
         handle.className = "column-resize";
@@ -28948,22 +29168,47 @@ ${indent}}` : "}";
       tr.append(th);
     }
     const tbody = table.createTBody();
+    let selected;
+    function selectCell(td, row, column) {
+      if (selected) {
+        selected.classList.remove("cell-selected");
+        selected.tabIndex = -1;
+      }
+      for (const cell of tbody.querySelectorAll('td[tabindex="0"]'))
+        cell.tabIndex = -1;
+      selected = td;
+      td.tabIndex = 0;
+      td.classList.add("cell-selected");
+      state.selectedCell = td.textContent;
+      state.selectedRow = stringify(row, null, 2);
+      $("copy-cell").title = `\u590D\u5236 ${column}\uFF08\u2318 / Ctrl + C\uFF09`;
+      for (const tr2 of tbody.rows)
+        tr2.classList.toggle("selected", tr2 === td.parentElement);
+      controls();
+    }
     rows.forEach(({ row, index }) => {
       const tr2 = tbody.insertRow();
-      tr2.tabIndex = 0;
       const number2 = tr2.insertCell();
       number2.textContent = String(index + 1);
       const actions = tr2.insertCell(), read = document.createElement("button");
       const identity = rowIdentity(row, partitionPaths());
-      read.textContent = "\u70B9\u8BFB";
+      read.textContent = identity ? "\u6253\u5F00\u6587\u6863" : "\u9884\u89C8";
       read.type = "button";
       read.className = "row-read";
-      read.setAttribute("aria-label", `\u8BFB\u53D6\u7B2C ${index + 1} \u884C\u5B8C\u6574\u6587\u6863`);
-      read.disabled = state.busy || !identity;
-      read.dataset.available = String(!!identity);
-      read.title = identity ? "\u6309\u672C\u884C id \u548C\u5B8C\u6574\u5206\u533A\u952E\u8BFB\u53D6" : "\u67E5\u8BE2\u7ED3\u679C\u9700\u5305\u542B id \u548C\u6240\u6709\u5206\u533A\u5B57\u6BB5\u624D\u80FD\u76F4\u63A5\u70B9\u8BFB";
+      read.setAttribute(
+        "aria-label",
+        identity ? `\u8BFB\u53D6\u7B2C ${index + 1} \u884C\u5B8C\u6574\u6587\u6863` : `\u9884\u89C8\u7B2C ${index + 1} \u884C\u67E5\u8BE2\u6295\u5F71`
+      );
+      read.disabled = state.busy;
+      read.dataset.available = "true";
+      read.title = identity ? "\u6309\u672C\u884C id \u548C\u5B8C\u6574\u5206\u533A\u952E\u8BFB\u53D6" : `\u4EC5\u9884\u89C8\u67E5\u8BE2\u7ED3\u679C\uFF1B\u67E5\u8BE2\u9700\u5305\u542B id \u548C\u5206\u533A\u5B57\u6BB5 ${partitionPaths().join(", ")} \u624D\u80FD\u76F4\u63A5\u6253\u5F00\u5B8C\u6574\u6587\u6863`;
       read.onclick = (e) => {
         e.stopPropagation();
+        if (!identity) {
+          void select();
+          return;
+        }
+        showDocument();
         void action(async () => {
           if (await discard())
             opened(await invoke("cosmos/read", { ...scope(), ...identity }), {
@@ -28978,14 +29223,30 @@ ${indent}}` : "}";
         const td = tr2.insertCell();
         td.textContent = cellText(value);
         td.title = td.textContent;
-        if (k === "id" && state.tablePrefs.pinId) td.classList.add("pinned-id");
+        if (k === "id") td.classList.add("pinned-id");
+        td.tabIndex = index === rows[0]?.index && k === columns[0] ? 0 : -1;
+        td.addEventListener("focus", () => selectCell(td, row, k));
         td.addEventListener("click", () => {
-          state.selectedCell = cellText(value);
-          state.selectedRow = stringify(row, null, 2);
+          selectCell(td, row, k);
+          td.focus({ preventScroll: true });
+        });
+        td.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && !e.altKey) {
+            e.preventDefault();
+            selectCell(td, row, k);
+            void copyResult(state.selectedCell, "\u5355\u5143\u683C");
+          } else if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) {
+            e.preventDefault();
+            const r = tr2.sectionRowIndex, c = td.cellIndex;
+            const target2 = e.key === "ArrowLeft" ? tr2.cells[Math.max(2, c - 1)] : e.key === "ArrowRight" ? tr2.cells[Math.min(tr2.cells.length - 1, c + 1)] : tbody.rows[r + (e.key === "ArrowUp" ? -1 : 1)]?.cells[c];
+            target2?.click();
+            target2?.scrollIntoView({ block: "nearest", inline: "nearest" });
+          }
         });
       }
       const select = () => action(async () => {
         if (!await discard()) return;
+        showDocument();
         resetEditor();
         state.selectedRow = stringify(row, null, 2);
         state.baseline = stringify(row, null, 2);
@@ -29013,9 +29274,14 @@ ${indent}}` : "}";
         controls();
         status("\u5DF2\u9884\u89C8\u67E5\u8BE2\u7ED3\u679C\u3002\u786E\u8BA4 id \u548C\u5206\u533A\u952E\u540E\uFF0C\u70B9\u51FB\u300C\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u300D\u3002");
       });
-      tr2.addEventListener("click", select);
+      tr2.addEventListener("dblclick", (e) => {
+        if (!e.target.closest("button")) void select();
+      });
       tr2.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") select();
+        if (e.key === "Enter" && !e.target.closest("button")) {
+          e.preventDefault();
+          void select();
+        }
       });
     });
     target.append(table);
@@ -29023,6 +29289,8 @@ ${indent}}` : "}";
     target.scrollTop = scrollTop;
   }
   async function query(next = false) {
+    const execution = next ? state.pages[state.page]?.execution : sqlEditor.execution;
+    if (!next) validateSQLExecution(execution);
     if (!await discard()) return;
     let spec;
     if (next) {
@@ -29034,12 +29302,13 @@ ${indent}}` : "}";
       if ($("query-pk").value.trim()) parseArray($("query-pk").value, "\u5206\u533A\u952E");
       spec = {
         ...scope(),
-        query: sqlEditor.value,
+        query: execution.query,
         parametersText: $("parameters").value,
         partitionKeyText: $("query-pk").value.trim(),
         pageSize: Number($("page-size").value)
       };
     }
+    clearSQLError();
     const job = {
       id: crypto.randomUUID(),
       connectionId: state.connectionId,
@@ -29047,6 +29316,8 @@ ${indent}}` : "}";
       canceled: false
     };
     state.queryJob = job;
+    state.resultStale = true;
+    renderResultSummary();
     const update = () => status(
       `\u67E5\u8BE2\u6267\u884C\u4E2D \xB7 ${((performance.now() - job.started) / 1e3).toFixed(1)} s \xB7 \u5C1A\u672A\u6536\u5230\u7ED3\u679C\uFF0CRU \u672A\u77E5`
     );
@@ -29059,6 +29330,13 @@ ${indent}}` : "}";
       if (job.canceled || state.queryJob !== job) throw new Error("STALE");
     } catch (error) {
       if (job.canceled || error.message === "STALE") throw new Error("STALE");
+      const diagnostic = sqlErrorDiagnostic(execution, sqlEditor.value, error);
+      if (diagnostic) {
+        setSQLCollapsed(false);
+        sqlEditor.setDiagnostic(diagnostic);
+        $("sql-diagnostic").textContent = diagnostic.message;
+        $("sql-diagnostic").hidden = false;
+      }
       throw new Error(
         `\u67E5\u8BE2\u5931\u8D25 \xB7 ${((performance.now() - job.started) / 1e3).toFixed(1)} s \xB7 \u672C\u6B21 RU \u672A\u77E5 \xB7 ${error.message}`
       );
@@ -29070,9 +29348,12 @@ ${indent}}` : "}";
     learnPartitionKeys(parse(result.json));
     if (hasRootProjection(spec.query))
       for (const doc2 of parse(result.json)) knownFields().learn(doc2);
-    if (!next) state.pages = [];
-    else state.pages = state.pages.slice(0, state.page + 1);
-    state.pages.push({ ...result, spec });
+    if (!next) {
+      state.pages = [];
+      $("result-filter").value = "";
+    } else state.pages = state.pages.slice(0, state.page + 1);
+    state.resultStale = false;
+    state.pages.push({ ...result, spec, execution });
     state.page = state.pages.length - 1;
     renderPage();
     resetEditor();
@@ -29447,13 +29728,15 @@ ${indent}}` : "}";
       if (error.message === "STALE") throw error;
       notes.push("\u5206\u533A\u952E\u7F13\u5B58\u8BFB\u53D6\u5931\u8D25");
     }
-    const previous = state.pages[state.page]?.spec;
+    const previousPage = state.pages[state.page];
+    const previous = previousPage?.spec;
     if (previous) {
       const spec = { ...previous };
       delete spec.continuation;
       try {
         const refreshed = await invoke("cosmos/query", spec);
-        state.pages = [{ ...refreshed, spec }];
+        state.resultStale = false;
+        state.pages = [{ ...refreshed, spec, execution: previousPage.execution }];
         state.page = 0;
         renderPage();
         notes.push(`\u4E0A\u6B21\u67E5\u8BE2\u5DF2\u5237\u65B0\u81F3\u7B2C 1 \u9875\uFF08${refreshed.ru.toFixed(2)} RU\uFF09`);
@@ -29477,6 +29760,7 @@ ${indent}}` : "}";
     $("table-view").setAttribute("aria-pressed", String(!json2));
     $("json-view").setAttribute("aria-pressed", String(json2));
     $("json-view").classList.toggle("active", json2);
+    $("table-tools").hidden = json2;
   }
   var bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
   bind("refresh", async () => {
@@ -29505,29 +29789,13 @@ ${indent}}` : "}";
     })
   );
   bind("run", () => query());
+  bind("run-collapsed", () => query());
   $("cancel-query").onclick = cancelQuery;
   $("result-filter").oninput = renderPage;
-  $("choose-columns").onclick = () => {
-    $("column-chooser").hidden = !$("column-chooser").hidden;
-    $("choose-columns").setAttribute(
-      "aria-expanded",
-      String(!$("column-chooser").hidden)
-    );
-  };
-  $("columns-close").onclick = () => {
-    $("column-chooser").hidden = true;
-    $("choose-columns").setAttribute("aria-expanded", "false");
-    $("choose-columns").focus();
-  };
-  $("columns-reset").onclick = () => {
-    state.tablePrefs = tablePreferences();
-    saveTablePreferences();
+  $("clear-filter").onclick = () => {
+    $("result-filter").value = "";
     renderPage();
-  };
-  $("pin-id").onchange = () => {
-    state.tablePrefs.pinId = $("pin-id").checked;
-    saveTablePreferences();
-    renderPage();
+    $("result-filter").focus();
   };
   $("copy-cell").onclick = () => {
     if (state.selectedCell !== null)
@@ -29552,6 +29820,7 @@ ${indent}}` : "}";
   $("pk-clear").onclick = () => {
     if (!state.busy) {
       $(partitionTarget).value = "";
+      renderResultSummary();
       if (partitionTarget === "query-pk") candidates().selected = "";
       closePartitionPicker();
       $(partitionTarget).focus();
@@ -29684,13 +29953,20 @@ id: ${identity.id}
   });
   bind("export", async () => {
     const p = state.pages[state.page];
-    const bytes = new TextEncoder().encode(p.json);
+    const { rows, filter } = pageRows();
+    const bytes = new TextEncoder().encode(
+      filter ? stringify(
+        rows.map((x) => x.row),
+        null,
+        2
+      ) : p.json
+    );
     if (bytes.length > 1024 * 1024)
       throw new Error("\u5F53\u524D\u9875\u8D85\u8FC7 1 MiB\uFF0C\u8BF7\u51CF\u5C0F\u6BCF\u9875\u6570\u91CF\u540E\u5BFC\u51FA");
     let binary = "";
     for (const byte of bytes) binary += String.fromCharCode(byte);
     const result = await host.request("host.saveFile", {
-      fileName: `${state.container}-page-${state.page + 1}.json`,
+      fileName: `${state.container}-page-${state.page + 1}${filter ? "-filtered" : ""}.json`,
       contentType: "application/json",
       dataBase64: btoa(binary)
     });
@@ -29740,12 +30016,18 @@ id: ${identity.id}
     $("document-id").value = doc2.id;
     status("\u5DF2\u751F\u6210\u65B0\u7684\u6587\u6863 UUID\u3002");
   });
-  document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.isComposing && e.target.closest(".query-panel") && !$("confirm-dialog").open) {
-      e.preventDefault();
-      if (!$("run").disabled) $("run").click();
-    }
-  });
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.isComposing && e.target.closest(".query-panel") && !$("confirm-dialog").open) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.repeat) return;
+        if (!$("run").disabled) $("run").click();
+      }
+    },
+    true
+  );
   async function contextChanged(context) {
     const id = context?.connectionId || context?.connection?.id || "";
     if (id === state.connectionId) return;
@@ -29796,6 +30078,52 @@ id: ${identity.id}
       return contextChanged(context || host.context);
     }).catch((e) => status(e.message, true));
   } else status("\u6B64\u5DE5\u4F5C\u53F0\u9700\u8981\u5728 DBX \u63D2\u4EF6\u5BBF\u4E3B\u4E2D\u6253\u5F00\u3002", true);
+  function clearSQLError() {
+    sqlEditor.setDiagnostic(null);
+    $("sql-diagnostic").hidden = true;
+  }
+  function updateSQLExecution() {
+    const selected = sqlEditor.execution.selected;
+    const label = selected ? "\u8FD0\u884C\u9009\u4E2D SQL" : "\u8FD0\u884C\u67E5\u8BE2";
+    for (const id of ["run", "run-collapsed"]) {
+      $(id).textContent = label;
+      $(id).title = selected ? "\u53EA\u6267\u884C SQL \u7F16\u8F91\u5668\u4E2D\u7684\u9009\u4E2D\u5185\u5BB9\uFF08\u2318 / Ctrl + Enter\uFF09" : "\u6267\u884C SQL \u7F16\u8F91\u5668\u5168\u6587\uFF08\u2318 / Ctrl + Enter\uFF09";
+    }
+    renderResultSummary();
+  }
+  sqlEditor.onChange(() => {
+    $("sql-diagnostic").hidden = true;
+  });
+  sqlEditor.onSelection(updateSQLExecution);
+  updateSQLExecution();
+  $("sql-diagnostic").onclick = () => sqlEditor.focusError();
+  for (const id of ["query-pk", "parameters", "page-size"]) {
+    $(id).addEventListener("input", renderResultSummary);
+    $(id).addEventListener("change", renderResultSummary);
+  }
+  function setSQLCollapsed(collapsed) {
+    $("query-body").hidden = collapsed;
+    $("run-collapsed").hidden = !collapsed;
+    $("query-collapse").textContent = collapsed ? "\u5C55\u5F00 SQL" : "\u6536\u8D77 SQL";
+    $("query-collapse").setAttribute("aria-expanded", String(!collapsed));
+    if (!collapsed) sqlEditor.measure();
+  }
+  $("query-collapse").onclick = () => setSQLCollapsed(!$("query-body").hidden);
+  function showDocument() {
+    workspace.classList.remove("document-hidden");
+    $("document-toggle").textContent = "\u6536\u8D77\u6587\u6863";
+    $("document-toggle").setAttribute("aria-expanded", "true");
+    documentEditor.measure();
+  }
+  $("document-toggle").onclick = () => {
+    if (workspace.classList.contains("document-hidden")) showDocument();
+    else {
+      workspace.classList.add("document-hidden");
+      $("document-toggle").textContent = "\u5C55\u5F00\u6587\u6863";
+      $("document-toggle").setAttribute("aria-expanded", "false");
+    }
+    sqlEditor.measure();
+  };
 })();
 
     </script>

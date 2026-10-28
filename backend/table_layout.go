@@ -13,9 +13,7 @@ import (
 
 // Contains column names and widths only, never cell contents or credentials.
 type tableLayout struct {
-	Hidden []string           `json:"hidden"`
 	Widths map[string]float64 `json:"widths"`
-	PinID  *bool              `json:"pinId,omitempty"`
 }
 
 func (c *cosmosClient) layoutPath(database, container string) (string, error) {
@@ -36,19 +34,14 @@ func (c *cosmosClient) layoutPath(database, container string) (string, error) {
 	return filepath.Join(root, "table-layout-v1", hex.EncodeToString(hash[:])+".json"), nil
 }
 func (c *cosmosClient) tablePreferences(database, container string, value *tableLayout) (tableLayout, error) {
-	empty := tableLayout{Hidden: []string{}, Widths: map[string]float64{}}
+	empty := tableLayout{Widths: map[string]float64{}}
 	path, err := c.layoutPath(database, container)
 	if err != nil {
 		return empty, err
 	}
 	validate := func(v *tableLayout) error {
-		if len(v.Hidden) > 500 || len(v.Widths) > 500 {
+		if len(v.Widths) > 500 {
 			return errors.New("Too many column preferences")
-		}
-		for _, name := range v.Hidden {
-			if len(name) > 4096 {
-				return errors.New("Column name is too long")
-			}
 		}
 		for name, width := range v.Widths {
 			if len(name) > 4096 || math.IsNaN(width) || math.IsInf(width, 0) || width < 80 || width > 800 {
@@ -73,7 +66,20 @@ func (c *cosmosClient) tablePreferences(database, container string, value *table
 		if len(data) > 128*1024 || json.Unmarshal(data, &empty) != nil {
 			return empty, errors.New("Invalid table preferences")
 		}
-		return empty, validate(&empty)
+		if err = validate(&empty); err != nil {
+			return empty, err
+		}
+		// Rewrite legacy layouts once, retaining widths but dropping hidden
+		// columns and pin toggles. No query or document data is stored here.
+		var legacy map[string]json.RawMessage
+		if err = json.Unmarshal(data, &legacy); err != nil {
+			return empty, err
+		}
+		if _, hidden := legacy["hidden"]; hidden || legacy["pinId"] != nil {
+			f.Close()
+			return c.tablePreferences(database, container, &empty)
+		}
+		return empty, nil
 	}
 	if err = validate(value); err != nil {
 		return empty, err
