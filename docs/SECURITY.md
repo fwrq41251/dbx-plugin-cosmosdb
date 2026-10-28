@@ -24,6 +24,15 @@ This document describes the release candidate for DBX Store review. The plugin s
 - Export is an explicit user action through DBX's `host.saveFile`; it exports the current result page only, with a 1 MiB limit.
 - Test servers, Azure validation scripts, package verification helpers, and identity migration notes are repository tooling. They are not included in the installed plugin.
 
+## External MCP surface (0.9.0 candidate)
+
+- Opts into DBX's external MCP bridge; the built-in AI surface is explicitly disabled. The validated stable pair is DBX 0.6.58 / MCP Server 0.4.132. This uses the stable manifest's `external_tools` plus per-tool `readOnlyHint`; it does not claim compatibility with 0.4.134's newer manifest access declarations and grants.
+- Exposes only `container_info`, `query`, `read_document` and `cached_partition_keys`. The dedicated MCP dispatcher rejects all other tool names and unknown/tool-inappropriate arguments, constructs a read-only client from the host lifecycle, and never routes to arbitrary `cosmos/*` methods. A writable UI connection does not enable MCP writes.
+- Requires a host-bound connection ID matching the lifecycle and a saved database/container pair. No caller-supplied endpoint, credentials or database/container overrides are accepted. DBX and the MCP client must separately restrict visible connections and exposed tool names.
+- Queries require a complete explicit partition-key array, default to 20 rows and cap the requested service page at 100. Query/point-read calls first validate the complete partition-key component count against current container metadata; total RU includes this metadata cost and reports it separately. Calls never auto-page, retry or enumerate partitions. Cached key lookup reads only the local historical cache.
+- Partition keys, parameter values and document results use JSON text strings to avoid host-side number rounding. Results are untrusted data, not instructions. Text output is limited to 192 KiB before MCP envelope serialization; oversized results fail with available RU/timing rather than silently truncating documents.
+- Opaque random continuation handles are scoped to connection/endpoint/container, credential identity and all query inputs. Up to 256 handles live only in sidecar memory for 10 minutes; no document bodies or credentials are stored in them. Restarting the sidecar invalidates handles.
+
 ## Known boundaries
 
 The first published target is macOS ARM64. Authentication is Account Key only; Entra ID, SSH/DBX proxy routing, automatic region failover, bulk operations and full SDK cross-partition query pipelines are not supported. Completion suggestions are based on a basic Cosmos SQL vocabulary and already-read document fields, not a complete container schema or SQL semantic validator.

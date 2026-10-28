@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — Read-only MCP bridge
+
+- Expose container metadata, explicit-partition SQL queries, point reads and local cached partition-key lookup through DBX's `mcp/tools` / `mcp/call` bridge.
+- Bind every tool to a host-managed container connection. No endpoint, credential, database/container override or mutation arguments are accepted.
+- Keep MCP read-only even when the saved UI connection permits writes; leave the built-in AI surface disabled.
+- Default to 20 rows, cap pages at 100, require explicit continuation and preserve numbers through JSON text fields. Cursors expire after 10 minutes and are bound to the full query context.
+- Reject oversized output instead of silently truncating or skipping documents. Return current-page RU, timing and Activity ID.
+- Require DBX 0.6.58+. The validated stable pairing is DBX 0.6.58 with MCP Server 0.4.132; MCP 0.4.134's new per-tool grant model requires a newer desktop/manifest contract and is not supported by this candidate.
+
 ## 0.8.0 — First marketplace candidate
 
 - Establish the permanent plugin ID `io.github.fwrq41251.cosmosdb` and publisher `fwrq41251`.

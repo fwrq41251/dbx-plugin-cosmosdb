@@ -1,16 +1,16 @@
 {
-  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/v0.6.49/plugins/manifest.schema.json",
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/v0.6.58/plugins/manifest.schema.json",
   "manifest_version": 1,
   "id": "io.github.fwrq41251.cosmosdb",
   "name": "Cosmos DB NoSQL",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "fwrq41251",
   "source": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "description": "Query and edit Azure Cosmos DB for NoSQL documents.",
   "icon": "assets/plugin.svg",
   "engines": {
-    "dbx": ">=0.6.49",
+    "dbx": ">=0.6.58",
     "host_api": "^1.0"
   },
   "permissions": [],
@@ -77,12 +77,23 @@
         }
       ],
       "workbench": "io.github.fwrq41251.cosmosdb.main",
-      "capabilities": ["test", "connect", "disconnect"]
+      "capabilities": [
+        "test",
+        "connect",
+        "disconnect"
+      ]
     },
     {
       "type": "workbench",
       "id": "io.github.fwrq41251.cosmosdb.main",
       "label": "Cosmos DB NoSQL"
+    },
+    {
+      "type": "mcp",
+      "id": "io.github.fwrq41251.cosmosdb.mcp",
+      "description": "Read-only container metadata, explicit-partition queries, point reads and local partition cache.",
+      "external_tools": true,
+      "ai_tools": false
     }
   ]
 }

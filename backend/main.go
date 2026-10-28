@@ -12,6 +12,8 @@ const pluginID = "io.github.fwrq41251.cosmosdb"
 type plugin struct {
 	mu          sync.RWMutex
 	connections map[string]*cosmosClient
+	mcpMu       sync.Mutex
+	mcpCursors  map[string]mcpCursor
 }
 type request struct {
 	ConnectionID string     `json:"connectionId"`
@@ -52,6 +54,12 @@ type connection struct {
 }
 
 func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage, _ *sdk.Emitter) (any, *sdk.PluginError) {
+	if method == "mcp/tools" {
+		return mcpTools(), nil
+	}
+	if method == "mcp/call" {
+		return p.mcpCall(raw), nil
+	}
 	var r request
 	if json.Unmarshal(raw, &r) != nil {
 		return nil, sdk.NewError(-32602, "Invalid request parameters")
@@ -220,7 +228,7 @@ func rpcError(err error) *sdk.PluginError {
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.8.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.9.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

@@ -21,7 +21,7 @@
 
 ## 在 DBX 中安装
 
-兼容目标为 DBX **0.6.49+**、Host API 1.x、sidecar protocol v1。
+`0.9.0` 开发候选版兼容目标为 DBX **0.6.58+**、Host API 1.x、sidecar protocol v1。当前商店版 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
 
 打开 **DBX → 插件中心 → Marketplace**，搜索 **Cosmos DB NoSQL**，确认发布者为 `fwrq41251`，点击安装。官方商店自动验证安装包签名，无需开启“允许安装未签名开发包”。
 
@@ -110,6 +110,54 @@ npm run package
 浏览器测试通过本地模拟 Cosmos HTTP 服务、真实 Go sidecar 和 DBX 官方开发宿主验证连接、查询、分页、只读、精度、ETag 冲突和文档增删改。测试用默认端口 5191、18081。Mac 默认使用已安装的 Chrome；CI 安装 Playwright Chromium。
 
 可选真实 Azure 验证：`python3 scripts/validate-live-cud.py --resource-group <group> --account <account> --database <database> --package <native.dbxp> --run`。脚本仅在本次新建的临时容器操作假数据，结束后删除容器并确认不存在；可写 Key 仅放在内存，不写入 DBX。Serverless 使用按请求计费；预配账号会临时分配 400 RU/s，请仅在开发账号显式运行。
+
+## MCP 只读工具（0.9.0 开发候选版）
+
+通过官方 DBX MCP Server 接入，不需要单独启动 Cosmos 插件服务器，也不需要把 Account Key 配置到 AI 客户端。当前已验证的稳定组合为 **DBX 0.6.58 + `@dbx-app/mcp-server@0.4.132`**。插件 Manifest 使用该版本支持的 `external_tools` 和 MCP 只读标注。`0.4.134` 已要求新的逐工具权限声明及插件授权，与 0.6.58 的界面和 Manifest 契约不配套；此候选版暂不支持该组合，不能仅升级独立 MCP Server。后续适配需要同时升级宿主及 Manifest。
+
+在 DBX 设置 → MCP → 权限管理中允许目标连接，并在工具列表添加以下四个精确工具名称。客户端只开放它们以及 `dbx_list_connections`；避免用通配符自动开放未来新增工具。
+
+| 工具 | 用途 | 主要参数 |
+| --- | --- | --- |
+| `dbx_cosmosdb__container_info` | 读取保存容器的元数据与分区路径 | `dbx_connection` |
+| `dbx_cosmosdb__query` | 指定逻辑分区读取一页结果 | `sql`、`partition_key_text`、可选 `parameters_text`、`page_size`、`cursor` |
+| `dbx_cosmosdb__read_document` | 按 id 和完整分区键点读 | `id`、`partition_key_text` |
+| `dbx_cosmosdb__cached_partition_keys` | 本地历史分区缓存过滤与分页 | 可选 `filter`、`offset`、`limit` |
+
+所有工具通过 `dbx_connection` 选择已保存并放行的容器连接，不能覆盖数据库、容器、Endpoint 或密钥。Account 层连接需先保存数据库和容器。MCP 只读分发器与界面写入分开，即使保存连接可写，也不提供 MCP 增删改。内置 DBX AI 工具保持关闭，仅开放外部 MCP。
+
+分区键和查询参数使用 **JSON 文本字符串**，防止宿主解析 JSON 数字时损失精度。例如查询工具参数：
+
+```json
+{
+  "dbx_connection": "my-test",
+  "sql": "SELECT c.id FROM c WHERE c.amount = @amount",
+  "partition_key_text": "[\"tenant-a\"]",
+  "parameters_text": "[{\"name\":\"@amount\",\"value\":9007199254740993}]",
+  "page_size": 20
+}
+```
+
+查询返回 `documents_json`（保留数字原文）、`count`、`ru`、`metadata_ru`、`duration_ms`、`activity_id`、`has_more` 和可选的 `next_cursor`；点读和元数据返回 `document_json`。下一页保留原参数，将 `next_cursor` 填入 `cursor`。每页默认 20、最多 100 条，不自动翻页、重试或发现分区键。查询和点读前会读取容器元数据，校验层级分区键组件齐全，避免把前缀误当成完整分区；`ru` 包含这次校验成本，`metadata_ru` 单独列出元数据 RU。空页可能仍有下一页。游标绑定连接、凭据身份、SQL、参数、分区键及每页大小，10 分钟或 sidecar 重启后失效；仅内存保存，最多 256 个游标。
+
+输出正文预算为 192 KiB，超出会明确失败并保留已知 RU，不静默截断文档或返回跳过结果的游标；查询时可减少每页数量或使用字段投影。AI 客户端仍可能施加自己的输出长度限制。分区缓存工具不发 Azure 请求，返回是否找到缓存、是否完整和缓存时间，不把已知候选当成实时完整列表。
+
+Codex 配置示例（路径改为实际安装位置；连接 ID 使用本机保存连接的 ID）：
+
+```toml
+[mcp_servers.dbx]
+command = "/absolute/path/to/dbx-mcp"
+enabled_tools = ["dbx_list_connections", "dbx_cosmosdb__container_info", "dbx_cosmosdb__query", "dbx_cosmosdb__read_document", "dbx_cosmosdb__cached_partition_keys"]
+startup_timeout_sec = 30
+tool_timeout_sec = 60
+default_tools_approval_mode = "writes"
+
+[mcp_servers.dbx.env]
+DBX_MCP_PLUGIN_TOOLS = "flat"
+DBX_MCP_SCOPE_CONNECTION_IDS = "your-saved-connection-id"
+```
+
+可选端到端验证：`python3 scripts/verify-mcp.py --binary /absolute/path/to/dbx-mcp --connection my-test --partition-key-text '["tenant-a"]'`。脚本通过真实 MCP 的初始化、发现和调用验证元数据、缓存、查询、点读及可用的下一页；仅输出验证结果，不打印凭据或文档内容，不写业务文档。macOS 如提示 `KEYRING_ACCESS_FAILED`，按官方说明对同一个 MCP 可执行文件运行一次 `--authorize-keychain`，不要将此参数放入客户端配置。
 
 ## 首版边界
 
