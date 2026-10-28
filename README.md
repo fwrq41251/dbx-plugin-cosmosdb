@@ -33,7 +33,6 @@
 | ------------------- | ---------------------------------------------------------- |
 | Account Endpoint    | `https://your-account.documents.azure.com:443/`            |
 | Account Key         | Azure Portal → Cosmos DB 账号 → Keys 中的主 / 次密钥       |
-| 数据库 ID / 容器 ID | 一起填写作为默认打开位置；均留空则保持 Account 连接。      |
 | 只读                | 默认开启；需要编辑时关闭。DBX 自身的只读连接设置仍会生效。 |
 
 Key 由 DBX Secret Store 保存，只有连接生命周期的本地后端收到密钥。工作台不会收到密钥。插件不包含遥测、云中转或 AI 服务。
