@@ -57,11 +57,14 @@ try:
     for connection in args.connection:
         info = call('container_info', connection)
         assert info['mcp_read_only'] is True
+        cached_info = call('container_info', connection)
+        assert cached_info['metadata_source'] == 'cache' and cached_info['ru'] == 0
         cache = call('cached_partition_keys', connection, filter='Kintai', limit=1)
         assert cache['ru'] == 0 and cache['source'] == 'local_cache'
         query_args = {'sql': 'SELECT c.id FROM c', 'partition_key_text': args.partition_key_text,
                       'page_size': 1}
         page = call('query', connection, **query_args)
+        assert page['metadata_source'] == 'cache' and page['metadata_ru'] == 0
         documents = json.loads(page['documents_json'])
         assert len(documents) <= 1
         if documents:
@@ -71,7 +74,9 @@ try:
         if page['has_more']:
             assert page['next_cursor']
             call('query', connection, **query_args, cursor=page['next_cursor'])
-        print(f'{connection}: metadata, local cache, partition query, point read and available next page: PASS')
+        refreshed = call('container_info', connection, refresh=True)
+        assert refreshed['metadata_source'] == 'live'
+        print(f'{connection}: metadata cache/refresh, local keys, partition query, point read and available next page: PASS')
 finally:
     process.stdin.close()
     try:

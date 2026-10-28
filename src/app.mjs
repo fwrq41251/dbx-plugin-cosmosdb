@@ -14,6 +14,12 @@ import {
 } from "./model.mjs";
 import { PartitionCandidates, PartitionLoader } from "./partitions.mjs";
 import {
+  cellText,
+  tablePreferences,
+  visibleColumns,
+  rowIdentity,
+} from "./results.mjs";
+import {
   editableDocument,
   applyDocumentPartition,
   newDocument,
@@ -46,6 +52,12 @@ const state = {
   documentView: "json",
   preferredDocumentView: "fields",
   fieldErrors: new Map(),
+  operation: 0,
+  queryJob: null,
+  tablePrefs: tablePreferences(),
+  tableRevision: 0,
+  selectedCell: null,
+  selectedRow: null,
 };
 const host = window.dbxPlugin;
 const fieldScopes = new Map();
@@ -384,6 +396,11 @@ function controls() {
   $("previous").disabled = busy || state.page <= 0;
   $("next").disabled = busy || !state.pages[state.page]?.continuation;
   $("export").disabled = busy || state.page < 0;
+  $("choose-columns").disabled = busy || state.page < 0;
+  $("result-filter").disabled = busy || state.page < 0;
+  $("copy-cell").disabled = busy || state.selectedCell === null;
+  $("copy-row").disabled = busy || state.selectedRow === null;
+  $("cancel-query").hidden = !state.queryJob;
   $("save").disabled =
     busy ||
     state.readOnly ||
@@ -418,20 +435,27 @@ function controls() {
   for (const id of ["query-pk-choose", "document-pk-choose"])
     $(id).disabled = busy || !selected;
   if (!$("pk-picker").hidden) renderPartitionOptions();
+  for (const el of $("table").querySelectorAll(".row-read"))
+    el.disabled = busy || el.dataset.available !== "true";
 }
 async function action(fn) {
   if (state.busy) return;
   const epoch = state.epoch;
+  const operation = ++state.operation;
   state.busy = true;
   controls();
   status("正在处理…");
   try {
     await fn();
   } catch (error) {
-    if (epoch === state.epoch && error?.message !== "STALE")
+    if (
+      epoch === state.epoch &&
+      operation === state.operation &&
+      error?.message !== "STALE"
+    )
       status(error.message || String(error), true);
   } finally {
-    if (epoch === state.epoch) {
+    if (epoch === state.epoch && operation === state.operation) {
       state.busy = false;
       controls();
     }
@@ -476,6 +500,9 @@ function resetEditor() {
   setDocumentView("json");
 }
 function resetResults() {
+  state.selectedCell = null;
+  state.selectedRow = null;
+  $("result-filter").value = "";
   state.pages = [];
   state.page = -1;
   renderPage();
@@ -542,6 +569,7 @@ function selectContainer(next) {
   state.container = next;
   activatePartitionScope();
   resetResults();
+  void loadTablePreferences();
   const item = state.containers.find((x) => x.id === next);
   $("metadata").textContent = item ? encodeJSON(item, null, 2) : "—";
   $("container-info").textContent = item
@@ -549,13 +577,106 @@ function selectContainer(next) {
     : "选择容器开始查询";
   status("可以运行查询");
 }
+let preferenceWrites = Promise.resolve();
+function preferenceKey() {
+  return `table-v1:${partitionScope()}`;
+}
+async function loadTablePreferences() {
+  const key = preferenceKey(),
+    revision = ++state.tableRevision;
+  state.tablePrefs = tablePreferences();
+  $("column-chooser").hidden = true;
+  $("choose-columns").setAttribute("aria-expanded", "false");
+  try {
+    const value = await invoke("cosmos/tablePreferences", scope());
+    if (key !== preferenceKey() || revision !== state.tableRevision) return;
+    state.tablePrefs = tablePreferences(value);
+    $("table-preferences-status").textContent = "列设置按容器保存";
+    renderPage();
+  } catch {
+    if (key === preferenceKey())
+      $("table-preferences-status").textContent =
+        "列设置仅本次有效（存储不可用）";
+  }
+}
+function saveTablePreferences() {
+  ++state.tableRevision;
+  const key = preferenceKey(),
+    value = JSON.parse(JSON.stringify(state.tablePrefs));
+  const params = {
+    connectionId: state.connectionId,
+    ...scope(),
+    preferences: value,
+  };
+  preferenceWrites = preferenceWrites
+    .catch(() => {})
+    .then(async () => {
+      await host.invoke("cosmos/tablePreferences", params, {
+        timeoutMs: 10000,
+      });
+      if (key === preferenceKey())
+        $("table-preferences-status").textContent = "列设置已保存";
+    })
+    .catch(() => {
+      if (key === preferenceKey())
+        $("table-preferences-status").textContent =
+          "列设置保存失败；本次仍有效";
+    });
+}
+function renderColumnChooser(columns) {
+  $("pin-id").checked = state.tablePrefs.pinId;
+  $("column-options").replaceChildren();
+  for (const name of columns) {
+    const label = document.createElement("label"),
+      input = document.createElement("input"),
+      text = document.createElement("span");
+    input.type = "checkbox";
+    input.checked = !state.tablePrefs.hidden.includes(name);
+    input.setAttribute("aria-label", `显示列 ${name}`);
+    text.textContent = name;
+    input.onchange = () => {
+      state.tablePrefs.hidden = state.tablePrefs.hidden.filter(
+        (x) => x !== name,
+      );
+      if (!input.checked) state.tablePrefs.hidden.push(name);
+      saveTablePreferences();
+      renderPage();
+    };
+    label.append(input, text);
+    $("column-options").append(label);
+  }
+}
+async function copyResult(text, label) {
+  try {
+    await host.request("host.copy", { text });
+    status(`已复制${label}`);
+  } catch {
+    status("复制失败，请重试。", true);
+  }
+}
 function renderPage() {
   const p = state.pages[state.page];
-  const rows = p ? parseJSON(p.json) : [];
-  $("row-count").textContent = `${rows.length} 条`;
+  const allRows = p ? parseJSON(p.json) : [];
+  const filter = $("result-filter").value.trim().toLowerCase();
+  const rows = allRows
+    .map((row, index) => ({ row, index }))
+    .filter(
+      ({ row }) => !filter || encodeJSON(row).toLowerCase().includes(filter),
+    );
+  $("row-count").textContent = filter
+    ? `${rows.length} / ${allRows.length} 条（仅当前页）`
+    : `${allRows.length} 条`;
   $("page-label").textContent = `第 ${state.page + 1} 页`;
   $("raw-results").value = p ? formatJSON(p.json) : "";
   const target = $("table");
+  const scrollLeft = target.scrollLeft,
+    scrollTop = target.scrollTop;
+  const allColumns = columnsFor(allRows);
+  renderColumnChooser(allColumns);
+  state.selectedCell = null;
+  state.selectedRow = null;
+  $("copy-cell").disabled = true;
+  $("copy-row").disabled = true;
   target.replaceChildren();
   if (!rows.length) {
     const el = document.createElement("div");
@@ -563,37 +684,121 @@ function renderPage() {
     el.textContent = p
       ? p.continuation
         ? "当前页为空，仍可读取下一页"
-        : "没有匹配的结果"
+        : filter
+          ? "当前页没有匹配的结果"
+          : "没有匹配的结果"
       : "选择容器后运行查询";
     target.append(el);
     return;
   }
-  const columns = columnsFor(rows),
+  const columns = visibleColumns(allColumns, state.tablePrefs),
     table = document.createElement("table"),
     thead = table.createTHead(),
     tr = thead.insertRow();
-  for (const name of ["#", ...columns]) {
+  table.className = "result-table";
+  const colgroup = document.createElement("colgroup");
+  table.prepend(colgroup);
+  for (const name of ["#", "操作", ...columns]) {
+    const col = document.createElement("col");
+    const width =
+      name === "#"
+        ? 48
+        : name === "操作"
+          ? 90
+          : state.tablePrefs.widths[name] || 180;
+    col.style.width = `${width}px`;
+    colgroup.append(col);
     const th = document.createElement("th");
     th.textContent = name;
+    th.style.width = `${width}px`;
+    if (name === "id" && state.tablePrefs.pinId) th.classList.add("pinned-id");
+    if (name !== "#" && name !== "操作") {
+      const handle = document.createElement("span");
+      handle.className = "column-resize";
+      handle.tabIndex = 0;
+      handle.setAttribute("role", "separator");
+      handle.setAttribute("aria-label", `调整 ${name} 列宽`);
+      handle.setAttribute("aria-orientation", "vertical");
+      handle.setAttribute("aria-valuemin", "80");
+      handle.setAttribute("aria-valuemax", "800");
+      handle.setAttribute("aria-valuenow", String(width));
+      const resize = (size) => {
+        size = Math.max(80, Math.min(800, size));
+        state.tablePrefs.widths[name] = size;
+        col.style.width = th.style.width = `${size}px`;
+        handle.setAttribute("aria-valuenow", String(size));
+      };
+      handle.onpointerdown = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const x = e.clientX,
+          initial = state.tablePrefs.widths[name] || 180;
+        handle.setPointerCapture(e.pointerId);
+        handle.onpointermove = (event) => resize(initial + event.clientX - x);
+        handle.onpointerup = handle.onpointercancel = () => {
+          handle.onpointermove = null;
+          saveTablePreferences();
+        };
+      };
+      handle.onkeydown = (e) => {
+        if (["ArrowLeft", "ArrowRight"].includes(e.key)) {
+          e.preventDefault();
+          resize(
+            (state.tablePrefs.widths[name] || 180) +
+              (e.key === "ArrowRight" ? 20 : -20),
+          );
+          saveTablePreferences();
+        }
+      };
+      th.append(handle);
+    }
     tr.append(th);
   }
   const tbody = table.createTBody();
-  rows.forEach((row, index) => {
+  rows.forEach(({ row, index }) => {
     const tr = tbody.insertRow();
     tr.tabIndex = 0;
-    for (const value of [
-      index + 1,
-      ...columns.map((k) => (k === "(value)" ? row : row?.[k])),
-    ]) {
+    const number = tr.insertCell();
+    number.textContent = String(index + 1);
+    const actions = tr.insertCell(),
+      read = document.createElement("button");
+    const identity = rowIdentity(row, partitionPaths());
+    read.textContent = "点读";
+    read.type = "button";
+    read.className = "row-read";
+    read.setAttribute("aria-label", `读取第 ${index + 1} 行完整文档`);
+    read.disabled = state.busy || !identity;
+    read.dataset.available = String(!!identity);
+    read.title = identity
+      ? "按本行 id 和完整分区键读取"
+      : "查询结果需包含 id 和所有分区字段才能直接点读";
+    read.onclick = (e) => {
+      e.stopPropagation();
+      void action(async () => {
+        if (await discard())
+          opened(await invoke("cosmos/read", { ...scope(), ...identity }), {
+            ...scope(),
+            ...identity,
+          });
+      });
+    };
+    actions.append(read);
+    for (const k of columns) {
+      const value = k === "(value)" ? row : row?.[k];
       const td = tr.insertCell();
-      td.textContent =
-        typeof value === "object" ? encodeJSON(value) : String(value ?? "");
+      td.textContent = cellText(value);
       td.title = td.textContent;
+      if (k === "id" && state.tablePrefs.pinId) td.classList.add("pinned-id");
+      td.addEventListener("click", () => {
+        state.selectedCell = cellText(value);
+        state.selectedRow = encodeJSON(row, null, 2);
+      });
     }
     const select = () =>
       action(async () => {
         if (!(await discard())) return;
         resetEditor();
+        state.selectedRow = encodeJSON(row, null, 2);
         state.baseline = encodeJSON(row, null, 2);
         documentEditor.value = state.baseline;
         $("document-state").textContent = "查询投影（只读）";
@@ -628,6 +833,7 @@ function renderPage() {
           .querySelectorAll("tr.selected")
           .forEach((x) => x.classList.remove("selected"));
         tr.classList.add("selected");
+        controls();
         status("已预览查询结果。确认 id 和分区键后，点击「读取完整文档」。");
       });
     tr.addEventListener("click", select);
@@ -636,6 +842,8 @@ function renderPage() {
     });
   });
   target.append(table);
+  target.scrollLeft = scrollLeft;
+  target.scrollTop = scrollTop;
 }
 async function query(next = false) {
   if (!(await discard())) return;
@@ -655,7 +863,33 @@ async function query(next = false) {
       pageSize: Number($("page-size").value),
     };
   }
-  const result = await invoke("cosmos/query", spec);
+  const job = {
+    id: crypto.randomUUID(),
+    connectionId: state.connectionId,
+    started: performance.now(),
+    canceled: false,
+  };
+  state.queryJob = job;
+  const update = () =>
+    status(
+      `查询执行中 · ${((performance.now() - job.started) / 1000).toFixed(1)} s · 尚未收到结果，RU 未知`,
+    );
+  update();
+  job.timer = setInterval(update, 100);
+  controls();
+  let result;
+  try {
+    result = await invoke("cosmos/query", { ...spec, queryId: job.id });
+    if (job.canceled || state.queryJob !== job) throw new Error("STALE");
+  } catch (error) {
+    if (job.canceled || error.message === "STALE") throw new Error("STALE");
+    throw new Error(
+      `查询失败 · ${((performance.now() - job.started) / 1000).toFixed(1)} s · 本次 RU 未知 · ${error.message}`,
+    );
+  } finally {
+    clearInterval(job.timer);
+    if (state.queryJob === job) state.queryJob = null;
+  }
   rememberKey(spec.partitionKeyText || "");
   learnPartitionKeys(parseJSON(result.json));
   if (hasRootProjection(spec.query))
@@ -666,7 +900,32 @@ async function query(next = false) {
   state.page = state.pages.length - 1;
   renderPage();
   resetEditor();
-  metrics(result);
+  metrics(result, `查询完成 · ${parseJSON(result.json).length} 条 · `);
+}
+function cancelQuery() {
+  const job = state.queryJob;
+  if (!job) return;
+  job.canceled = true;
+  clearInterval(job.timer);
+  state.queryJob = null;
+  ++state.operation;
+  state.busy = false;
+  controls();
+  const operation = state.operation;
+  status("查询已取消；保留上次结果。已产生的 RU 不会退回，本次消耗未知。");
+  void host
+    .invoke(
+      "cosmos/cancel",
+      { connectionId: job.connectionId, queryId: job.id },
+      { timeoutMs: 10000 },
+    )
+    .catch(() => {
+      if (
+        state.operation === operation &&
+        state.connectionId === job.connectionId
+      )
+        status("已停止接收本次查询结果；后端取消未确认，本次 RU 未知。", true);
+    });
 }
 function point() {
   const id = $("document-id").value;
@@ -1110,6 +1369,38 @@ $("container").addEventListener("change", () =>
   }),
 );
 bind("run", () => query());
+$("cancel-query").onclick = cancelQuery;
+$("result-filter").oninput = renderPage;
+$("choose-columns").onclick = () => {
+  $("column-chooser").hidden = !$("column-chooser").hidden;
+  $("choose-columns").setAttribute(
+    "aria-expanded",
+    String(!$("column-chooser").hidden),
+  );
+};
+$("columns-close").onclick = () => {
+  $("column-chooser").hidden = true;
+  $("choose-columns").setAttribute("aria-expanded", "false");
+  $("choose-columns").focus();
+};
+$("columns-reset").onclick = () => {
+  state.tablePrefs = tablePreferences();
+  saveTablePreferences();
+  renderPage();
+};
+$("pin-id").onchange = () => {
+  state.tablePrefs.pinId = $("pin-id").checked;
+  saveTablePreferences();
+  renderPage();
+};
+$("copy-cell").onclick = () => {
+  if (state.selectedCell !== null)
+    void copyResult(state.selectedCell, "单元格");
+};
+$("copy-row").onclick = () => {
+  if (state.selectedRow !== null)
+    void copyResult(state.selectedRow, "行 JSON（查询投影）");
+};
 $("pk-load").onclick = () => {
   if (state.busy) return;
   const loader = candidates().loader;
@@ -1348,6 +1639,7 @@ document.addEventListener("keydown", (e) => {
 async function contextChanged(context) {
   const id = context?.connectionId || context?.connection?.id || "";
   if (id === state.connectionId) return;
+  if (state.queryJob) cancelQuery();
   for (const cache of partitionScopes.values()) cache.loader?.stop();
   partitionScopes.clear();
   fieldScopes.clear();

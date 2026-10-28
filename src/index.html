@@ -50,6 +50,7 @@
             <span>SQL 查询</span>
             <div class="toolbar">
               <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
+              <button id="cancel-query" type="button" hidden>取消查询</button>
               <button
                 id="sql-search"
                 type="button"
@@ -118,6 +119,31 @@
               </div>
               <button id="export">导出当前页</button>
             </div>
+          </div>
+          <div class="result-tools">
+            <input
+              id="result-filter"
+              aria-label="筛选当前页"
+              placeholder="筛选当前页（不查询数据库）"
+            />
+            <button id="choose-columns" type="button" aria-expanded="false">
+              显示列
+            </button>
+            <button id="copy-cell" type="button" disabled>复制单元格</button>
+            <button id="copy-row" type="button" disabled>复制行 JSON</button>
+            <span
+              id="table-preferences-status"
+              class="muted"
+              role="status"
+            ></span>
+          </div>
+          <div id="column-chooser" hidden>
+            <label
+              ><input id="pin-id" type="checkbox" checked />固定 id 列</label
+            >
+            <button id="columns-reset" type="button">重置列设置</button>
+            <button id="columns-close" type="button">完成</button>
+            <div id="column-options"></div>
           </div>
           <div class="results-navigation">
             <span class="muted">当前页结果</span>

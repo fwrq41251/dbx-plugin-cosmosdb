@@ -44,7 +44,7 @@ export function columnsFor(rows) {
       Object.keys(row).forEach((k) => keys.add(k));
     else keys.add("(value)");
   }
-  return [...keys].slice(0, 20);
+  return [...keys];
 }
 export function formatJSON(text) {
   // Add whitespace lexically so 64-bit integers and decimal literals remain exact.

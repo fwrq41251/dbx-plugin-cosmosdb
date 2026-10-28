@@ -20,6 +20,9 @@ let version = 1,
   unsupportedSeek = false,
   failNextQuery = false,
   throttleDiscovery = false;
+let queryDelay = 0,
+  queryCalls = 0,
+  canceledQueries = 0;
 const server = http.createServer(async (req, res) => {
   const send = (body, status = 200, headers = {}) => {
     res.writeHead(status, {
@@ -41,9 +44,21 @@ const server = http.createServer(async (req, res) => {
       deleted,
       discoveryCalls,
       accountLists,
+      queryCalls,
+      canceledQueries,
     });
   if (req.url === "/test/slow-discovery") {
     discoveryDelay = 100;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/slow-query") {
+    queryDelay = 1500;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/wide-document") {
+    const doc = parseExact(document);
+    for (let i = 0; i < 30; i++) doc[`extra${i}`] = `value-${i}`;
+    document = stringifyExact(doc);
     return send({ ok: true });
   }
   if (req.url === "/test/unsupported-seek") {
@@ -78,6 +93,9 @@ const server = http.createServer(async (req, res) => {
     unsupportedSeek = false;
     failNextQuery = false;
     throttleDiscovery = false;
+    queryDelay = 0;
+    queryCalls = 0;
+    canceledQueries = 0;
     return send({ ok: true });
   }
   if (req.url === "/test/nested-document") {
@@ -259,6 +277,16 @@ const server = http.createServer(async (req, res) => {
       return send({
         Documents: deleted ? [] : [{ id: JSON.parse(document).id }],
       });
+    queryCalls++;
+    if (queryDelay) {
+      const delay = queryDelay;
+      queryDelay = 0;
+      res.on("close", () => {
+        if (!res.writableEnded) canceledQueries++;
+      });
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      if (res.destroyed) return;
+    }
     if (failNextQuery) {
       failNextQuery = false;
       return send({}, 503);

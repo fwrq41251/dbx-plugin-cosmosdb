@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0 — Result tools, query cancellation and metadata caching
+
+- Remove the 20-column display limit; add column selection, remembered widths, pinned id, current-page filtering, exact cell copy and projected row JSON copy.
+- Persist only table layout metadata in private per-connection/container local files; add no host permissions.
+- Point-read a complete result row directly using its own id and full partition key, preserving the unsaved-draft confirmation.
+- Show query elapsed time and unknown RU while running; cancel through the sidecar HTTP context, retain previous results, and reject late responses after cancel/requery.
+- Cache MCP container definitions for five minutes with isolated keys, explicit refresh, source/timestamps and invalidation after container-related 400/404 responses. Cached validation adds no metadata RU.
+- Fix primary-button hover text contrast.
+
 ## 0.9.0 — Read-only MCP bridge
 
 - Expose container metadata, explicit-partition SQL queries, point reads and local cached partition-key lookup through DBX's `mcp/tools` / `mcp/call` bridge.

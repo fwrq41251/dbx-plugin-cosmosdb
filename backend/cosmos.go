@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -103,8 +104,14 @@ func resourcePath(parts ...string) string {
 
 // A request is one service page. Writes are never automatically retried.
 func (c *cosmosClient) request(method, kind, link, path string, body []byte, headers http.Header, sessionKey string) (page, error) {
+	return c.requestContext(nil, method, kind, link, path, body, headers, sessionKey)
+}
+func (c *cosmosClient) requestContext(ctx context.Context, method, kind, link, path string, body []byte, headers http.Header, sessionKey string) (page, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	start := time.Now()
-	req, err := http.NewRequest(method, c.endpoint+"/"+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, c.endpoint+"/"+path, bytes.NewReader(body))
 	if err != nil {
 		return page{}, errors.New("Could not construct Cosmos request")
 	}
@@ -129,6 +136,9 @@ func (c *cosmosClient) request(method, kind, link, path string, body []byte, hea
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return page{}, ctx.Err()
+		}
 		return page{}, errors.New("Cosmos request failed or timed out. Check network access. For a write, its outcome may be unknown; reload before retrying.")
 	}
 	defer resp.Body.Close()
@@ -142,6 +152,9 @@ func (c *cosmosClient) request(method, kind, link, path string, body []byte, hea
 	const limit = 6 * 1024 * 1024
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
+		if ctx.Err() != nil {
+			return page{}, ctx.Err()
+		}
 		return page{}, errors.New("Could not read service response; reload to verify any write outcome")
 	}
 	if len(data) > limit {
@@ -252,7 +265,7 @@ func (c *cosmosClient) documents(method string, r request) (page, error) {
 		if r.Continuation != "" {
 			h.Set("x-ms-continuation", r.Continuation)
 		}
-		p, err := c.request("POST", "docs", link, path, body, h, link)
+		p, err := c.requestContext(r.Context, "POST", "docs", link, path, body, h, link)
 		if err != nil {
 			return p, err
 		}

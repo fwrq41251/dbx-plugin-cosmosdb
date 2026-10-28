@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	sdk "github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk"
 	"log"
+	"strings"
 	"sync"
 )
 
@@ -14,10 +17,16 @@ type plugin struct {
 	connections map[string]*cosmosClient
 	mcpMu       sync.Mutex
 	mcpCursors  map[string]mcpCursor
+	queriesMu   sync.Mutex
+	queries     map[string]*queryJob
+	mcpMetadata map[string]metadataEntry
 }
 type request struct {
-	ConnectionID string     `json:"connectionId"`
-	Connection   connection `json:"connection"`
+	ConnectionID string          `json:"connectionId"`
+	QueryID      string          `json:"queryId"`
+	Context      context.Context `json:"-"`
+	Preferences  *tableLayout    `json:"preferences"`
+	Connection   connection      `json:"connection"`
 	Runtime      struct {
 		Host  string          `json:"host"`
 		Port  int             `json:"port"`
@@ -65,6 +74,13 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		return nil, sdk.NewError(-32602, "Invalid request parameters")
 	}
 	if method == "connection/disconnect" {
+		p.queriesMu.Lock()
+		for key, job := range p.queries {
+			if strings.HasPrefix(key, r.Connection.ID+"\x00") && job.cancel != nil {
+				job.cancel()
+			}
+		}
+		p.queriesMu.Unlock()
 		p.mu.Lock()
 		delete(p.connections, r.Connection.ID)
 		p.mu.Unlock()
@@ -122,6 +138,17 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	if c == nil {
 		return nil, sdk.NewError(-32010, "Connection is not active. Reopen the saved Cosmos DB connection.")
 	}
+	if method == "cosmos/cancel" {
+		return p.cancelQuery(r.ConnectionID, r.QueryID)
+	}
+	if method == "cosmos/query" && r.QueryID != "" {
+		ctx, finish, err := p.beginQuery(r.ConnectionID, r.QueryID)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		defer finish()
+		r.Context = ctx
+	}
 	if method == "cosmos/info" {
 		return map[string]any{"readOnly": c.readOnly, "database": c.database, "container": c.container}, nil
 	}
@@ -137,6 +164,12 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	var result any
 	var err error
 	switch method {
+	case "cosmos/tablePreferences":
+		if validID(r.Database) != nil || validID(r.Container) != nil {
+			err = errors.New("A database and container are required")
+		} else {
+			result, err = c.tablePreferences(r.Database, r.Container, r.Preferences)
+		}
 	case "cosmos/databases":
 		if c.database != "" {
 			items, _ := json.Marshal([]map[string]string{{"id": c.database}})
@@ -222,13 +255,16 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	return result, nil
 }
 func rpcError(err error) *sdk.PluginError {
+	if errors.Is(err, context.Canceled) {
+		return sdk.NewError(-32800, "查询已取消；已产生的 RU 不会退回，未收到响应的消耗未知")
+	}
 	if e, ok := err.(*serviceError); ok {
 		return &sdk.PluginError{Code: -32000, Message: e.Error(), Data: map[string]any{"status": e.status, "activityId": e.activityID, "retryAfterMs": e.retryAfter, "category": e.category, "serviceCode": e.errorCode, "position": e.position}}
 	}
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.9.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.10.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

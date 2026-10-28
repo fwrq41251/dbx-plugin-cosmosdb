@@ -153,6 +153,9 @@ button.primary {
   border-color: var(--accent);
   font-weight: 600;
 }
+button.primary:hover:not(:disabled) {
+  color: var(--bg);
+}
 button.danger {
   color: #f4a6a6;
 }
@@ -296,6 +299,101 @@ main {
 .table-scroll {
   overflow: auto;
   flex: 1;
+}
+.result-tools {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+}
+.result-tools input {
+  min-width: 140px;
+  flex: 1;
+  height: 32px;
+}
+.result-tools button {
+  height: 32px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+#table-preferences-status {
+  font-size: 10px;
+  flex-basis: 100%;
+}
+#column-chooser {
+  max-height: 210px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 0 16px;
+}
+#column-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding-top: 10px;
+}
+#column-options label {
+  max-width: 100%;
+  overflow: hidden;
+}
+#column-options label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#column-chooser label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+}
+#column-chooser input {
+  width: 14px;
+  height: 14px;
+}
+.result-table {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.result-table td,
+.result-table th {
+  max-width: none;
+  box-sizing: border-box;
+}
+.result-table th {
+  position: sticky;
+  padding-right: 18px;
+}
+.column-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+  border-right: 1px solid var(--line);
+}
+.result-table .pinned-id {
+  position: sticky;
+  left: 0;
+  background: var(--panel);
+  z-index: 1;
+  box-shadow: 1px 0 var(--line);
+}
+.result-table th.pinned-id {
+  z-index: 3;
+}
+.row-read {
+  height: 26px;
+  padding: 0 6px;
+  font-size: 11px;
 }
 table {
   border-collapse: collapse;
@@ -984,6 +1082,7 @@ body.light button.danger {
             <span>SQL 查询</span>
             <div class="toolbar">
               <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
+              <button id="cancel-query" type="button" hidden>取消查询</button>
               <button
                 id="sql-search"
                 type="button"
@@ -1052,6 +1151,31 @@ body.light button.danger {
               </div>
               <button id="export">导出当前页</button>
             </div>
+          </div>
+          <div class="result-tools">
+            <input
+              id="result-filter"
+              aria-label="筛选当前页"
+              placeholder="筛选当前页（不查询数据库）"
+            />
+            <button id="choose-columns" type="button" aria-expanded="false">
+              显示列
+            </button>
+            <button id="copy-cell" type="button" disabled>复制单元格</button>
+            <button id="copy-row" type="button" disabled>复制行 JSON</button>
+            <span
+              id="table-preferences-status"
+              class="muted"
+              role="status"
+            ></span>
+          </div>
+          <div id="column-chooser" hidden>
+            <label
+              ><input id="pin-id" type="checkbox" checked />固定 id 列</label
+            >
+            <button id="columns-reset" type="button">重置列设置</button>
+            <button id="columns-close" type="button">完成</button>
+            <div id="column-options"></div>
           </div>
           <div class="results-navigation">
             <span class="muted">当前页结果</span>
@@ -27386,7 +27510,7 @@ ${indent}}` : "}";
         Object.keys(row).forEach((k) => keys2.add(k));
       else keys2.add("(value)");
     }
-    return [...keys2].slice(0, 20);
+    return [...keys2];
   }
   function formatJSON(text) {
     let out = "", indent = 0, quoted = false, escaped = false;
@@ -27966,6 +28090,42 @@ ${indent}}` : "}";
     }
   };
 
+  // src/results.mjs
+  function cellText(value) {
+    if (value === void 0) return "";
+    if (typeof value === "string") return value;
+    return stringify(value);
+  }
+  function tablePreferences(value) {
+    const widths = /* @__PURE__ */ Object.create(null);
+    for (const [key, size] of Object.entries(value?.widths || {}).slice(0, 500)) {
+      if (Number.isFinite(size)) widths[key] = Math.max(80, Math.min(800, size));
+    }
+    return {
+      hidden: Array.isArray(value?.hidden) ? value.hidden.filter((x) => typeof x === "string").slice(0, 500) : [],
+      widths,
+      pinId: value?.pinId !== false
+    };
+  }
+  function visibleColumns(columns, preferences) {
+    const visible = columns.filter((name2) => !preferences.hidden.includes(name2));
+    if (preferences.pinId && visible.includes("id"))
+      return ["id", ...visible.filter((name2) => name2 !== "id")];
+    return visible;
+  }
+  function rowIdentity(row, paths) {
+    if (!row || typeof row.id !== "string" || !paths.length) return null;
+    for (const path of paths) {
+      let value = row;
+      for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
+        if (value === null || typeof value !== "object" || !Object.hasOwn(value, part))
+          return null;
+        value = value[part];
+      }
+    }
+    return { id: row.id, partitionKeyText: keyFromDocument(row, paths) };
+  }
+
   // src/documents.mjs
   var systemFields = /* @__PURE__ */ new Set(["_rid", "_self", "_etag", "_attachments", "_ts"]);
   function object(value) {
@@ -28196,7 +28356,13 @@ ${indent}}` : "}";
     creating: false,
     documentView: "json",
     preferredDocumentView: "fields",
-    fieldErrors: /* @__PURE__ */ new Map()
+    fieldErrors: /* @__PURE__ */ new Map(),
+    operation: 0,
+    queryJob: null,
+    tablePrefs: tablePreferences(),
+    tableRevision: 0,
+    selectedCell: null,
+    selectedRow: null
   };
   var host = window.dbxPlugin;
   var fieldScopes = /* @__PURE__ */ new Map();
@@ -28476,6 +28642,11 @@ ${indent}}` : "}";
     $("previous").disabled = busy || state.page <= 0;
     $("next").disabled = busy || !state.pages[state.page]?.continuation;
     $("export").disabled = busy || state.page < 0;
+    $("choose-columns").disabled = busy || state.page < 0;
+    $("result-filter").disabled = busy || state.page < 0;
+    $("copy-cell").disabled = busy || state.selectedCell === null;
+    $("copy-row").disabled = busy || state.selectedRow === null;
+    $("cancel-query").hidden = !state.queryJob;
     $("save").disabled = busy || state.readOnly || !state.snapshot && !state.creating || !!state.snapshot && !dirty() || state.fieldErrors.size > 0 || !!documentError;
     $("delete").disabled = busy || state.readOnly || !state.snapshot;
     $("new").disabled ||= state.readOnly;
@@ -28495,20 +28666,23 @@ ${indent}}` : "}";
     for (const id of ["query-pk-choose", "document-pk-choose"])
       $(id).disabled = busy || !selected;
     if (!$("pk-picker").hidden) renderPartitionOptions();
+    for (const el of $("table").querySelectorAll(".row-read"))
+      el.disabled = busy || el.dataset.available !== "true";
   }
   async function action(fn) {
     if (state.busy) return;
     const epoch = state.epoch;
+    const operation = ++state.operation;
     state.busy = true;
     controls();
     status("\u6B63\u5728\u5904\u7406\u2026");
     try {
       await fn();
     } catch (error) {
-      if (epoch === state.epoch && error?.message !== "STALE")
+      if (epoch === state.epoch && operation === state.operation && error?.message !== "STALE")
         status(error.message || String(error), true);
     } finally {
-      if (epoch === state.epoch) {
+      if (epoch === state.epoch && operation === state.operation) {
         state.busy = false;
         controls();
       }
@@ -28551,6 +28725,9 @@ ${indent}}` : "}";
     setDocumentView("json");
   }
   function resetResults() {
+    state.selectedCell = null;
+    state.selectedRow = null;
+    $("result-filter").value = "";
     state.pages = [];
     state.page = -1;
     renderPage();
@@ -28616,47 +28793,201 @@ ${indent}}` : "}";
     state.container = next;
     activatePartitionScope();
     resetResults();
+    void loadTablePreferences();
     const item = state.containers.find((x) => x.id === next);
     $("metadata").textContent = item ? stringify(item, null, 2) : "\u2014";
     $("container-info").textContent = item ? `\u5206\u533A\u8DEF\u5F84\uFF1A${(item.partitionKey?.paths || []).join(", ") || "\u65E0"}` : "\u9009\u62E9\u5BB9\u5668\u5F00\u59CB\u67E5\u8BE2";
     status("\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2");
   }
+  var preferenceWrites = Promise.resolve();
+  function preferenceKey() {
+    return `table-v1:${partitionScope()}`;
+  }
+  async function loadTablePreferences() {
+    const key = preferenceKey(), revision = ++state.tableRevision;
+    state.tablePrefs = tablePreferences();
+    $("column-chooser").hidden = true;
+    $("choose-columns").setAttribute("aria-expanded", "false");
+    try {
+      const value = await invoke("cosmos/tablePreferences", scope());
+      if (key !== preferenceKey() || revision !== state.tableRevision) return;
+      state.tablePrefs = tablePreferences(value);
+      $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u6309\u5BB9\u5668\u4FDD\u5B58";
+      renderPage();
+    } catch {
+      if (key === preferenceKey())
+        $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u4EC5\u672C\u6B21\u6709\u6548\uFF08\u5B58\u50A8\u4E0D\u53EF\u7528\uFF09";
+    }
+  }
+  function saveTablePreferences() {
+    ++state.tableRevision;
+    const key = preferenceKey(), value = JSON.parse(JSON.stringify(state.tablePrefs));
+    const params = {
+      connectionId: state.connectionId,
+      ...scope(),
+      preferences: value
+    };
+    preferenceWrites = preferenceWrites.catch(() => {
+    }).then(async () => {
+      await host.invoke("cosmos/tablePreferences", params, {
+        timeoutMs: 1e4
+      });
+      if (key === preferenceKey())
+        $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u5DF2\u4FDD\u5B58";
+    }).catch(() => {
+      if (key === preferenceKey())
+        $("table-preferences-status").textContent = "\u5217\u8BBE\u7F6E\u4FDD\u5B58\u5931\u8D25\uFF1B\u672C\u6B21\u4ECD\u6709\u6548";
+    });
+  }
+  function renderColumnChooser(columns) {
+    $("pin-id").checked = state.tablePrefs.pinId;
+    $("column-options").replaceChildren();
+    for (const name2 of columns) {
+      const label = document.createElement("label"), input = document.createElement("input"), text = document.createElement("span");
+      input.type = "checkbox";
+      input.checked = !state.tablePrefs.hidden.includes(name2);
+      input.setAttribute("aria-label", `\u663E\u793A\u5217 ${name2}`);
+      text.textContent = name2;
+      input.onchange = () => {
+        state.tablePrefs.hidden = state.tablePrefs.hidden.filter(
+          (x) => x !== name2
+        );
+        if (!input.checked) state.tablePrefs.hidden.push(name2);
+        saveTablePreferences();
+        renderPage();
+      };
+      label.append(input, text);
+      $("column-options").append(label);
+    }
+  }
+  async function copyResult(text, label) {
+    try {
+      await host.request("host.copy", { text });
+      status(`\u5DF2\u590D\u5236${label}`);
+    } catch {
+      status("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u3002", true);
+    }
+  }
   function renderPage() {
     const p = state.pages[state.page];
-    const rows = p ? parse(p.json) : [];
-    $("row-count").textContent = `${rows.length} \u6761`;
+    const allRows = p ? parse(p.json) : [];
+    const filter = $("result-filter").value.trim().toLowerCase();
+    const rows = allRows.map((row, index) => ({ row, index })).filter(
+      ({ row }) => !filter || stringify(row).toLowerCase().includes(filter)
+    );
+    $("row-count").textContent = filter ? `${rows.length} / ${allRows.length} \u6761\uFF08\u4EC5\u5F53\u524D\u9875\uFF09` : `${allRows.length} \u6761`;
     $("page-label").textContent = `\u7B2C ${state.page + 1} \u9875`;
     $("raw-results").value = p ? formatJSON(p.json) : "";
     const target = $("table");
+    const scrollLeft = target.scrollLeft, scrollTop = target.scrollTop;
+    const allColumns = columnsFor(allRows);
+    renderColumnChooser(allColumns);
+    state.selectedCell = null;
+    state.selectedRow = null;
+    $("copy-cell").disabled = true;
+    $("copy-row").disabled = true;
     target.replaceChildren();
     if (!rows.length) {
       const el = document.createElement("div");
       el.className = "empty";
-      el.textContent = p ? p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C" : "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2";
+      el.textContent = p ? p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : filter ? "\u5F53\u524D\u9875\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C" : "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2";
       target.append(el);
       return;
     }
-    const columns = columnsFor(rows), table = document.createElement("table"), thead = table.createTHead(), tr = thead.insertRow();
-    for (const name2 of ["#", ...columns]) {
+    const columns = visibleColumns(allColumns, state.tablePrefs), table = document.createElement("table"), thead = table.createTHead(), tr = thead.insertRow();
+    table.className = "result-table";
+    const colgroup = document.createElement("colgroup");
+    table.prepend(colgroup);
+    for (const name2 of ["#", "\u64CD\u4F5C", ...columns]) {
+      const col = document.createElement("col");
+      const width = name2 === "#" ? 48 : name2 === "\u64CD\u4F5C" ? 90 : state.tablePrefs.widths[name2] || 180;
+      col.style.width = `${width}px`;
+      colgroup.append(col);
       const th = document.createElement("th");
       th.textContent = name2;
+      th.style.width = `${width}px`;
+      if (name2 === "id" && state.tablePrefs.pinId) th.classList.add("pinned-id");
+      if (name2 !== "#" && name2 !== "\u64CD\u4F5C") {
+        const handle = document.createElement("span");
+        handle.className = "column-resize";
+        handle.tabIndex = 0;
+        handle.setAttribute("role", "separator");
+        handle.setAttribute("aria-label", `\u8C03\u6574 ${name2} \u5217\u5BBD`);
+        handle.setAttribute("aria-orientation", "vertical");
+        handle.setAttribute("aria-valuemin", "80");
+        handle.setAttribute("aria-valuemax", "800");
+        handle.setAttribute("aria-valuenow", String(width));
+        const resize = (size) => {
+          size = Math.max(80, Math.min(800, size));
+          state.tablePrefs.widths[name2] = size;
+          col.style.width = th.style.width = `${size}px`;
+          handle.setAttribute("aria-valuenow", String(size));
+        };
+        handle.onpointerdown = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const x = e.clientX, initial = state.tablePrefs.widths[name2] || 180;
+          handle.setPointerCapture(e.pointerId);
+          handle.onpointermove = (event) => resize(initial + event.clientX - x);
+          handle.onpointerup = handle.onpointercancel = () => {
+            handle.onpointermove = null;
+            saveTablePreferences();
+          };
+        };
+        handle.onkeydown = (e) => {
+          if (["ArrowLeft", "ArrowRight"].includes(e.key)) {
+            e.preventDefault();
+            resize(
+              (state.tablePrefs.widths[name2] || 180) + (e.key === "ArrowRight" ? 20 : -20)
+            );
+            saveTablePreferences();
+          }
+        };
+        th.append(handle);
+      }
       tr.append(th);
     }
     const tbody = table.createTBody();
-    rows.forEach((row, index) => {
+    rows.forEach(({ row, index }) => {
       const tr2 = tbody.insertRow();
       tr2.tabIndex = 0;
-      for (const value of [
-        index + 1,
-        ...columns.map((k) => k === "(value)" ? row : row?.[k])
-      ]) {
+      const number2 = tr2.insertCell();
+      number2.textContent = String(index + 1);
+      const actions = tr2.insertCell(), read = document.createElement("button");
+      const identity = rowIdentity(row, partitionPaths());
+      read.textContent = "\u70B9\u8BFB";
+      read.type = "button";
+      read.className = "row-read";
+      read.setAttribute("aria-label", `\u8BFB\u53D6\u7B2C ${index + 1} \u884C\u5B8C\u6574\u6587\u6863`);
+      read.disabled = state.busy || !identity;
+      read.dataset.available = String(!!identity);
+      read.title = identity ? "\u6309\u672C\u884C id \u548C\u5B8C\u6574\u5206\u533A\u952E\u8BFB\u53D6" : "\u67E5\u8BE2\u7ED3\u679C\u9700\u5305\u542B id \u548C\u6240\u6709\u5206\u533A\u5B57\u6BB5\u624D\u80FD\u76F4\u63A5\u70B9\u8BFB";
+      read.onclick = (e) => {
+        e.stopPropagation();
+        void action(async () => {
+          if (await discard())
+            opened(await invoke("cosmos/read", { ...scope(), ...identity }), {
+              ...scope(),
+              ...identity
+            });
+        });
+      };
+      actions.append(read);
+      for (const k of columns) {
+        const value = k === "(value)" ? row : row?.[k];
         const td = tr2.insertCell();
-        td.textContent = typeof value === "object" ? stringify(value) : String(value ?? "");
+        td.textContent = cellText(value);
         td.title = td.textContent;
+        if (k === "id" && state.tablePrefs.pinId) td.classList.add("pinned-id");
+        td.addEventListener("click", () => {
+          state.selectedCell = cellText(value);
+          state.selectedRow = stringify(row, null, 2);
+        });
       }
       const select = () => action(async () => {
         if (!await discard()) return;
         resetEditor();
+        state.selectedRow = stringify(row, null, 2);
         state.baseline = stringify(row, null, 2);
         documentEditor.value = state.baseline;
         $("document-state").textContent = "\u67E5\u8BE2\u6295\u5F71\uFF08\u53EA\u8BFB\uFF09";
@@ -28679,6 +29010,7 @@ ${indent}}` : "}";
         }
         target.querySelectorAll("tr.selected").forEach((x) => x.classList.remove("selected"));
         tr2.classList.add("selected");
+        controls();
         status("\u5DF2\u9884\u89C8\u67E5\u8BE2\u7ED3\u679C\u3002\u786E\u8BA4 id \u548C\u5206\u533A\u952E\u540E\uFF0C\u70B9\u51FB\u300C\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u300D\u3002");
       });
       tr2.addEventListener("click", select);
@@ -28687,6 +29019,8 @@ ${indent}}` : "}";
       });
     });
     target.append(table);
+    target.scrollLeft = scrollLeft;
+    target.scrollTop = scrollTop;
   }
   async function query(next = false) {
     if (!await discard()) return;
@@ -28706,7 +29040,32 @@ ${indent}}` : "}";
         pageSize: Number($("page-size").value)
       };
     }
-    const result = await invoke("cosmos/query", spec);
+    const job = {
+      id: crypto.randomUUID(),
+      connectionId: state.connectionId,
+      started: performance.now(),
+      canceled: false
+    };
+    state.queryJob = job;
+    const update = () => status(
+      `\u67E5\u8BE2\u6267\u884C\u4E2D \xB7 ${((performance.now() - job.started) / 1e3).toFixed(1)} s \xB7 \u5C1A\u672A\u6536\u5230\u7ED3\u679C\uFF0CRU \u672A\u77E5`
+    );
+    update();
+    job.timer = setInterval(update, 100);
+    controls();
+    let result;
+    try {
+      result = await invoke("cosmos/query", { ...spec, queryId: job.id });
+      if (job.canceled || state.queryJob !== job) throw new Error("STALE");
+    } catch (error) {
+      if (job.canceled || error.message === "STALE") throw new Error("STALE");
+      throw new Error(
+        `\u67E5\u8BE2\u5931\u8D25 \xB7 ${((performance.now() - job.started) / 1e3).toFixed(1)} s \xB7 \u672C\u6B21 RU \u672A\u77E5 \xB7 ${error.message}`
+      );
+    } finally {
+      clearInterval(job.timer);
+      if (state.queryJob === job) state.queryJob = null;
+    }
     rememberKey(spec.partitionKeyText || "");
     learnPartitionKeys(parse(result.json));
     if (hasRootProjection(spec.query))
@@ -28717,7 +29076,27 @@ ${indent}}` : "}";
     state.page = state.pages.length - 1;
     renderPage();
     resetEditor();
-    metrics(result);
+    metrics(result, `\u67E5\u8BE2\u5B8C\u6210 \xB7 ${parse(result.json).length} \u6761 \xB7 `);
+  }
+  function cancelQuery() {
+    const job = state.queryJob;
+    if (!job) return;
+    job.canceled = true;
+    clearInterval(job.timer);
+    state.queryJob = null;
+    ++state.operation;
+    state.busy = false;
+    controls();
+    const operation = state.operation;
+    status("\u67E5\u8BE2\u5DF2\u53D6\u6D88\uFF1B\u4FDD\u7559\u4E0A\u6B21\u7ED3\u679C\u3002\u5DF2\u4EA7\u751F\u7684 RU \u4E0D\u4F1A\u9000\u56DE\uFF0C\u672C\u6B21\u6D88\u8017\u672A\u77E5\u3002");
+    void host.invoke(
+      "cosmos/cancel",
+      { connectionId: job.connectionId, queryId: job.id },
+      { timeoutMs: 1e4 }
+    ).catch(() => {
+      if (state.operation === operation && state.connectionId === job.connectionId)
+        status("\u5DF2\u505C\u6B62\u63A5\u6536\u672C\u6B21\u67E5\u8BE2\u7ED3\u679C\uFF1B\u540E\u7AEF\u53D6\u6D88\u672A\u786E\u8BA4\uFF0C\u672C\u6B21 RU \u672A\u77E5\u3002", true);
+    });
   }
   function point() {
     const id = $("document-id").value;
@@ -29126,6 +29505,38 @@ ${indent}}` : "}";
     })
   );
   bind("run", () => query());
+  $("cancel-query").onclick = cancelQuery;
+  $("result-filter").oninput = renderPage;
+  $("choose-columns").onclick = () => {
+    $("column-chooser").hidden = !$("column-chooser").hidden;
+    $("choose-columns").setAttribute(
+      "aria-expanded",
+      String(!$("column-chooser").hidden)
+    );
+  };
+  $("columns-close").onclick = () => {
+    $("column-chooser").hidden = true;
+    $("choose-columns").setAttribute("aria-expanded", "false");
+    $("choose-columns").focus();
+  };
+  $("columns-reset").onclick = () => {
+    state.tablePrefs = tablePreferences();
+    saveTablePreferences();
+    renderPage();
+  };
+  $("pin-id").onchange = () => {
+    state.tablePrefs.pinId = $("pin-id").checked;
+    saveTablePreferences();
+    renderPage();
+  };
+  $("copy-cell").onclick = () => {
+    if (state.selectedCell !== null)
+      void copyResult(state.selectedCell, "\u5355\u5143\u683C");
+  };
+  $("copy-row").onclick = () => {
+    if (state.selectedRow !== null)
+      void copyResult(state.selectedRow, "\u884C JSON\uFF08\u67E5\u8BE2\u6295\u5F71\uFF09");
+  };
   $("pk-load").onclick = () => {
     if (state.busy) return;
     const loader = candidates().loader;
@@ -29338,6 +29749,7 @@ id: ${identity.id}
   async function contextChanged(context) {
     const id = context?.connectionId || context?.connection?.id || "";
     if (id === state.connectionId) return;
+    if (state.queryJob) cancelQuery();
     for (const cache of partitionScopes.values()) cache.loader?.stop();
     partitionScopes.clear();
     fieldScopes.clear();

@@ -21,7 +21,7 @@
 
 ## 在 DBX 中安装
 
-`0.9.0` 开发候选版兼容目标为 DBX **0.6.58+**、Host API 1.x、sidecar protocol v1。当前商店版 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
+`0.10.0` 开发候选版兼容目标为 DBX **0.6.58+**、Host API 1.x、sidecar protocol v1。当前商店版 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
 
 打开 **DBX → 插件中心 → Marketplace**，搜索 **Cosmos DB NoSQL**，确认发布者为 `fwrq41251`，点击安装。官方商店自动验证安装包签名，无需开启“允许安装未签名开发包”。
 
@@ -44,6 +44,16 @@ Key 由 DBX Secret Store 保存，只有连接生命周期的本地后端收到�
 
 分区键以 JSON 数组填写，例如 `["tenant-a"]`、`[42]`、`[null]`；不存在的分区键值用 `[{}]`，层级分区键依次填写所有组件。
 参数示例：`[{"name":"@id","value":"order-001"}]`。
+
+## 结果表格与查询状态（0.10.0）
+
+表格不再限制为前 20 列。点击“显示列”选择要展示的字段；拖动列头右缘调整宽度，聚焦分隔条后也可用左右方向键调整。默认固定 id 列，可在列选择器关闭。重置可恢复全部列和默认宽度。列显示、宽度及固定设置按端点、连接、数据库和容器保存；只保存列名与尺寸，不保存单元格或查询正文。
+
+点击单元格预览后，可复制该单元格值或整行 JSON，保留大整数及嵌套 JSON 精度；整行复制的是查询结果投影，并不代表完整文档。“筛选当前页”仅筛选已加载的这一页，不会发送查询，也不影响分页令牌和当前页导出。
+
+每行的“点读”按本行 id 和完整分区键直接读取完整文档；查询投影缺少 id 或任一分区字段时禁用并说明原因，不借用其他查询的分区键。未保存的文档草稿仍需确认后才能切换。
+
+查询执行期间显示耗时与“RU 未知”，可点击“取消查询”。取消通过独立请求传到 Go HTTP context；立即允许重新查询，并阻止旧响应覆盖新结果。取消保留上次成功结果，已产生的 RU 不会退回，未收到响应时不推断为 0 RU。查询成功、失败和取消分别显示对应状态；写入操作不提供此取消入口，避免误判写入结果。
 
 ## 单文档增删改
 
@@ -111,7 +121,7 @@ npm run package
 
 可选真实 Azure 验证：`python3 scripts/validate-live-cud.py --resource-group <group> --account <account> --database <database> --package <native.dbxp> --run`。脚本仅在本次新建的临时容器操作假数据，结束后删除容器并确认不存在；可写 Key 仅放在内存，不写入 DBX。Serverless 使用按请求计费；预配账号会临时分配 400 RU/s，请仅在开发账号显式运行。
 
-## MCP 只读工具（0.9.0 开发候选版）
+## MCP 只读工具（0.9.0 起）
 
 通过官方 DBX MCP Server 接入，不需要单独启动 Cosmos 插件服务器，也不需要把 Account Key 配置到 AI 客户端。当前已验证的稳定组合为 **DBX 0.6.58 + `@dbx-app/mcp-server@0.4.132`**。插件 Manifest 使用该版本支持的 `external_tools` 和 MCP 只读标注。`0.4.134` 已要求新的逐工具权限声明及插件授权，与 0.6.58 的界面和 Manifest 契约不配套；此候选版暂不支持该组合，不能仅升级独立 MCP Server。后续适配需要同时升级宿主及 Manifest。
 
@@ -119,7 +129,7 @@ npm run package
 
 | 工具 | 用途 | 主要参数 |
 | --- | --- | --- |
-| `dbx_cosmosdb__container_info` | 读取保存容器的元数据与分区路径 | `dbx_connection` |
+| `dbx_cosmosdb__container_info` | 读取保存容器的元数据与分区路径 | `dbx_connection`、可选 `refresh` |
 | `dbx_cosmosdb__query` | 指定逻辑分区读取一页结果 | `sql`、`partition_key_text`、可选 `parameters_text`、`page_size`、`cursor` |
 | `dbx_cosmosdb__read_document` | 按 id 和完整分区键点读 | `id`、`partition_key_text` |
 | `dbx_cosmosdb__cached_partition_keys` | 本地历史分区缓存过滤与分页 | 可选 `filter`、`offset`、`limit` |
@@ -138,7 +148,7 @@ npm run package
 }
 ```
 
-查询返回 `documents_json`（保留数字原文）、`count`、`ru`、`metadata_ru`、`duration_ms`、`activity_id`、`has_more` 和可选的 `next_cursor`；点读和元数据返回 `document_json`。下一页保留原参数，将 `next_cursor` 填入 `cursor`。每页默认 20、最多 100 条，不自动翻页、重试或发现分区键。查询和点读前会读取容器元数据，校验层级分区键组件齐全，避免把前缀误当成完整分区；`ru` 包含这次校验成本，`metadata_ru` 单独列出元数据 RU。空页可能仍有下一页。游标绑定连接、凭据身份、SQL、参数、分区键及每页大小，10 分钟或 sidecar 重启后失效；仅内存保存，最多 256 个游标。
+查询返回 `documents_json`（保留数字原文）、`count`、`ru`、`metadata_ru`、`duration_ms`、`activity_id`、`has_more` 和可选的 `next_cursor`；点读和元数据返回 `document_json`。下一页保留原参数，将 `next_cursor` 填入 `cursor`。每页默认 20、最多 100 条，不自动翻页、重试或发现分区键。查询和点读使用容器元数据校验完整分区键。元数据按端点、连接、凭据身份、数据库和容器在 sidecar 内存缓存五分钟；缓存命中不请求 Azure。`metadata_source` 标明 `cache` / `live`，并返回 `metadata_cached_at`、`metadata_expires_at`。`ru` 包含实际发生的元数据读取成本，`metadata_ru` 单独列出；缓存命中为 0。容器相关的 400 / 404 会使该缓存失效，下次调用重新获取，不自动重试失败查询。显式调用 `container_info` 并传入 `refresh: true` 可立即刷新。空页可能仍有下一页。游标绑定连接、凭据身份、SQL、参数、分区键及每页大小，10 分钟或 sidecar 重启后失效；仅内存保存，最多 256 个游标。
 
 输出正文预算为 192 KiB，超出会明确失败并保留已知 RU，不静默截断文档或返回跳过结果的游标；查询时可减少每页数量或使用字段投影。AI 客户端仍可能施加自己的输出长度限制。分区缓存工具不发 Azure 请求，返回是否找到缓存、是否完整和缓存时间，不把已知候选当成实时完整列表。
 
