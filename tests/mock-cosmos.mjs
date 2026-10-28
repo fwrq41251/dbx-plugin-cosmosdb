@@ -26,7 +26,13 @@ let queryDelay = 0,
   canceledQueries = 0,
   readRequests = [],
   extraDocuments = [],
-  resultOverride = null;
+  resultOverride = null,
+  scopeLists = false,
+  scopeListDenied = false,
+  scopeListDelay = 0,
+  scopeListPending = 0,
+  scopeListCalls = [],
+  mutationRequests = [];
 const server = http.createServer(async (req, res) => {
   const send = (body, status = 200, headers = {}) => {
     res.writeHead(status, {
@@ -52,6 +58,9 @@ const server = http.createServer(async (req, res) => {
       queryRequests,
       canceledQueries,
       readRequests,
+      scopeListCalls,
+      scopeListPending,
+      mutationRequests,
     });
   if (req.url === "/test/slow-discovery") {
     discoveryDelay = 100;
@@ -59,6 +68,22 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.url === "/test/slow-query") {
     queryDelay = 1500;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/multi-scope") {
+    scopeLists = true;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/deny-scope-list") {
+    scopeListDenied = true;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/allow-scope-list") {
+    scopeListDenied = false;
+    return send({ ok: true });
+  }
+  if (req.url === "/test/slow-scope-list") {
+    scopeListDelay = 1000;
     return send({ ok: true });
   }
   if (req.url === "/test/multi-results") {
@@ -130,6 +155,12 @@ const server = http.createServer(async (req, res) => {
     readRequests = [];
     extraDocuments = [];
     resultOverride = null;
+    scopeLists = false;
+    scopeListDenied = false;
+    scopeListDelay = 0;
+    scopeListPending = 0;
+    scopeListCalls = [];
+    mutationRequests = [];
     return send({ ok: true });
   }
   if (req.url === "/test/nested-document") {
@@ -169,8 +200,42 @@ const server = http.createServer(async (req, res) => {
     `type=master&ver=1.0&sig=${sig}`
   )
     return send({ message: "Invalid signature" }, 401);
+  if (
+    req.method === "GET" &&
+    (req.url === "/dbs" || req.url.endsWith("/colls"))
+  ) {
+    scopeListCalls.push(req.url);
+    if (scopeListDelay) {
+      scopeListPending++;
+      const delay = scopeListDelay;
+      scopeListDelay = 0;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      scopeListPending--;
+    }
+    if (scopeListDenied) return send({ message: "Forbidden" }, 403);
+  }
+  if (req.url === "/dbs/Reports/colls")
+    return send({
+      DocumentCollections: [
+        {
+          id: "Events",
+          partitionKey: { paths: ["/org"], kind: "Hash", version: 2 },
+        },
+      ],
+    });
+  if (req.method === "GET" && req.url === "/dbs/Reports/colls/Events")
+    return send({
+      id: "Events",
+      partitionKey: { paths: ["/org"], kind: "Hash", version: 2 },
+    });
   if (req.url === "/dbs") {
     accountLists++;
+    if (scopeLists)
+      return req.headers["x-ms-continuation"]
+        ? send({ Databases: [{ id: "Reports" }] })
+        : send({ Databases: [{ id: "Shop" }] }, 200, {
+            "x-ms-continuation": "next-db",
+          });
     return send({ Databases: [{ id: "Shop" }] });
   }
   if (req.url === "/dbs/Shop/colls")
@@ -216,6 +281,11 @@ const server = http.createServer(async (req, res) => {
   let body = "";
   for await (const chunk of req) body += chunk;
   if (
+    ["POST", "PUT", "PATCH", "DELETE"].includes(req.method) &&
+    req.headers["x-ms-documentdb-isquery"] !== "true"
+  )
+    mutationRequests.push({ method: req.method, url: req.url });
+  if (
     denyWrites &&
     (req.method === "PATCH" ||
       req.method === "PUT" ||
@@ -228,7 +298,9 @@ const server = http.createServer(async (req, res) => {
       403,
     );
   if (
-    /^\/dbs\/Shop\/colls\/(Orders|Archive)\/docs$/.test(req.url) &&
+    /^\/dbs\/(Shop\/colls\/(Orders|Archive)|Reports\/colls\/Events)\/docs$/.test(
+      req.url,
+    ) &&
     req.headers["x-ms-documentdb-isquery"] === "true"
   ) {
     const query = JSON.parse(body).query;
@@ -313,6 +385,7 @@ const server = http.createServer(async (req, res) => {
       });
     queryCalls++;
     queryRequests.push({
+      url: req.url,
       query,
       continuation: req.headers["x-ms-continuation"] || "",
       partitionKey: req.headers["x-ms-documentdb-partitionkey"] || "",
@@ -366,6 +439,8 @@ const server = http.createServer(async (req, res) => {
         },
         400,
       );
+    if (req.url.includes("/Reports/"))
+      return send({ Documents: [{ id: "report-001", org: "reports" }] });
     return send(
       resultOverride
         ? `{"Documents":${resultOverride}}`

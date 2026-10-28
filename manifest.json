@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.fwrq41251.cosmosdb",
   "name": "Cosmos DB NoSQL",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "publisher": "fwrq41251",
   "source": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
@@ -59,7 +59,7 @@
           "label": "数据库 ID（可选）",
           "type": "text",
           "binding": "config",
-          "placeholder": "与容器 ID 一起填写，保存为容器连接"
+          "placeholder": "与容器 ID 一起填写，作为默认打开位置"
         },
         {
           "key": "container_id",

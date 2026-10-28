@@ -256,7 +256,7 @@ func TestLifecycleSecretAndReadOnlyBoundary(t *testing.T) {
 	}
 }
 
-func TestContainerScopedConnectionLifecycle(t *testing.T) {
+func TestDefaultContainerConnectionLifecycle(t *testing.T) {
 	calls := 0
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
@@ -293,19 +293,6 @@ func TestContainerScopedConnectionLifecycle(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatalf("unexpected requests %d", calls)
-	}
-	for _, params := range []string{
-		`{"connectionId":"scoped","database":"Other","container":"Orders"}`,
-		`{"connectionId":"scoped","database":"Shop","container":"Other"}`,
-	} {
-		for _, method := range []string{"cosmos/containers", "cosmos/partitionKeys", "cosmos/query", "cosmos/create", "cosmos/delete"} {
-			if _, err := p.Handle(sdk.RequestContext{}, method, json.RawMessage(params), nil); err == nil {
-				t.Fatalf("scope escape: %s", method)
-			}
-		}
-	}
-	if calls != 3 {
-		t.Fatal("out-of-scope operation reached network")
 	}
 	call("connection/disconnect", json.RawMessage(`{"connection":{"id":"scoped"}}`))
 	call("connection/connect", raw)

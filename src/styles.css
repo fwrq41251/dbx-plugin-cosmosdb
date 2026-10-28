@@ -1396,3 +1396,91 @@ header .badge {
     flex-basis: 100%;
   }
 }
+
+#scope-context .scope-select {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 20px 0 6px;
+  position: relative;
+  font-size: 12px;
+  text-align: left;
+}
+.scope-select::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  top: 10px;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.6;
+}
+#scope-picker {
+  position: fixed;
+  z-index: 1001;
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 100px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px #0004;
+}
+#scope-picker-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#scope-picker .section-title {
+  align-items: start;
+}
+#scope-picker .section-title .toolbar {
+  flex-wrap: nowrap;
+}
+#scope-picker input {
+  flex-shrink: 0;
+}
+#scope-options {
+  overflow: auto;
+  min-height: 64px;
+  max-height: 300px;
+}
+#scope-options button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  height: auto;
+  min-height: 34px;
+  padding: 7px 9px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#scope-options button[aria-selected="true"] {
+  color: var(--accent);
+  background: var(--hover);
+}
+#scope-options button:focus-visible {
+  outline-offset: -2px;
+}
+.scope-empty {
+  padding: 20px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+#scope-picker-status {
+  max-height: 64px;
+  overflow: auto;
+  font-size: 11px;
+}
+#scope-picker small {
+  margin: 0;
+  line-height: 1.5;
+}

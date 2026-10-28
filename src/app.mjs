@@ -397,6 +397,8 @@ function controls() {
     "query-pk",
     "page-size",
     "parameters",
+    "scope-database",
+    "scope-container",
     "document-id",
     "document-pk",
   ])
@@ -405,6 +407,8 @@ function controls() {
   sqlEditor.readOnly = busy || !ready;
   documentEditor.readOnly =
     busy || state.readOnly || (!state.snapshot && !state.creating);
+  $("scope-container").disabled = busy || !ready || !state.database;
+  $("scope-info").disabled = busy || !state.container;
   $("sql-search").disabled = busy || !ready;
   $("document-search").disabled =
     busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
@@ -412,6 +416,7 @@ function controls() {
   if (busy) {
     closeDocumentMenu();
     closeResultItemMenu();
+    closeScopePicker();
   }
   documentActions();
   $("document-format").disabled =
@@ -556,7 +561,16 @@ async function listAll(method, params) {
   return items;
 }
 async function loadDatabases() {
-  const items = await listAll("cosmos/databases", {});
+  // Preserve a temporary selection on refresh; only reopening restores defaults.
+  const database = state.database || state.savedDatabase;
+  const container =
+    state.container ||
+    (database === state.savedDatabase ? state.savedContainer : "");
+  databaseChoices = null;
+  containerChoices.clear();
+  const items = await listAll("cosmos/databases", {
+    browse: !!database && database !== state.savedDatabase,
+  });
   options("database", items, "选择数据库");
   options("container", [], "选择容器");
   state.database = "";
@@ -566,36 +580,55 @@ async function loadDatabases() {
   resetResults();
   $("metadata").textContent = "—";
   $("container-info").textContent = `${items.length} 个数据库`;
+  updateScopeContext();
   status("已连接，选择数据库和容器。");
-  if (state.savedDatabase) {
-    $("database").value = state.savedDatabase;
-    await selectDatabase(state.savedDatabase);
-    $("container").value = state.savedContainer;
-    selectContainer(state.savedContainer);
+  if (database && items.some((item) => item.id === database)) {
+    $("database").value = database;
+    await selectDatabase(database, { container });
   }
 }
-
-async function selectDatabase(next) {
+async function selectDatabase(next, { container = "", browse = false } = {}) {
+  const full =
+    browse ||
+    next !== state.savedDatabase ||
+    (!!container && container !== state.savedContainer);
+  let items = [];
+  if (next) {
+    try {
+      items = await listAll("cosmos/containers", {
+        database: next,
+        browse: full,
+      });
+    } catch (error) {
+      $("database").value = state.database;
+      throw error;
+    }
+  }
+  // Commit the switch only after metadata has loaded successfully.
   state.database = next;
+  $("database").value = next;
   $("database").title = next;
   state.container = "";
   activatePartitionScope();
   resetResults();
-  options("container", [], "选择容器");
-  state.containers = [];
-  $("metadata").textContent = "—";
-  if (!next) {
-    status("请选择数据库");
-    return;
-  }
-  const items = await listAll("cosmos/containers", { database: next });
   state.containers = items;
   options("container", items, "选择容器");
-  $("container-info").textContent = `${items.length} 个容器`;
-  status("请选择容器");
+  $("metadata").textContent = "—";
+  $("container-info").textContent = next
+    ? `${items.length} 个容器`
+    : "选择容器开始查询";
+  if (full && next) containerChoices.set(next, items);
+  updateScopeContext();
+  status(next ? "请选择容器" : "请选择数据库");
+  if (container && items.some((item) => item.id === container)) {
+    $("container").value = container;
+    selectContainer(container);
+  }
 }
+
 function selectContainer(next) {
   state.container = next;
+  $("container").value = next;
   $("container").title = next;
   activatePartitionScope();
   resetResults();
@@ -605,8 +638,10 @@ function selectContainer(next) {
   $("container-info").textContent = item
     ? `分区路径：${(item.partitionKey?.paths || []).join(", ") || "无"}`
     : "选择容器开始查询";
-  status("可以运行查询");
+  updateScopeContext();
+  status(next ? "可以运行查询" : "请选择容器");
 }
+
 let preferenceWrites = Promise.resolve();
 function preferenceKey() {
   return `table-v1:${partitionScope()}`;
@@ -1271,6 +1306,202 @@ function opened(result, identity) {
   setDocumentView(state.preferredDocumentView);
 }
 
+let databaseChoices = null;
+const containerChoices = new Map();
+let scopePicker = null;
+function closeScopePicker(focus = false) {
+  const trigger = scopePicker?.trigger;
+  scopePicker = null;
+  $("scope-picker").hidden = true;
+  for (const id of ["scope-database", "scope-container"])
+    $(id).setAttribute("aria-expanded", "false");
+  if (focus && trigger && !$(trigger).disabled) $(trigger).focus();
+}
+function liveScopePicker(context) {
+  return (
+    scopePicker === context &&
+    context.epoch === state.epoch &&
+    context.connection === state.connectionId &&
+    context.database === state.database
+  );
+}
+async function openScopePicker(kind, refresh = false) {
+  if (
+    state.busy ||
+    !state.connectionId ||
+    (kind === "container" && !state.database)
+  )
+    return;
+  closeScopeInfo();
+  closeScopePicker();
+  const context = (scopePicker = {
+    kind,
+    trigger: `scope-${kind}`,
+    database: state.database,
+    connection: state.connectionId,
+    epoch: state.epoch,
+    items: [],
+    loading: true,
+    error: "",
+  });
+  const picker = $("scope-picker");
+  $("scope-picker-title").textContent =
+    kind === "database" ? "选择数据库" : `选择容器 · ${state.database}`;
+  $("scope-filter").value = "";
+  picker.hidden = false;
+  $(context.trigger).setAttribute("aria-expanded", "true");
+  const rect = $(context.trigger).getBoundingClientRect();
+  picker.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - Math.min(400, window.innerWidth - 24) - 12))}px`;
+  picker.style.top = `${Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 260))}px`;
+  renderScopeOptions();
+  $("scope-filter").focus();
+  try {
+    let items =
+      kind === "database"
+        ? databaseChoices
+        : containerChoices.get(context.database);
+    if (refresh || !items) {
+      items = await listAll(
+        kind === "database" ? "cosmos/databases" : "cosmos/containers",
+        { database: context.database, browse: true },
+      );
+      if (!liveScopePicker(context)) return;
+      if (kind === "database") databaseChoices = items;
+      else containerChoices.set(context.database, items);
+    }
+    if (!liveScopePicker(context)) return;
+    context.items = items;
+  } catch (error) {
+    if (!liveScopePicker(context)) return;
+    context.error = error.message || "列表加载失败，请重试";
+  }
+  if (liveScopePicker(context)) {
+    context.loading = false;
+    renderScopeOptions();
+  }
+}
+function renderScopeOptions() {
+  const context = scopePicker;
+  if (!context) return;
+  const needle = $("scope-filter").value.trim().toLowerCase();
+  const items = context.items.filter((item) =>
+    item.id.toLowerCase().includes(needle),
+  );
+  const target = $("scope-options");
+  target.replaceChildren();
+  $("scope-reload").disabled = context.loading;
+  $("scope-picker-status").textContent = context.loading
+    ? "正在加载列表…"
+    : context.error || `${items.length} / ${context.items.length} 项`;
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "scope-empty";
+    empty.textContent = context.loading
+      ? "请稍候"
+      : context.error
+        ? "无法加载列表，可点击刷新重试。当前范围保持不变。"
+        : needle
+          ? "没有匹配的名称"
+          : "没有可选项";
+    target.append(empty);
+  }
+  const selected =
+    context.kind === "database" ? state.database : state.container;
+  for (const item of items) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", String(item.id === selected));
+    option.textContent = item.id;
+    option.title = item.id;
+    option.onclick = () => chooseScope(context, item.id);
+    target.append(option);
+  }
+}
+async function chooseScope(context, id) {
+  if (!liveScopePicker(context) || state.busy) return;
+  const same =
+    id === (context.kind === "database" ? state.database : state.container);
+  closeScopePicker(true);
+  if (same) return;
+  let switched = false;
+  await action(async () => {
+    if (!(await discard()) || context.epoch !== state.epoch) return;
+    await pauseDiscovery();
+    if (context.kind === "database") {
+      options("database", context.items, "选择数据库");
+      $("database").value = id;
+      await selectDatabase(id, { browse: true });
+    } else {
+      state.containers = context.items;
+      options("container", context.items, "选择容器");
+      selectContainer(id);
+    }
+    switched = true;
+  });
+  if (
+    switched &&
+    context.kind === "database" &&
+    context.epoch === state.epoch &&
+    !state.busy
+  )
+    void openScopePicker("container");
+}
+$("scope-database").onclick = () => void openScopePicker("database");
+$("scope-container").onclick = () => void openScopePicker("container");
+$("scope-filter").oninput = renderScopeOptions;
+$("scope-reload").onclick = () =>
+  scopePicker && void openScopePicker(scopePicker.kind, true);
+$("scope-close").onclick = () => closeScopePicker(true);
+$("scope-picker").onkeydown = (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    closeScopePicker(true);
+    return;
+  }
+  const options = [...$("scope-options").querySelectorAll("button")];
+  if (event.target === $("scope-filter") && event.key === "Enter") {
+    event.preventDefault();
+    options[0]?.click();
+    return;
+  }
+  if (
+    !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) ||
+    (event.target === $("scope-filter") && !event.key.startsWith("Arrow"))
+  )
+    return;
+  event.preventDefault();
+  const current = options.indexOf(document.activeElement);
+  const next =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : current < 0
+          ? event.key === "ArrowUp"
+            ? options.length - 1
+            : 0
+          : (current + (event.key === "ArrowUp" ? -1 : 1) + options.length) %
+            options.length;
+  options[next]?.focus();
+};
+document.addEventListener("pointerdown", (event) => {
+  if (
+    !$("scope-picker").contains(event.target) &&
+    !event.target.closest(".scope-select")
+  )
+    closeScopePicker();
+});
+document.addEventListener("focusin", (event) => {
+  if (
+    !$("scope-picker").contains(event.target) &&
+    !event.target.closest(".scope-select")
+  )
+    closeScopePicker();
+});
+window.addEventListener("resize", () => closeScopePicker());
+
 function updateScopeContext() {
   const scoped = !!(state.savedDatabase && state.savedContainer);
   document.body.classList.toggle("container-scoped", scoped);
@@ -1284,8 +1515,13 @@ function updateScopeContext() {
   $("refresh").setAttribute("aria-label", $("refresh").title);
   for (const [id, value] of [
     ["scope-connection", state.connectionName],
-    ["scope-database", state.savedDatabase],
-    ["scope-container", state.savedContainer],
+    ["scope-database", state.database || state.savedDatabase || "选择数据库"],
+    [
+      "scope-container",
+      state.container ||
+        (state.database ? "选择容器" : state.savedContainer) ||
+        "选择容器",
+    ],
   ]) {
     $(id).textContent = value;
     $(id).title = value;
@@ -1293,6 +1529,7 @@ function updateScopeContext() {
   $("scope-connection").hidden = !state.connectionName;
   $("scope-connection-divider").hidden = !state.connectionName;
   closeScopeInfo();
+  closeScopePicker();
 }
 function closeScopeInfo(focus = false) {
   document.body.classList.remove("scope-info-open");
@@ -1300,6 +1537,7 @@ function closeScopeInfo(focus = false) {
   if (focus) $("scope-info").focus();
 }
 $("scope-info").onclick = () => {
+  closeScopePicker();
   const open = !document.body.classList.contains("scope-info-open");
   document.body.classList.toggle("scope-info-open", open);
   $("scope-info").setAttribute("aria-expanded", String(open));
@@ -2104,6 +2342,8 @@ async function contextChanged(context) {
   state.readOnly = true;
   state.savedDatabase = "";
   state.savedContainer = "";
+  databaseChoices = null;
+  containerChoices.clear();
   updateScopeContext();
   resetResults();
   options("database", [], "选择数据库");

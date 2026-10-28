@@ -22,6 +22,7 @@ type plugin struct {
 	mcpMetadata map[string]metadataEntry
 }
 type request struct {
+	Browse       bool            `json:"browse"`
 	ConnectionID string          `json:"connectionId"`
 	QueryID      string          `json:"queryId"`
 	Context      context.Context `json:"-"`
@@ -152,9 +153,6 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	if method == "cosmos/info" {
 		return map[string]any{"readOnly": c.readOnly, "database": c.database, "container": c.container}, nil
 	}
-	if c.database != "" && ((r.Database != "" && r.Database != c.database) || (r.Container != "" && r.Container != c.container)) {
-		return nil, sdk.NewError(-32602, "This connection is scoped to its saved database and container")
-	}
 	if r.PageSize == 0 {
 		r.PageSize = 100
 	}
@@ -171,7 +169,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 			result, err = c.tablePreferences(r.Database, r.Container, r.Preferences)
 		}
 	case "cosmos/databases":
-		if c.database != "" {
+		if c.database != "" && !r.Browse {
 			items, _ := json.Marshal([]map[string]string{{"id": c.database}})
 			result = page{JSON: string(items)}
 		} else {
@@ -179,7 +177,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		}
 	case "cosmos/containers":
 		if err = validID(r.Database); err == nil {
-			if c.container != "" {
+			if c.container != "" && r.Database == c.database && !r.Browse {
 				var metadata page
 				metadata, err = c.containerMetadata(c.database, c.container)
 				if err == nil {
@@ -264,7 +262,7 @@ func rpcError(err error) *sdk.PluginError {
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.14.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.15.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

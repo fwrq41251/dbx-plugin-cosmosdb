@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.0 — Searchable database and container breadcrumbs
+
+- Make database/container breadcrumbs searchable selectors with lazy paginated lists, local caching, explicit refresh and keyboard navigation.
+- **Behavior change:** saved database/container settings are the default UI location, rather than a UI access boundary. Initial opening still validates/loads the default directly; MCP remains bound to the saved scope.
+- Preserve draft-discard confirmation, readonly settings and credential handling; send UI reads/writes to the explicitly selected scope without changing saved defaults.
+- Clear stale results/document identity and isolate partition candidates, completions and table preferences; failed database metadata loads retain the current scope and draft.
+- Ignore dismissed late list responses; keep temporary scope during metadata refresh and restore saved defaults on reconnect.
+
 ## 0.14.0 — Workbench visual refinement
 
 - Replace the fixed sidebar on container connections with a compact scope path and an on-demand metadata panel; retain account-level selectors.

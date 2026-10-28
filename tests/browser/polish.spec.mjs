@@ -120,6 +120,7 @@ for (const width of [1100, 900, 600]) {
       await f.locator("body").evaluate((el) => el.scrollWidth - el.clientWidth),
     ).toBeLessThanOrEqual(1);
     await f.locator("#scope-info").press("Enter");
+    await expect(f.locator("#scope-panel")).toBeVisible();
     const panel = await f.locator("#scope-panel").boundingBox();
     const body = await f.locator("body").boundingBox();
     expect(panel.x).toBeGreaterThanOrEqual(body.x);

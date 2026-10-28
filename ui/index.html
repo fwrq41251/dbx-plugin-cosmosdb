@@ -1404,6 +1404,94 @@ header .badge {
   }
 }
 
+#scope-context .scope-select {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 20px 0 6px;
+  position: relative;
+  font-size: 12px;
+  text-align: left;
+}
+.scope-select::after {
+  content: "";
+  position: absolute;
+  right: 7px;
+  top: 10px;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.6;
+}
+#scope-picker {
+  position: fixed;
+  z-index: 1001;
+  width: min(400px, calc(100vw - 24px));
+  max-height: min(520px, calc(100vh - 100px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px #0004;
+}
+#scope-picker-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#scope-picker .section-title {
+  align-items: start;
+}
+#scope-picker .section-title .toolbar {
+  flex-wrap: nowrap;
+}
+#scope-picker input {
+  flex-shrink: 0;
+}
+#scope-options {
+  overflow: auto;
+  min-height: 64px;
+  max-height: 300px;
+}
+#scope-options button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  height: auto;
+  min-height: 34px;
+  padding: 7px 9px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#scope-options button[aria-selected="true"] {
+  color: var(--accent);
+  background: var(--hover);
+}
+#scope-options button:focus-visible {
+  outline-offset: -2px;
+}
+.scope-empty {
+  padding: 20px 8px;
+  color: var(--muted);
+  text-align: center;
+}
+#scope-picker-status {
+  max-height: 64px;
+  overflow: auto;
+  font-size: 11px;
+}
+#scope-picker small {
+  margin: 0;
+  line-height: 1.5;
+}
+
     </style>
   </head>
   <body>
@@ -1434,9 +1522,25 @@ header .badge {
           aria-hidden="true"
           >/</span
         >
-        <span id="scope-database"></span
+        <button
+          id="scope-database"
+          type="button"
+          class="scope-select"
+          aria-label="选择数据库"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-controls="scope-picker"
+        ></button
         ><span class="scope-divider" aria-hidden="true">/</span>
-        <span id="scope-container"></span>
+        <button
+          id="scope-container"
+          type="button"
+          class="scope-select"
+          aria-label="选择容器"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-controls="scope-picker"
+        ></button>
         <button
           id="scope-info"
           type="button"
@@ -1821,6 +1925,50 @@ header .badge {
         </div>
       </section>
     </div>
+    <section
+      id="scope-picker"
+      role="dialog"
+      aria-label="切换数据库或容器"
+      hidden
+    >
+      <div class="section-title">
+        <span id="scope-picker-title">选择容器</span>
+        <div class="toolbar">
+          <button
+            id="scope-reload"
+            type="button"
+            class="compact"
+            title="重新加载列表"
+          >
+            刷新列表</button
+          ><button
+            id="scope-close"
+            type="button"
+            class="icon-button"
+            aria-label="关闭选择器"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M6 18 18 6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <input
+        id="scope-filter"
+        type="search"
+        aria-label="搜索数据库或容器"
+        placeholder="输入名称筛选…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div
+        id="scope-options"
+        role="listbox"
+        aria-label="可选数据库或容器"
+      ></div>
+      <div id="scope-picker-status" class="muted" role="status"></div>
+      <small>仅切换当前工作台；重新打开连接时恢复保存的默认位置。</small>
+    </section>
     <div id="result-item-menu" role="menu" aria-label="结果项操作" hidden>
       <div id="result-item-summary" class="muted"></div>
       <button id="copy-result-item" type="button" role="menuitem">
@@ -29255,6 +29403,8 @@ ${indent}}` : "}";
       "query-pk",
       "page-size",
       "parameters",
+      "scope-database",
+      "scope-container",
       "document-id",
       "document-pk"
     ])
@@ -29262,12 +29412,15 @@ ${indent}}` : "}";
     for (const id of ["run", "read", "new"]) $(id).disabled = busy || !selected;
     sqlEditor.readOnly = busy || !ready;
     documentEditor.readOnly = busy || state.readOnly || !state.snapshot && !state.creating;
+    $("scope-container").disabled = busy || !ready || !state.database;
+    $("scope-info").disabled = busy || !state.container;
     $("sql-search").disabled = busy || !ready;
     $("document-search").disabled = busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
     $("document-more").disabled = busy || !documentEditor.value.trim();
     if (busy) {
       closeDocumentMenu();
       closeResultItemMenu();
+      closeScopePicker();
     }
     documentActions();
     $("document-format").disabled = busy || state.readOnly || !state.snapshot && !state.creating;
@@ -29390,7 +29543,13 @@ ${indent}}` : "}";
     return items;
   }
   async function loadDatabases() {
-    const items = await listAll("cosmos/databases", {});
+    const database = state.database || state.savedDatabase;
+    const container = state.container || (database === state.savedDatabase ? state.savedContainer : "");
+    databaseChoices = null;
+    containerChoices.clear();
+    const items = await listAll("cosmos/databases", {
+      browse: !!database && database !== state.savedDatabase
+    });
     options("database", items, "\u9009\u62E9\u6570\u636E\u5E93");
     options("container", [], "\u9009\u62E9\u5BB9\u5668");
     state.database = "";
@@ -29400,35 +29559,48 @@ ${indent}}` : "}";
     resetResults();
     $("metadata").textContent = "\u2014";
     $("container-info").textContent = `${items.length} \u4E2A\u6570\u636E\u5E93`;
+    updateScopeContext();
     status("\u5DF2\u8FDE\u63A5\uFF0C\u9009\u62E9\u6570\u636E\u5E93\u548C\u5BB9\u5668\u3002");
-    if (state.savedDatabase) {
-      $("database").value = state.savedDatabase;
-      await selectDatabase(state.savedDatabase);
-      $("container").value = state.savedContainer;
-      selectContainer(state.savedContainer);
+    if (database && items.some((item) => item.id === database)) {
+      $("database").value = database;
+      await selectDatabase(database, { container });
     }
   }
-  async function selectDatabase(next) {
+  async function selectDatabase(next, { container = "", browse = false } = {}) {
+    const full = browse || next !== state.savedDatabase || !!container && container !== state.savedContainer;
+    let items = [];
+    if (next) {
+      try {
+        items = await listAll("cosmos/containers", {
+          database: next,
+          browse: full
+        });
+      } catch (error) {
+        $("database").value = state.database;
+        throw error;
+      }
+    }
     state.database = next;
+    $("database").value = next;
     $("database").title = next;
     state.container = "";
     activatePartitionScope();
     resetResults();
-    options("container", [], "\u9009\u62E9\u5BB9\u5668");
-    state.containers = [];
-    $("metadata").textContent = "\u2014";
-    if (!next) {
-      status("\u8BF7\u9009\u62E9\u6570\u636E\u5E93");
-      return;
-    }
-    const items = await listAll("cosmos/containers", { database: next });
     state.containers = items;
     options("container", items, "\u9009\u62E9\u5BB9\u5668");
-    $("container-info").textContent = `${items.length} \u4E2A\u5BB9\u5668`;
-    status("\u8BF7\u9009\u62E9\u5BB9\u5668");
+    $("metadata").textContent = "\u2014";
+    $("container-info").textContent = next ? `${items.length} \u4E2A\u5BB9\u5668` : "\u9009\u62E9\u5BB9\u5668\u5F00\u59CB\u67E5\u8BE2";
+    if (full && next) containerChoices.set(next, items);
+    updateScopeContext();
+    status(next ? "\u8BF7\u9009\u62E9\u5BB9\u5668" : "\u8BF7\u9009\u62E9\u6570\u636E\u5E93");
+    if (container && items.some((item) => item.id === container)) {
+      $("container").value = container;
+      selectContainer(container);
+    }
   }
   function selectContainer(next) {
     state.container = next;
+    $("container").value = next;
     $("container").title = next;
     activatePartitionScope();
     resetResults();
@@ -29436,7 +29608,8 @@ ${indent}}` : "}";
     const item = state.containers.find((x) => x.id === next);
     $("metadata").textContent = item ? stringify(item, null, 2) : "\u2014";
     $("container-info").textContent = item ? `\u5206\u533A\u8DEF\u5F84\uFF1A${(item.partitionKey?.paths || []).join(", ") || "\u65E0"}` : "\u9009\u62E9\u5BB9\u5668\u5F00\u59CB\u67E5\u8BE2";
-    status("\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2");
+    updateScopeContext();
+    status(next ? "\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2" : "\u8BF7\u9009\u62E9\u5BB9\u5668");
   }
   var preferenceWrites = Promise.resolve();
   function preferenceKey() {
@@ -29978,6 +30151,153 @@ ${indent}}` : "}";
     $("etag").title = $("etag").textContent;
     setDocumentView(state.preferredDocumentView);
   }
+  var databaseChoices = null;
+  var containerChoices = /* @__PURE__ */ new Map();
+  var scopePicker = null;
+  function closeScopePicker(focus = false) {
+    const trigger = scopePicker?.trigger;
+    scopePicker = null;
+    $("scope-picker").hidden = true;
+    for (const id of ["scope-database", "scope-container"])
+      $(id).setAttribute("aria-expanded", "false");
+    if (focus && trigger && !$(trigger).disabled) $(trigger).focus();
+  }
+  function liveScopePicker(context) {
+    return scopePicker === context && context.epoch === state.epoch && context.connection === state.connectionId && context.database === state.database;
+  }
+  async function openScopePicker(kind, refresh = false) {
+    if (state.busy || !state.connectionId || kind === "container" && !state.database)
+      return;
+    closeScopeInfo();
+    closeScopePicker();
+    const context = scopePicker = {
+      kind,
+      trigger: `scope-${kind}`,
+      database: state.database,
+      connection: state.connectionId,
+      epoch: state.epoch,
+      items: [],
+      loading: true,
+      error: ""
+    };
+    const picker = $("scope-picker");
+    $("scope-picker-title").textContent = kind === "database" ? "\u9009\u62E9\u6570\u636E\u5E93" : `\u9009\u62E9\u5BB9\u5668 \xB7 ${state.database}`;
+    $("scope-filter").value = "";
+    picker.hidden = false;
+    $(context.trigger).setAttribute("aria-expanded", "true");
+    const rect = $(context.trigger).getBoundingClientRect();
+    picker.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - Math.min(400, window.innerWidth - 24) - 12))}px`;
+    picker.style.top = `${Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 260))}px`;
+    renderScopeOptions();
+    $("scope-filter").focus();
+    try {
+      let items = kind === "database" ? databaseChoices : containerChoices.get(context.database);
+      if (refresh || !items) {
+        items = await listAll(
+          kind === "database" ? "cosmos/databases" : "cosmos/containers",
+          { database: context.database, browse: true }
+        );
+        if (!liveScopePicker(context)) return;
+        if (kind === "database") databaseChoices = items;
+        else containerChoices.set(context.database, items);
+      }
+      if (!liveScopePicker(context)) return;
+      context.items = items;
+    } catch (error) {
+      if (!liveScopePicker(context)) return;
+      context.error = error.message || "\u5217\u8868\u52A0\u8F7D\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5";
+    }
+    if (liveScopePicker(context)) {
+      context.loading = false;
+      renderScopeOptions();
+    }
+  }
+  function renderScopeOptions() {
+    const context = scopePicker;
+    if (!context) return;
+    const needle = $("scope-filter").value.trim().toLowerCase();
+    const items = context.items.filter(
+      (item) => item.id.toLowerCase().includes(needle)
+    );
+    const target = $("scope-options");
+    target.replaceChildren();
+    $("scope-reload").disabled = context.loading;
+    $("scope-picker-status").textContent = context.loading ? "\u6B63\u5728\u52A0\u8F7D\u5217\u8868\u2026" : context.error || `${items.length} / ${context.items.length} \u9879`;
+    if (!items.length) {
+      const empty2 = document.createElement("div");
+      empty2.className = "scope-empty";
+      empty2.textContent = context.loading ? "\u8BF7\u7A0D\u5019" : context.error ? "\u65E0\u6CD5\u52A0\u8F7D\u5217\u8868\uFF0C\u53EF\u70B9\u51FB\u5237\u65B0\u91CD\u8BD5\u3002\u5F53\u524D\u8303\u56F4\u4FDD\u6301\u4E0D\u53D8\u3002" : needle ? "\u6CA1\u6709\u5339\u914D\u7684\u540D\u79F0" : "\u6CA1\u6709\u53EF\u9009\u9879";
+      target.append(empty2);
+    }
+    const selected = context.kind === "database" ? state.database : state.container;
+    for (const item of items) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(item.id === selected));
+      option.textContent = item.id;
+      option.title = item.id;
+      option.onclick = () => chooseScope(context, item.id);
+      target.append(option);
+    }
+  }
+  async function chooseScope(context, id) {
+    if (!liveScopePicker(context) || state.busy) return;
+    const same = id === (context.kind === "database" ? state.database : state.container);
+    closeScopePicker(true);
+    if (same) return;
+    let switched = false;
+    await action(async () => {
+      if (!await discard() || context.epoch !== state.epoch) return;
+      await pauseDiscovery();
+      if (context.kind === "database") {
+        options("database", context.items, "\u9009\u62E9\u6570\u636E\u5E93");
+        $("database").value = id;
+        await selectDatabase(id, { browse: true });
+      } else {
+        state.containers = context.items;
+        options("container", context.items, "\u9009\u62E9\u5BB9\u5668");
+        selectContainer(id);
+      }
+      switched = true;
+    });
+    if (switched && context.kind === "database" && context.epoch === state.epoch && !state.busy)
+      void openScopePicker("container");
+  }
+  $("scope-database").onclick = () => void openScopePicker("database");
+  $("scope-container").onclick = () => void openScopePicker("container");
+  $("scope-filter").oninput = renderScopeOptions;
+  $("scope-reload").onclick = () => scopePicker && void openScopePicker(scopePicker.kind, true);
+  $("scope-close").onclick = () => closeScopePicker(true);
+  $("scope-picker").onkeydown = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeScopePicker(true);
+      return;
+    }
+    const options2 = [...$("scope-options").querySelectorAll("button")];
+    if (event.target === $("scope-filter") && event.key === "Enter") {
+      event.preventDefault();
+      options2[0]?.click();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || event.target === $("scope-filter") && !event.key.startsWith("Arrow"))
+      return;
+    event.preventDefault();
+    const current = options2.indexOf(document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? options2.length - 1 : current < 0 ? event.key === "ArrowUp" ? options2.length - 1 : 0 : (current + (event.key === "ArrowUp" ? -1 : 1) + options2.length) % options2.length;
+    options2[next]?.focus();
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("scope-picker").contains(event.target) && !event.target.closest(".scope-select"))
+      closeScopePicker();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!$("scope-picker").contains(event.target) && !event.target.closest(".scope-select"))
+      closeScopePicker();
+  });
+  window.addEventListener("resize", () => closeScopePicker());
   function updateScopeContext() {
     const scoped = !!(state.savedDatabase && state.savedContainer);
     document.body.classList.toggle("container-scoped", scoped);
@@ -29991,8 +30311,11 @@ ${indent}}` : "}";
     $("refresh").setAttribute("aria-label", $("refresh").title);
     for (const [id, value] of [
       ["scope-connection", state.connectionName],
-      ["scope-database", state.savedDatabase],
-      ["scope-container", state.savedContainer]
+      ["scope-database", state.database || state.savedDatabase || "\u9009\u62E9\u6570\u636E\u5E93"],
+      [
+        "scope-container",
+        state.container || (state.database ? "\u9009\u62E9\u5BB9\u5668" : state.savedContainer) || "\u9009\u62E9\u5BB9\u5668"
+      ]
     ]) {
       $(id).textContent = value;
       $(id).title = value;
@@ -30000,6 +30323,7 @@ ${indent}}` : "}";
     $("scope-connection").hidden = !state.connectionName;
     $("scope-connection-divider").hidden = !state.connectionName;
     closeScopeInfo();
+    closeScopePicker();
   }
   function closeScopeInfo(focus = false) {
     document.body.classList.remove("scope-info-open");
@@ -30007,6 +30331,7 @@ ${indent}}` : "}";
     if (focus) $("scope-info").focus();
   }
   $("scope-info").onclick = () => {
+    closeScopePicker();
     const open = !document.body.classList.contains("scope-info-open");
     document.body.classList.toggle("scope-info-open", open);
     $("scope-info").setAttribute("aria-expanded", String(open));
@@ -30725,6 +31050,8 @@ id: ${identity.id}
     state.readOnly = true;
     state.savedDatabase = "";
     state.savedContainer = "";
+    databaseChoices = null;
+    containerChoices.clear();
     updateScopeContext();
     resetResults();
     options("database", [], "\u9009\u62E9\u6570\u636E\u5E93");

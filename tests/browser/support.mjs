@@ -40,6 +40,7 @@ export async function connect(
     await frame.getByLabel("数据库", { exact: true }).selectOption("Shop");
     await frame.getByLabel("容器", { exact: true }).selectOption("Orders");
   }
+  await expect(frame.locator("#run")).toBeEnabled();
   return frame;
 }
 export async function query(frame) {
