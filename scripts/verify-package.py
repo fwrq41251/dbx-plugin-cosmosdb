@@ -41,7 +41,16 @@ assert package.stat().st_size == metadata['size']
 with tempfile.TemporaryDirectory(prefix='cosmos-package-') as directory:
     with zipfile.ZipFile(package) as archive:
         checksums = json.loads(archive.read('checksums.json'))['files']
-        assert set(archive.namelist()) == set(checksums) | {'checksums.json'}
+        expected = set(checksums) | {'checksums.json'}
+        if 'signature.json' in archive.namelist():
+            expected.add('signature.json')
+            signature = json.loads(archive.read('signature.json'))
+            assert signature['algorithm'] == 'ed25519'
+            assert signature['key_id'] == metadata['signingKeyId']
+            assert len(base64.b64decode(signature['signature'], validate=True)) == 64
+            # DBX verifies the signature against its trusted store key on install.
+            # This script checks the envelope, payload and sidecar lifecycle only.
+        assert set(archive.namelist()) == expected
         for name, digest in checksums.items():
             assert '..' not in pathlib.PurePosixPath(name).parts and not name.startswith('/')
             assert hashlib.sha256(archive.read(name)).hexdigest() == digest, name

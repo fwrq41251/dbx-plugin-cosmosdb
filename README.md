@@ -23,10 +23,9 @@
 
 兼容目标为 DBX **0.6.49+**、Host API 1.x、sidecar protocol v1。
 
-从源码运行下方构建命令后，安装包生成在 `dist/`；例如 Mac ARM64 对应 `io.github.fwrq41251.cosmosdb-0.8.0-darwin-arm64.dbxp`。
-正式插件 ID 为 `io.github.fwrq41251.cosmosdb`，发布者为 `fwrq41251`。首个发布目标为 macOS ARM64；其他平台暂未提供商店安装包。
+打开 **DBX → 插件中心 → Marketplace**，搜索 **Cosmos DB NoSQL**，确认发布者为 `fwrq41251`，点击安装。官方商店自动验证安装包签名，无需开启“允许安装未签名开发包”。
 
-源码仓库的 Release 提供未签名审核候选包，正式商店包由 DBX Store 审核签名后分发。下述方式仅用于手动安装候选包：打开 DBX → 插件中心 → 设置 → 第三方与开发者选项，启用“允许安装未签名开发包”，然后选择 `.dbxp` 安装。商店审核状态见 [上架流程](docs/RELEASING.md)。
+正式插件 ID 为 `io.github.fwrq41251.cosmosdb`，当前商店版为 `0.8.0`，支持 macOS ARM64（Apple Silicon）。其他平台暂未提供商店安装包。[上架记录](https://github.com/t8y2/dbx-store/pull/384)。更新或重装前先关闭使用此插件的连接；同一正式插件身份的连接可在安装后重新打开。
 
 新建连接时选择 **Azure Cosmos DB for NoSQL**：
 
@@ -91,6 +90,8 @@ SQL 语法错误、分区键不匹配、跨分区管线限制、索引不足、�
 ## 开发与验证
 
 需要 Node.js 22+、Go 1.22+。最终用户安装 `.dbxp` 后无需这些运行时。
+
+普通用户从商店安装即可。从源码构建的安装包生成在 `dist/`；源码仓库 Release 提供的是未签名审核候选包，仅用于开发验证。手动安装开发包时，在 DBX → 插件中心 → 设置 → 第三方与开发者选项启用“允许安装未签名开发包”，再选择 `.dbxp` 安装。正式发布流程见 [发布与商店审核](docs/RELEASING.md)。
 
 ```bash
 npm ci
