@@ -11,7 +11,16 @@
   <body>
     <header>
       <div class="brand">
-        <span class="orbit">◉</span>
+        <svg class="orbit" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="9" />
+          <ellipse
+            cx="16"
+            cy="16"
+            rx="15"
+            ry="6"
+            transform="rotate(-35 16 16)"
+          />
+        </svg>
         <div>
           <strong>Cosmos DB <span class="muted">/ NoSQL</span></strong
           ><small id="connection-name"
@@ -19,12 +28,49 @@
           >
         </div>
       </div>
+      <nav id="scope-context" aria-label="当前容器" hidden>
+        <span id="scope-connection"></span
+        ><span
+          id="scope-connection-divider"
+          class="scope-divider"
+          aria-hidden="true"
+          >/</span
+        >
+        <span id="scope-database"></span
+        ><span class="scope-divider" aria-hidden="true">/</span>
+        <span id="scope-container"></span>
+        <button
+          id="scope-info"
+          type="button"
+          class="icon-button"
+          aria-label="容器信息"
+          title="容器信息"
+          aria-expanded="false"
+          aria-controls="scope-panel"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v6m0-10v1" />
+          </svg>
+        </button>
+      </nav>
       <span id="mode" class="badge">未连接</span>
     </header>
     <div class="workspace">
-      <aside>
+      <aside id="scope-panel" aria-label="数据库与容器">
         <div class="section-title">
-          数据库与容器 <button id="refresh" title="刷新数据库列表">↻</button>
+          <span id="scope-panel-title">数据库与容器</span
+          ><button
+            id="refresh"
+            class="icon-button"
+            aria-label="刷新数据库列表"
+            title="刷新数据库列表"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 7v5h-5M4 17v-5h5" />
+              <path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1" />
+            </svg>
+          </button>
         </div>
         <label
           >数据库<select id="database" aria-label="数据库">
@@ -36,7 +82,7 @@
           </select></label
         >
         <div id="container-info" class="info">连接后选择容器开始查询。</div>
-        <details>
+        <details id="scope-metadata">
           <summary>容器元数据</summary>
           <pre id="metadata">—</pre>
         </details>
@@ -368,6 +414,7 @@
               <option value="replace">完整替换文档</option>
             </select></label
           >
+          <small id="draft-summary" role="status" hidden></small>
           <small id="etag">读取完整文档后才能更新或删除。</small>
           <div class="toolbar">
             <button id="save" class="primary">保存</button

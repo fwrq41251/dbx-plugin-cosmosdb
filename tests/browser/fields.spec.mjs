@@ -30,7 +30,7 @@ test("fields edit strings and exact numbers; saving sends only the two changed p
   await f
     .getByLabel("字段 /total", { exact: true })
     .fill("9223372036854775808");
-  await page.screenshot({ path: "docs/field-editor.png", fullPage: true });
+  await page.locator("iframe").last().screenshot({ path: "docs/field-editor.png" });
   await save(f);
   await expect(f.locator("#confirm-title")).toHaveText("局部更新文档？");
   await expect(f.locator("#confirm-message")).toContainText(

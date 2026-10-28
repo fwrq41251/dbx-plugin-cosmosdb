@@ -9,14 +9,17 @@
   color-scheme: light dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
-  --bg: #111718;
-  --panel: #172022;
-  --line: #2a3739;
-  --text: #e0e9e8;
-  --muted: #93a7a6;
+  --bg: #15191e;
+  --panel: #1b2027;
+  --line: #303842;
+  --text: #e1e6ec;
+  --muted: #98a3b1;
   --accent: #86dfc9;
-  --field: #111a1b;
+  --field: #161b21;
   --control-height: 32px;
+  --header-height: 52px;
+  --hover: #94a3b812;
+  --modified: #86dfc90a;
   --syntax-keyword: #d2a6f5;
   --syntax-string: #a7d9b7;
   --syntax-number: #f1c58b;
@@ -33,13 +36,13 @@ body {
 }
 body.light {
   color-scheme: light;
-  --bg: #f6f8f7;
+  --bg: #f5f7f9;
   --panel: #fff;
-  --line: #d9e3df;
-  --text: #20322e;
-  --muted: #647b72;
+  --line: #dde2e8;
+  --text: #25313f;
+  --muted: #687789;
   --accent: #186f57;
-  --field: #f8faf9;
+  --field: #fafbfd;
   --syntax-keyword: #7a3da4;
   --syntax-string: #247447;
   --syntax-number: #9c531b;
@@ -47,8 +50,8 @@ body.light {
   --syntax-function: #806113;
 }
 header {
-  height: 60px;
-  padding: 12px 18px;
+  height: var(--header-height);
+  padding: 8px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -64,8 +67,12 @@ header {
   font-weight: 600;
 }
 .orbit {
-  font-size: 30px;
-  color: var(--accent);
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  flex-shrink: 0;
 }
 small {
   display: block;
@@ -91,7 +98,7 @@ small {
       --document-width,
       400px
     );
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--header-height));
   min-height: 560px;
 }
 aside {
@@ -512,24 +519,87 @@ th:first-child {
   background: var(--field);
 }
 .field-card {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 0 6px;
+  padding: 6px;
+  min-height: 46px;
+}
+.field-card > label {
+  display: grid;
+  grid-template-columns: minmax(88px, 0.85fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.field-caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: center;
+  min-width: 0;
 }
 .field-title {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.field-card textarea {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
   width: 100%;
-  resize: vertical;
 }
-.field-error {
+.field-kind {
+  font-size: 10px;
+  color: var(--muted);
+}
+.field-change {
+  font-size: 10px;
+  color: var(--accent);
+}
+.field-modified {
+  background: var(--modified);
+  box-shadow: inset 2px 0 var(--accent);
+}
+.field-card .field-error {
+  color: #d98274;
+  grid-column: 1/-1;
+  margin: 3px 0 0;
+}
+.field-error:empty {
+  display: none;
+}
+.field-card .remove-field {
+  opacity: 0;
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 5px;
+}
+.field-card:hover .remove-field,
+.field-card:focus-within .remove-field {
+  opacity: 1;
+}
+.field-card .remove-field:disabled {
+  display: none;
+}
+.field-card .remove-field:hover:not(:disabled) {
   color: #d98274;
 }
-.remove-field {
-  font-size: 10px;
-  margin-top: 5px;
-  color: var(--muted);
+.field-multiline {
+  align-items: start;
+}
+.field-multiline > label {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.field-multiline .field-title {
+  width: auto;
+}
+.field-multiline textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px 9px;
 }
 #add-field-section input,
 #add-field-section textarea {
@@ -1099,7 +1169,7 @@ body.light button.danger {
 @media (max-width: 800px) {
   .workspace {
     display: block;
-    height: calc(100vh - 60px);
+    height: calc(100vh - var(--header-height));
     min-height: 0;
     overflow: auto;
   }
@@ -1175,12 +1245,180 @@ body.light button.danger {
   font-size: 10px;
 }
 
+/* Quiet controls and consistent focus keep attention on the data. */
+button:not(.primary):not(.active) {
+  background: transparent;
+  border-color: transparent;
+}
+button:hover:not(:disabled):not(.primary) {
+  background: var(--hover);
+  border-color: transparent;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.segmented {
+  background: var(--field);
+}
+.segmented button.active {
+  background: var(--hover);
+  border-color: transparent;
+}
+button:disabled {
+  opacity: 0.42;
+}
+header {
+  gap: 18px;
+}
+header .brand {
+  flex-shrink: 0;
+  gap: 9px;
+}
+header .badge {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 5px;
+}
+#scope-context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+#scope-context > span:not(.scope-divider) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+#scope-connection {
+  color: var(--muted);
+  flex: 0 1 auto;
+}
+#scope-database {
+  color: var(--muted);
+  flex: 0 1 auto;
+}
+#scope-container {
+  font-weight: 600;
+  flex: 0 1 auto;
+}
+.scope-divider {
+  color: var(--muted);
+  opacity: 0.5;
+}
+#scope-info {
+  flex-shrink: 0;
+}
+.container-scoped .brand small {
+  display: none;
+}
+.container-scoped .workspace {
+  grid-template-columns: minmax(320px, 1fr) 6px var(--document-width, 400px);
+}
+.container-scoped .workspace.document-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+.container-scoped .workspace.document-expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+.container-scoped #scope-panel {
+  display: none;
+}
+.container-scoped.scope-info-open #scope-panel {
+  display: flex;
+  position: fixed;
+  top: calc(var(--header-height) + 8px);
+  left: 12px;
+  width: min(400px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--header-height) - 24px);
+  z-index: 20;
+  padding: 12px 16px;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 40px #0004;
+}
+.container-scoped #scope-panel > label,
+.container-scoped #scope-panel > .aside-note {
+  display: none;
+}
+#scope-metadata pre {
+  max-height: 45vh;
+  overflow: auto;
+}
+#draft-summary {
+  color: var(--accent);
+  margin: 0;
+}
+#etag {
+  font-size: 10px;
+  margin: 0;
+}
+@media (hover: none) {
+  .field-card .remove-field {
+    opacity: 1;
+  }
+}
+@media (max-width: 1100px) {
+  header {
+    gap: 12px;
+  }
+  .container-scoped .brand strong {
+    font-size: 13px;
+  }
+  .container-scoped .brand .muted {
+    display: none;
+  }
+}
+@media (max-width: 800px) {
+  .container-scoped .workspace {
+    display: block;
+  }
+  #scope-context {
+    gap: 6px;
+  }
+  .container-scoped header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--header-height);
+    padding-block: 8px;
+  }
+  .container-scoped {
+    --header-height: 88px;
+  }
+  .container-scoped header .brand {
+    order: 0;
+  }
+  .container-scoped header .badge {
+    order: 1;
+    margin-left: auto;
+  }
+  .container-scoped #scope-context {
+    order: 2;
+    flex-basis: 100%;
+  }
+}
+
     </style>
   </head>
   <body>
     <header>
       <div class="brand">
-        <span class="orbit">◉</span>
+        <svg class="orbit" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="9" />
+          <ellipse
+            cx="16"
+            cy="16"
+            rx="15"
+            ry="6"
+            transform="rotate(-35 16 16)"
+          />
+        </svg>
         <div>
           <strong>Cosmos DB <span class="muted">/ NoSQL</span></strong
           ><small id="connection-name"
@@ -1188,12 +1426,49 @@ body.light button.danger {
           >
         </div>
       </div>
+      <nav id="scope-context" aria-label="当前容器" hidden>
+        <span id="scope-connection"></span
+        ><span
+          id="scope-connection-divider"
+          class="scope-divider"
+          aria-hidden="true"
+          >/</span
+        >
+        <span id="scope-database"></span
+        ><span class="scope-divider" aria-hidden="true">/</span>
+        <span id="scope-container"></span>
+        <button
+          id="scope-info"
+          type="button"
+          class="icon-button"
+          aria-label="容器信息"
+          title="容器信息"
+          aria-expanded="false"
+          aria-controls="scope-panel"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v6m0-10v1" />
+          </svg>
+        </button>
+      </nav>
       <span id="mode" class="badge">未连接</span>
     </header>
     <div class="workspace">
-      <aside>
+      <aside id="scope-panel" aria-label="数据库与容器">
         <div class="section-title">
-          数据库与容器 <button id="refresh" title="刷新数据库列表">↻</button>
+          <span id="scope-panel-title">数据库与容器</span
+          ><button
+            id="refresh"
+            class="icon-button"
+            aria-label="刷新数据库列表"
+            title="刷新数据库列表"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 7v5h-5M4 17v-5h5" />
+              <path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1" />
+            </svg>
+          </button>
         </div>
         <label
           >数据库<select id="database" aria-label="数据库">
@@ -1205,7 +1480,7 @@ body.light button.danger {
           </select></label
         >
         <div id="container-info" class="info">连接后选择容器开始查询。</div>
-        <details>
+        <details id="scope-metadata">
           <summary>容器元数据</summary>
           <pre id="metadata">—</pre>
         </details>
@@ -1537,6 +1812,7 @@ body.light button.danger {
               <option value="replace">完整替换文档</option>
             </select></label
           >
+          <small id="draft-summary" role="status" hidden></small>
           <small id="etag">读取完整文档后才能更新或删除。</small>
           <div class="toolbar">
             <button id="save" class="primary">保存</button
@@ -28677,6 +28953,7 @@ ${indent}}` : "}";
   var $ = (id) => document.getElementById(id);
   var state = {
     connectionId: "",
+    connectionName: "",
     database: "",
     container: "",
     containers: [],
@@ -29002,6 +29279,7 @@ ${indent}}` : "}";
     $("copy-cell").disabled = busy || state.selectedCell === null;
     $("copy-row").disabled = busy || state.selectedRow === null;
     resultReaderControls();
+    updateFieldChanges();
     $("cancel-query").hidden = !state.queryJob;
     $("save").disabled = busy || state.readOnly || !state.snapshot && !state.creating || !!state.snapshot && !dirty() || state.fieldErrors.size > 0 || !!documentError;
     $("delete").disabled = busy || state.readOnly || !state.snapshot;
@@ -29700,6 +29978,87 @@ ${indent}}` : "}";
     $("etag").title = $("etag").textContent;
     setDocumentView(state.preferredDocumentView);
   }
+  function updateScopeContext() {
+    const scoped = !!(state.savedDatabase && state.savedContainer);
+    document.body.classList.toggle("container-scoped", scoped);
+    $("scope-context").hidden = !scoped;
+    $("scope-panel-title").textContent = scoped ? "\u5BB9\u5668\u4FE1\u606F" : "\u6570\u636E\u5E93\u4E0E\u5BB9\u5668";
+    $("scope-panel").setAttribute(
+      "aria-label",
+      scoped ? "\u5BB9\u5668\u4FE1\u606F" : "\u6570\u636E\u5E93\u4E0E\u5BB9\u5668"
+    );
+    $("refresh").title = scoped ? "\u5237\u65B0\u5BB9\u5668\u5143\u6570\u636E" : "\u5237\u65B0\u6570\u636E\u5E93\u5217\u8868";
+    $("refresh").setAttribute("aria-label", $("refresh").title);
+    for (const [id, value] of [
+      ["scope-connection", state.connectionName],
+      ["scope-database", state.savedDatabase],
+      ["scope-container", state.savedContainer]
+    ]) {
+      $(id).textContent = value;
+      $(id).title = value;
+    }
+    $("scope-connection").hidden = !state.connectionName;
+    $("scope-connection-divider").hidden = !state.connectionName;
+    closeScopeInfo();
+  }
+  function closeScopeInfo(focus = false) {
+    document.body.classList.remove("scope-info-open");
+    $("scope-info").setAttribute("aria-expanded", "false");
+    if (focus) $("scope-info").focus();
+  }
+  $("scope-info").onclick = () => {
+    const open = !document.body.classList.contains("scope-info-open");
+    document.body.classList.toggle("scope-info-open", open);
+    $("scope-info").setAttribute("aria-expanded", String(open));
+    if (open) {
+      $("scope-metadata").open = true;
+      const rect = $("scope-info").getBoundingClientRect();
+      $("scope-panel").style.left = `${Math.max(12, Math.min(rect.right - 400, window.innerWidth - Math.min(400, window.innerWidth - 24) - 12))}px`;
+      $("refresh").focus();
+    }
+  };
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("scope-panel").contains(event.target) && !$("scope-info").contains(event.target))
+      closeScopeInfo();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.body.classList.contains("scope-info-open")) {
+      event.preventDefault();
+      closeScopeInfo(true);
+    }
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!$("scope-panel").contains(event.target) && !$("scope-info").contains(event.target))
+      closeScopeInfo();
+  });
+  window.addEventListener("resize", () => closeScopeInfo());
+  var changeDocument;
+  var changeBaseline;
+  var fieldChanges = [];
+  function updateFieldChanges() {
+    const text = state.snapshot || state.creating ? documentEditor.value : "{}";
+    const baseline = state.baseline || "{}";
+    if (text !== changeDocument || baseline !== changeBaseline) {
+      changeDocument = text;
+      changeBaseline = baseline;
+      fieldChanges = [];
+      try {
+        fieldChanges = documentChanges(parse(baseline), parse(text));
+      } catch {
+      }
+    }
+    const changes = fieldChanges;
+    const summary = $("draft-summary");
+    summary.hidden = !(state.snapshot || state.creating) || !changes.length && !state.fieldErrors.size && !documentError;
+    summary.textContent = state.fieldErrors.size || documentError ? "\u8349\u7A3F\u683C\u5F0F\u6709\u8BEF\uFF0C\u8BF7\u5148\u4FEE\u6B63" : `\u5DF2\u4FEE\u6539 ${changes.length} \u4E2A\u5B57\u6BB5`;
+    for (const card of $("field-list").querySelectorAll(".field-card")) {
+      const changed = changes.some(
+        (change) => change.path === card.dataset.path || change.path.startsWith(card.dataset.path + "/") || card.dataset.path.startsWith(change.path + "/")
+      );
+      card.classList.toggle("field-modified", changed);
+      card.querySelector(".field-change").hidden = !changed;
+    }
+  }
   function draftChanged() {
     $("document-state").textContent = dirty() ? "\u672A\u4FDD\u5B58" : state.creating ? "\u65B0\u6587\u6863" : "\u5B8C\u6574\u6587\u6863";
     controls();
@@ -29742,14 +30101,28 @@ ${indent}}` : "}";
       card.dataset.path = row.path;
       const label = document.createElement("label"), title = document.createElement("span");
       title.className = "field-title";
-      title.textContent = row.path + (row.locked ? " \xB7 \u53EA\u8BFB" : "");
+      title.textContent = row.path;
+      title.title = row.path;
+      const kind = document.createElement("span");
+      kind.className = "field-kind";
+      kind.textContent = row.locked ? "\u53EA\u8BFB" : { string: "\u6587\u672C", number: "\u6570\u5B57", boolean: "\u5E03\u5C14", json: "JSON" }[row.kind];
+      const marker = document.createElement("span");
+      marker.className = "field-change";
+      marker.textContent = "\u5DF2\u4FEE\u6539";
+      marker.hidden = true;
+      const caption = document.createElement("span");
+      caption.className = "field-caption";
+      caption.append(title, kind, marker);
       const input = row.kind === "boolean" ? document.createElement("select") : document.createElement(
-        row.kind === "json" || row.kind === "string" && String(row.value).length > 80 ? "textarea" : "input"
+        row.kind === "json" && row.value !== null || row.kind === "string" && (String(row.value).length > 80 || /[\r\n]/.test(row.value)) ? "textarea" : "input"
       );
       if (row.kind === "boolean")
         for (const value of ["true", "false"])
           input.add(new Option(value, value));
-      if (input.tagName === "TEXTAREA") input.rows = 3;
+      if (input.tagName === "TEXTAREA") {
+        input.rows = 3;
+        card.classList.add("field-multiline");
+      }
       input.value = row.kind === "string" ? row.value : stringify(row.value);
       input.setAttribute("aria-label", `\u5B57\u6BB5 ${row.path}`);
       input.dataset.locked = String(row.locked);
@@ -29779,8 +30152,9 @@ ${indent}}` : "}";
       };
       const remove2 = document.createElement("button");
       remove2.type = "button";
-      remove2.textContent = "\u5220\u9664\u5B57\u6BB5";
-      remove2.className = "remove-field";
+      remove2.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg>';
+      remove2.title = `\u5220\u9664\u5B57\u6BB5 ${row.path}`;
+      remove2.className = "remove-field icon-button";
       remove2.dataset.locked = String(row.locked);
       remove2.setAttribute("aria-label", `\u5220\u9664\u5B57\u6BB5 ${row.path}`);
       remove2.onclick = () => {
@@ -29808,10 +30182,11 @@ ${indent}}` : "}";
           status(error2.message, true);
         }
       };
-      label.append(title, input);
-      card.append(label, error, remove2);
+      label.append(caption, input);
+      card.append(label, remove2, error);
       target.append(card);
     }
+    updateFieldChanges();
     if (!target.children.length) {
       const empty2 = document.createElement("p");
       empty2.className = "info";
@@ -30348,10 +30723,14 @@ id: ${identity.id}
     state.container = "";
     activatePartitionScope();
     state.readOnly = true;
+    state.savedDatabase = "";
+    state.savedContainer = "";
+    updateScopeContext();
     resetResults();
     options("database", [], "\u9009\u62E9\u6570\u636E\u5E93");
     options("container", [], "\u9009\u62E9\u5BB9\u5668");
-    $("connection-name").textContent = context?.connection?.name || context?.connectionName || context?.name || (id ? "\u5DF2\u8FDE\u63A5\u5230 Azure Cosmos DB" : "\u4ECE DBX \u6253\u5F00\u5DF2\u4FDD\u5B58\u7684 Cosmos DB \u8FDE\u63A5");
+    state.connectionName = context?.connection?.name || context?.connectionName || context?.name || "";
+    $("connection-name").textContent = state.connectionName || (id ? "\u5DF2\u8FDE\u63A5\u5230 Azure Cosmos DB" : "\u4ECE DBX \u6253\u5F00\u5DF2\u4FDD\u5B58\u7684 Cosmos DB \u8FDE\u63A5");
     if (!id) {
       $("mode").textContent = "\u672A\u8FDE\u63A5";
       status("\u8BF7\u4ECE DBX \u8FDE\u63A5\u5217\u8868\u6253\u5F00\u5DF2\u4FDD\u5B58\u7684 Cosmos DB \u8FDE\u63A5\u3002");
@@ -30364,6 +30743,7 @@ id: ${identity.id}
       state.readOnly = info.readOnly;
       state.savedDatabase = info.database || "";
       state.savedContainer = info.container || "";
+      updateScopeContext();
       $("mode").textContent = info.readOnly ? "\u53EA\u8BFB\u8FDE\u63A5" : "\u5141\u8BB8\u6587\u6863\u5199\u5165";
       await loadDatabases();
     });

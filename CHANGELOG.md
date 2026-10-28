@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.0 — Workbench visual refinement
+
+- Replace the fixed sidebar on container connections with a compact scope path and an on-demand metadata panel; retain account-level selectors.
+- Align scalar fields in compact rows, keep multiline values readable, and reveal field deletion on hover/focus or touch without changing write safeguards.
+- Mark changed fields and show exact semantic change counts, including removed fields; clear marks on reversion and explain invalid drafts.
+- Unify neutral light/dark surfaces, quiet secondary buttons, line icons and visible keyboard focus.
+
 ## 0.13.0 — Result JSON item actions
 
 - Add a context menu to copy one complete top-level result item, including when invoked inside nested or folded content; preserve numeric text.

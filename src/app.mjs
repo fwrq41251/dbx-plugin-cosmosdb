@@ -38,6 +38,7 @@ import {
 const $ = (id) => document.getElementById(id);
 const state = {
   connectionId: "",
+  connectionName: "",
   database: "",
   container: "",
   containers: [],
@@ -423,6 +424,7 @@ function controls() {
   $("copy-cell").disabled = busy || state.selectedCell === null;
   $("copy-row").disabled = busy || state.selectedRow === null;
   resultReaderControls();
+  updateFieldChanges();
   $("cancel-query").hidden = !state.queryJob;
   $("save").disabled =
     busy ||
@@ -1269,6 +1271,106 @@ function opened(result, identity) {
   setDocumentView(state.preferredDocumentView);
 }
 
+function updateScopeContext() {
+  const scoped = !!(state.savedDatabase && state.savedContainer);
+  document.body.classList.toggle("container-scoped", scoped);
+  $("scope-context").hidden = !scoped;
+  $("scope-panel-title").textContent = scoped ? "容器信息" : "数据库与容器";
+  $("scope-panel").setAttribute(
+    "aria-label",
+    scoped ? "容器信息" : "数据库与容器",
+  );
+  $("refresh").title = scoped ? "刷新容器元数据" : "刷新数据库列表";
+  $("refresh").setAttribute("aria-label", $("refresh").title);
+  for (const [id, value] of [
+    ["scope-connection", state.connectionName],
+    ["scope-database", state.savedDatabase],
+    ["scope-container", state.savedContainer],
+  ]) {
+    $(id).textContent = value;
+    $(id).title = value;
+  }
+  $("scope-connection").hidden = !state.connectionName;
+  $("scope-connection-divider").hidden = !state.connectionName;
+  closeScopeInfo();
+}
+function closeScopeInfo(focus = false) {
+  document.body.classList.remove("scope-info-open");
+  $("scope-info").setAttribute("aria-expanded", "false");
+  if (focus) $("scope-info").focus();
+}
+$("scope-info").onclick = () => {
+  const open = !document.body.classList.contains("scope-info-open");
+  document.body.classList.toggle("scope-info-open", open);
+  $("scope-info").setAttribute("aria-expanded", String(open));
+  if (open) {
+    $("scope-metadata").open = true;
+    const rect = $("scope-info").getBoundingClientRect();
+    $("scope-panel").style.left =
+      `${Math.max(12, Math.min(rect.right - 400, window.innerWidth - Math.min(400, window.innerWidth - 24) - 12))}px`;
+    $("refresh").focus();
+  }
+};
+document.addEventListener("pointerdown", (event) => {
+  if (
+    !$("scope-panel").contains(event.target) &&
+    !$("scope-info").contains(event.target)
+  )
+    closeScopeInfo();
+});
+document.addEventListener("keydown", (event) => {
+  if (
+    event.key === "Escape" &&
+    document.body.classList.contains("scope-info-open")
+  ) {
+    event.preventDefault();
+    closeScopeInfo(true);
+  }
+});
+document.addEventListener("focusin", (event) => {
+  if (
+    !$("scope-panel").contains(event.target) &&
+    !$("scope-info").contains(event.target)
+  )
+    closeScopeInfo();
+});
+window.addEventListener("resize", () => closeScopeInfo());
+let changeDocument,
+  changeBaseline,
+  fieldChanges = [];
+function updateFieldChanges() {
+  const text = state.snapshot || state.creating ? documentEditor.value : "{}";
+  const baseline = state.baseline || "{}";
+  if (text !== changeDocument || baseline !== changeBaseline) {
+    changeDocument = text;
+    changeBaseline = baseline;
+    fieldChanges = [];
+    try {
+      fieldChanges = documentChanges(parseJSON(baseline), parseJSON(text));
+    } catch {
+      /* Invalid drafts remain editable; never infer a change count. */
+    }
+  }
+  const changes = fieldChanges;
+  const summary = $("draft-summary");
+  summary.hidden =
+    !(state.snapshot || state.creating) ||
+    (!changes.length && !state.fieldErrors.size && !documentError);
+  summary.textContent =
+    state.fieldErrors.size || documentError
+      ? "草稿格式有误，请先修正"
+      : `已修改 ${changes.length} 个字段`;
+  for (const card of $("field-list").querySelectorAll(".field-card")) {
+    const changed = changes.some(
+      (change) =>
+        change.path === card.dataset.path ||
+        change.path.startsWith(card.dataset.path + "/") ||
+        card.dataset.path.startsWith(change.path + "/"),
+    );
+    card.classList.toggle("field-modified", changed);
+    card.querySelector(".field-change").hidden = !changed;
+  }
+}
 function draftChanged() {
   $("document-state").textContent = dirty()
     ? "未保存"
@@ -1319,20 +1421,39 @@ function renderFields() {
     const label = document.createElement("label"),
       title = document.createElement("span");
     title.className = "field-title";
-    title.textContent = row.path + (row.locked ? " · 只读" : "");
+    title.textContent = row.path;
+    title.title = row.path;
+    const kind = document.createElement("span");
+    kind.className = "field-kind";
+    kind.textContent = row.locked
+      ? "只读"
+      : { string: "文本", number: "数字", boolean: "布尔", json: "JSON" }[
+          row.kind
+        ];
+    const marker = document.createElement("span");
+    marker.className = "field-change";
+    marker.textContent = "已修改";
+    marker.hidden = true;
+    const caption = document.createElement("span");
+    caption.className = "field-caption";
+    caption.append(title, kind, marker);
     const input =
       row.kind === "boolean"
         ? document.createElement("select")
         : document.createElement(
-            row.kind === "json" ||
-              (row.kind === "string" && String(row.value).length > 80)
+            (row.kind === "json" && row.value !== null) ||
+              (row.kind === "string" &&
+                (String(row.value).length > 80 || /[\r\n]/.test(row.value)))
               ? "textarea"
               : "input",
           );
     if (row.kind === "boolean")
       for (const value of ["true", "false"])
         input.add(new Option(value, value));
-    if (input.tagName === "TEXTAREA") input.rows = 3;
+    if (input.tagName === "TEXTAREA") {
+      input.rows = 3;
+      card.classList.add("field-multiline");
+    }
     input.value = row.kind === "string" ? row.value : encodeJSON(row.value);
     input.setAttribute("aria-label", `字段 ${row.path}`);
     input.dataset.locked = String(row.locked);
@@ -1363,8 +1484,10 @@ function renderFields() {
     };
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "删除字段";
-    remove.className = "remove-field";
+    remove.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7m4-7v7"/></svg>';
+    remove.title = `删除字段 ${row.path}`;
+    remove.className = "remove-field icon-button";
     remove.dataset.locked = String(row.locked);
     remove.setAttribute("aria-label", `删除字段 ${row.path}`);
     remove.onclick = () => {
@@ -1392,10 +1515,11 @@ function renderFields() {
         status(error.message, true);
       }
     };
-    label.append(title, input);
-    card.append(label, error, remove);
+    label.append(caption, input);
+    card.append(label, remove, error);
     target.append(card);
   }
+  updateFieldChanges();
   if (!target.children.length) {
     const empty = document.createElement("p");
     empty.className = "info";
@@ -1978,13 +2102,16 @@ async function contextChanged(context) {
   state.container = "";
   activatePartitionScope();
   state.readOnly = true;
+  state.savedDatabase = "";
+  state.savedContainer = "";
+  updateScopeContext();
   resetResults();
   options("database", [], "选择数据库");
   options("container", [], "选择容器");
+  state.connectionName =
+    context?.connection?.name || context?.connectionName || context?.name || "";
   $("connection-name").textContent =
-    context?.connection?.name ||
-    context?.connectionName ||
-    context?.name ||
+    state.connectionName ||
     (id ? "已连接到 Azure Cosmos DB" : "从 DBX 打开已保存的 Cosmos DB 连接");
   if (!id) {
     $("mode").textContent = "未连接";
@@ -1999,6 +2126,7 @@ async function contextChanged(context) {
     state.readOnly = info.readOnly;
     state.savedDatabase = info.database || "";
     state.savedContainer = info.container || "";
+    updateScopeContext();
     $("mode").textContent = info.readOnly ? "只读连接" : "允许文档写入";
     await loadDatabases();
   });
