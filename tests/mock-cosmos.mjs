@@ -57,6 +57,16 @@ const server = http.createServer(async (req, res) => {
     queryDelay = 1500;
     return send({ ok: true });
   }
+  if (req.url === "/test/large-result") {
+    const doc = parseExact(document);
+    doc.items = Array.from({ length: 1000 }, (_, index) => ({
+      index,
+      label: `entry-${index}`,
+    }));
+    doc.tail = "tail-marker";
+    document = stringifyExact(doc);
+    return send({ ok: true });
+  }
   if (req.url === "/test/wide-document") {
     const doc = parseExact(document);
     for (let i = 0; i < 30; i++) doc[`extra${i}`] = `value-${i}`;

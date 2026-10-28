@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0 — Read-only result JSON viewer
+
+- Reuse CodeMirror for result JSON highlighting, line numbers, gutter folding and local search with match navigation/counts.
+- Initialize the result editor only on first JSON-view activation; avoid result formatting in table mode and clear obsolete hidden reader content.
+- Copy the complete visible page or local-filter result, preserving numeric text regardless of folds or virtualized lines; export keeps the same scope.
+- Reuse the reader and its fold/scroll state while page data is unchanged; invalidate reading state on page/filter/query/scope changes.
+- Keep read-only editors keyboard-focusable and count search matches only while the search panel is open.
+
 ## 0.11.0 — Selected SQL execution and inline syntax locations
 
 - Run the selected SQL verbatim from the existing button or query shortcut; reject blank/multiple selections without falling back to the full editor.

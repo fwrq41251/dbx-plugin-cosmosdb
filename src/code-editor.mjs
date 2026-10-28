@@ -12,7 +12,11 @@ import { json, jsonLanguage } from "@codemirror/lang-json";
 import { sql, SQLDialect } from "@codemirror/lang-sql";
 import { linter, setDiagnostics, setDiagnosticsEffect } from "@codemirror/lint";
 import { sqlExecution } from "./sql-execution.mjs";
-import { openSearchPanel, getSearchQuery } from "@codemirror/search";
+import {
+  openSearchPanel,
+  getSearchQuery,
+  searchPanelOpen,
+} from "@codemirror/search";
 import { autocompletion } from "@codemirror/autocomplete";
 import {
   foldEffect,
@@ -111,7 +115,8 @@ export function createCodeEditor(
     lastDiagnostic;
   const status = document.createElement("div");
   status.className = "editor-status";
-  let previousQuery,
+  let previousSearchOpen,
+    previousQuery,
     previousDoc,
     matches = [],
     capped = false;
@@ -126,12 +131,18 @@ export function createCodeEditor(
   }
   function updateStatus(state) {
     const query = getSearchQuery(state);
-    if (query !== previousQuery || state.doc !== previousDoc) {
+    const searchOpen = searchPanelOpen(state);
+    if (
+      query !== previousQuery ||
+      state.doc !== previousDoc ||
+      searchOpen !== previousSearchOpen
+    ) {
+      previousSearchOpen = searchOpen;
       previousQuery = query;
       previousDoc = state.doc;
       matches = [];
       capped = false;
-      if (query.valid) {
+      if (searchOpen && query.valid) {
         const cursor = query.getCursor(state);
         for (let next = cursor.next(); !next.done; next = cursor.next()) {
           if (matches.length === 10000) {
@@ -150,7 +161,7 @@ export function createCodeEditor(
     const count = foldedRanges(state).size;
     status.textContent =
       `第 ${line.number} 行，第 ${selection.head - line.from + 1} 列${state.readOnly ? " · 只读" : ""}${count ? ` · 已折叠 ${count} 处` : ""}` +
-      (query.search
+      (searchOpen && query.search
         ? ` · 匹配 ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} 项`
         : "") +
       (language === "sql" && !selection.empty
@@ -175,6 +186,7 @@ export function createCodeEditor(
     EditorState.phrases.of(phrases),
     EditorView.contentAttributes.of({
       "aria-label": label,
+      tabindex: "0",
       spellcheck: "false",
       autocapitalize: "off",
     }),

@@ -173,6 +173,24 @@
               <button id="copy-cell" type="button" disabled>复制单元格</button>
               <button id="copy-row" type="button" disabled>复制行 JSON</button>
             </div>
+            <div id="result-json-tools" class="toolbar" hidden>
+              <button
+                id="result-json-search"
+                type="button"
+                class="icon-button"
+                aria-label="搜索查询结果"
+                title="搜索当前页 JSON（⌘ / Ctrl + F）"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d="m16 16 4.5 4.5" />
+                </svg>
+              </button>
+              <button id="copy-results-json" type="button" disabled>
+                复制 JSON
+              </button>
+            </div>
             <div class="toolbar pagination" aria-label="查询结果分页">
               <button id="previous">上一页</button>
               <span id="page-label">第 0 页</span>
@@ -182,12 +200,7 @@
           <div id="table" class="table-scroll">
             <div class="empty">选择容器后运行查询</div>
           </div>
-          <textarea
-            id="raw-results"
-            aria-label="JSON 查询结果"
-            readonly
-            hidden
-          ></textarea>
+          <div id="raw-results" class="code-editor" hidden></div>
         </section>
       </main>
       <div

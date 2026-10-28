@@ -457,7 +457,7 @@ th:first-child {
 }
 #raw-results {
   flex: 1;
-  resize: none;
+  min-height: 0;
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
@@ -1306,6 +1306,24 @@ body.light button.danger {
               <button id="copy-cell" type="button" disabled>复制单元格</button>
               <button id="copy-row" type="button" disabled>复制行 JSON</button>
             </div>
+            <div id="result-json-tools" class="toolbar" hidden>
+              <button
+                id="result-json-search"
+                type="button"
+                class="icon-button"
+                aria-label="搜索查询结果"
+                title="搜索当前页 JSON（⌘ / Ctrl + F）"
+                disabled
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d="m16 16 4.5 4.5" />
+                </svg>
+              </button>
+              <button id="copy-results-json" type="button" disabled>
+                复制 JSON
+              </button>
+            </div>
             <div class="toolbar pagination" aria-label="查询结果分页">
               <button id="previous">上一页</button>
               <span id="page-label">第 0 页</span>
@@ -1315,12 +1333,7 @@ body.light button.danger {
           <div id="table" class="table-scroll">
             <div class="empty">选择容器后运行查询</div>
           </div>
-          <textarea
-            id="raw-results"
-            aria-label="JSON 查询结果"
-            readonly
-            hidden
-          ></textarea>
+          <div id="raw-results" class="code-editor" hidden></div>
         </section>
       </main>
       <div
@@ -23645,6 +23658,10 @@ body.light button.danger {
     let curState = state2.field(searchState, false);
     return curState ? curState.query.spec : defaultQuery(state2);
   }
+  function searchPanelOpen(state2) {
+    var _a2;
+    return ((_a2 = state2.field(searchState, false)) === null || _a2 === void 0 ? void 0 : _a2.panel) != null;
+  }
   var SearchState = class {
     constructor(query2, panel) {
       this.query = query2;
@@ -27799,7 +27816,7 @@ ${indent}}` : "}";
     }, lastDiagnostic;
     const status2 = document.createElement("div");
     status2.className = "editor-status";
-    let previousQuery, previousDoc, matches = [], capped = false;
+    let previousSearchOpen, previousQuery, previousDoc, matches = [], capped = false;
     let foldDoc, nestedFolds = [];
     function foldRanges() {
       if (foldDoc !== view2.state.doc) {
@@ -27810,12 +27827,14 @@ ${indent}}` : "}";
     }
     function updateStatus(state2) {
       const query2 = getSearchQuery(state2);
-      if (query2 !== previousQuery || state2.doc !== previousDoc) {
+      const searchOpen = searchPanelOpen(state2);
+      if (query2 !== previousQuery || state2.doc !== previousDoc || searchOpen !== previousSearchOpen) {
+        previousSearchOpen = searchOpen;
         previousQuery = query2;
         previousDoc = state2.doc;
         matches = [];
         capped = false;
-        if (query2.valid) {
+        if (searchOpen && query2.valid) {
           const cursor = query2.getCursor(state2);
           for (let next = cursor.next(); !next.done; next = cursor.next()) {
             if (matches.length === 1e4) {
@@ -27831,7 +27850,7 @@ ${indent}}` : "}";
         (m) => m.from === selection.from && m.to === selection.to
       );
       const count = foldedRanges(state2).size;
-      status2.textContent = `\u7B2C ${line.number} \u884C\uFF0C\u7B2C ${selection.head - line.from + 1} \u5217${state2.readOnly ? " \xB7 \u53EA\u8BFB" : ""}${count ? ` \xB7 \u5DF2\u6298\u53E0 ${count} \u5904` : ""}` + (query2.search ? ` \xB7 \u5339\u914D ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} \u9879` : "") + (language2 === "sql" && !selection.empty ? ` \xB7 \u5DF2\u9009 ${selection.to - selection.from} \u5B57\u7B26 \xB7 \u6267\u884C\u9009\u533A` : "");
+      status2.textContent = `\u7B2C ${line.number} \u884C\uFF0C\u7B2C ${selection.head - line.from + 1} \u5217${state2.readOnly ? " \xB7 \u53EA\u8BFB" : ""}${count ? ` \xB7 \u5DF2\u6298\u53E0 ${count} \u5904` : ""}` + (searchOpen && query2.search ? ` \xB7 \u5339\u914D ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} \u9879` : "") + (language2 === "sql" && !selection.empty ? ` \xB7 \u5DF2\u9009 ${selection.to - selection.from} \u5B57\u7B26 \xB7 \u6267\u884C\u9009\u533A` : "");
     }
     const report = () => {
       if (!diagnostics) return;
@@ -27849,6 +27868,7 @@ ${indent}}` : "}";
       EditorState.phrases.of(phrases),
       EditorView.contentAttributes.of({
         "aria-label": label,
+        tabindex: "0",
         spellcheck: "false",
         autocapitalize: "off"
       }),
@@ -28559,6 +28579,9 @@ ${indent}}` : "}";
     resultStale: false
   };
   var host = window.dbxPlugin;
+  var resultEditor = null;
+  var resultEditorPage;
+  var resultEditorFilter = "";
   var fieldScopes = /* @__PURE__ */ new Map();
   function knownFields() {
     const key = partitionScope();
@@ -28851,6 +28874,7 @@ ${indent}}` : "}";
     $("result-filter").disabled = busy || state.page < 0;
     $("copy-cell").disabled = busy || state.selectedCell === null;
     $("copy-row").disabled = busy || state.selectedRow === null;
+    resultReaderControls();
     $("cancel-query").hidden = !state.queryJob;
     $("save").disabled = busy || state.readOnly || !state.snapshot && !state.creating || !!state.snapshot && !dirty() || state.fieldErrors.size > 0 || !!documentError;
     $("delete").disabled = busy || state.readOnly || !state.snapshot;
@@ -29054,6 +29078,42 @@ ${indent}}` : "}";
       )
     };
   }
+  function resultReaderControls() {
+    const unavailable = state.busy || state.page < 0 || !resultEditor;
+    $("result-json-search").disabled = unavailable;
+    $("copy-results-json").disabled = unavailable;
+    $("copy-results-json").title = $("result-filter").value.trim() ? "\u590D\u5236\u5F53\u524D\u9875\u7B5B\u9009\u540E\u7684 JSON\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09" : "\u590D\u5236\u5F53\u524D\u9875\u5168\u90E8 JSON\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09";
+  }
+  function syncResultReader(source) {
+    const page = state.pages[state.page], filter = $("result-filter").value.trim().toLowerCase();
+    if ($("raw-results").hidden) {
+      if (resultEditor && (resultEditorPage !== page || resultEditorFilter !== filter) && resultEditor.value) {
+        resultEditor.value = "";
+        resultEditorPage = void 0;
+        resultEditorFilter = "";
+      }
+      return;
+    }
+    if (!resultEditor) {
+      resultEditor = createCodeEditor($("raw-results"), {
+        label: "JSON \u67E5\u8BE2\u7ED3\u679C",
+        readOnly: true,
+        hint: "\u8FD0\u884C\u67E5\u8BE2\u540E\u67E5\u770B\u5F53\u524D\u9875 JSON\uFF1B\u7B5B\u9009\u53EA\u5F71\u54CD\u5F53\u524D\u9875\u3002"
+      });
+    }
+    if (resultEditorPage !== page || resultEditorFilter !== filter) {
+      const rows = source?.rows || pageRows().rows;
+      resultEditor.value = page ? filter ? stringify(
+        rows.map((x) => x.row),
+        null,
+        2
+      ) : formatJSON(page.json) : "";
+      resultEditorPage = page;
+      resultEditorFilter = filter;
+    }
+    resultEditor.measure();
+    resultReaderControls();
+  }
   function renderResultSummary() {
     const p = state.pages[state.page];
     $("query-metrics").title = p?.activityId ? `Activity ID: ${p.activityId}` : "";
@@ -29084,11 +29144,7 @@ ${indent}}` : "}";
     $("export").title = filter ? "\u4EC5\u5BFC\u51FA\u5F53\u524D\u9875\u5339\u914D\u7B5B\u9009\u7684\u6587\u6863\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09" : "\u5BFC\u51FA\u5F53\u524D\u9875\u6240\u6709\u6587\u6863\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09";
     $("row-count").textContent = filter ? `${rows.length} / ${allRows.length} \u6761\uFF08\u4EC5\u5F53\u524D\u9875\uFF09` : `${allRows.length} \u6761`;
     $("page-label").textContent = `\u7B2C ${state.page + 1} \u9875`;
-    $("raw-results").value = p ? filter ? stringify(
-      rows.map((x) => x.row),
-      null,
-      2
-    ) : formatJSON(p.json) : "";
+    syncResultReader({ page: p, filter, rows });
     const target = $("table");
     const scrollLeft = target.scrollLeft, scrollTop = target.scrollTop;
     const allColumns = columnsFor(allRows);
@@ -29761,6 +29817,8 @@ ${indent}}` : "}";
     $("json-view").setAttribute("aria-pressed", String(json2));
     $("json-view").classList.toggle("active", json2);
     $("table-tools").hidden = json2;
+    $("result-json-tools").hidden = !json2;
+    if (json2) syncResultReader();
   }
   var bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
   bind("refresh", async () => {
@@ -29974,6 +30032,16 @@ id: ${identity.id}
   });
   $("table-view").onclick = () => view(false);
   $("json-view").onclick = () => view(true);
+  $("result-json-search").onclick = () => {
+    if (resultEditor && !state.busy) resultEditor.search();
+  };
+  $("copy-results-json").onclick = () => {
+    if (!resultEditor || state.busy || state.page < 0) return;
+    void copyResult(
+      resultEditor.value,
+      $("result-filter").value.trim() ? "\u5F53\u524D\u9875\u7B5B\u9009\u7ED3\u679C JSON" : "\u5F53\u524D\u9875 JSON"
+    );
+  };
   documentEditor.onChange(() => {
     $("document-state").textContent = dirty() ? "\u672A\u4FDD\u5B58" : state.creating ? "\u65B0\u6587\u6863" : "\u5B8C\u6574\u6587\u6863";
     if (state.creating) {

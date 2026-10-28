@@ -194,7 +194,7 @@ test("local filtering agrees across table, JSON and exported documents", async (
   await expect(f.locator("#table")).toContainText("当前页没有匹配的结果");
   await expect(f.locator("#table")).not.toContainText("当前页为空");
   await f.locator("#json-view").click();
-  await expect(f.locator("#raw-results")).toHaveValue("[]");
+  await expect(f.locator("#raw-results .cm-content")).toHaveText("[]");
   await expect(f.locator("#table-tools")).toBeHidden();
   await expect(f.locator("#export")).toHaveText("导出筛选结果");
   // The official dev host has no saveFile implementation. Capture the exact
@@ -213,7 +213,9 @@ test("local filtering agrees across table, JSON and exported documents", async (
     JSON.parse(Buffer.from(exported.dataBase64, "base64").toString("utf8")),
   ).toEqual([]);
   await f.locator("#clear-filter").click();
-  await expect(f.locator("#raw-results")).toHaveValue(/order-001/);
+  await expect(f.locator("#raw-results .cm-content")).toContainText(
+    "order-001",
+  );
   await f.locator("#result-filter").fill("order-001");
   await f.locator("#export").click();
   await expect(f.locator("#status")).toContainText("当前页已导出");

@@ -62,6 +62,10 @@ const state = {
   resultStale: false,
 };
 const host = window.dbxPlugin;
+let resultEditor = null,
+  resultEditorPage,
+  resultEditorFilter = "";
+
 const fieldScopes = new Map();
 function knownFields() {
   const key = partitionScope();
@@ -413,6 +417,7 @@ function controls() {
   $("result-filter").disabled = busy || state.page < 0;
   $("copy-cell").disabled = busy || state.selectedCell === null;
   $("copy-row").disabled = busy || state.selectedRow === null;
+  resultReaderControls();
   $("cancel-query").hidden = !state.queryJob;
   $("save").disabled =
     busy ||
@@ -646,6 +651,55 @@ function pageRows() {
       ),
   };
 }
+function resultReaderControls() {
+  const unavailable = state.busy || state.page < 0 || !resultEditor;
+  $("result-json-search").disabled = unavailable;
+  $("copy-results-json").disabled = unavailable;
+  $("copy-results-json").title = $("result-filter").value.trim()
+    ? "复制当前页筛选后的 JSON（包含所有字段）"
+    : "复制当前页全部 JSON（包含所有字段）";
+}
+function syncResultReader(source) {
+  const page = state.pages[state.page],
+    filter = $("result-filter").value.trim().toLowerCase();
+  if ($("raw-results").hidden) {
+    // Do not format or create another editor while the table is in use. If a
+    // reader already exists, discard obsolete data and undo/search/fold state.
+    if (
+      resultEditor &&
+      (resultEditorPage !== page || resultEditorFilter !== filter) &&
+      resultEditor.value
+    ) {
+      resultEditor.value = "";
+      resultEditorPage = undefined;
+      resultEditorFilter = "";
+    }
+    return;
+  }
+  if (!resultEditor) {
+    resultEditor = createCodeEditor($("raw-results"), {
+      label: "JSON 查询结果",
+      readOnly: true,
+      hint: "运行查询后查看当前页 JSON；筛选只影响当前页。",
+    });
+  }
+  if (resultEditorPage !== page || resultEditorFilter !== filter) {
+    const rows = source?.rows || pageRows().rows;
+    resultEditor.value = page
+      ? filter
+        ? encodeJSON(
+            rows.map((x) => x.row),
+            null,
+            2,
+          )
+        : formatJSON(page.json)
+      : "";
+    resultEditorPage = page;
+    resultEditorFilter = filter;
+  }
+  resultEditor.measure();
+  resultReaderControls();
+}
 function renderResultSummary() {
   const p = state.pages[state.page];
   $("query-metrics").title = p?.activityId
@@ -697,15 +751,7 @@ function renderPage() {
     ? `${rows.length} / ${allRows.length} 条（仅当前页）`
     : `${allRows.length} 条`;
   $("page-label").textContent = `第 ${state.page + 1} 页`;
-  $("raw-results").value = p
-    ? filter
-      ? encodeJSON(
-          rows.map((x) => x.row),
-          null,
-          2,
-        )
-      : formatJSON(p.json)
-    : "";
+  syncResultReader({ page: p, filter, rows });
   const target = $("table");
   const scrollLeft = target.scrollLeft,
     scrollTop = target.scrollTop;
@@ -1471,6 +1517,8 @@ function view(json) {
   $("json-view").setAttribute("aria-pressed", String(json));
   $("json-view").classList.toggle("active", json);
   $("table-tools").hidden = json;
+  $("result-json-tools").hidden = !json;
+  if (json) syncResultReader();
 }
 const bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
 bind("refresh", async () => {
@@ -1701,6 +1749,16 @@ bind("export", async () => {
 });
 $("table-view").onclick = () => view(false);
 $("json-view").onclick = () => view(true);
+$("result-json-search").onclick = () => {
+  if (resultEditor && !state.busy) resultEditor.search();
+};
+$("copy-results-json").onclick = () => {
+  if (!resultEditor || state.busy || state.page < 0) return;
+  void copyResult(
+    resultEditor.value,
+    $("result-filter").value.trim() ? "当前页筛选结果 JSON" : "当前页 JSON",
+  );
+};
 documentEditor.onChange(() => {
   $("document-state").textContent = dirty()
     ? "未保存"
