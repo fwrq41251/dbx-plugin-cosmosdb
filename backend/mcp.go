@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"strings"
 	"time"
@@ -70,15 +69,15 @@ func mcpTools() any {
 
 func decodeMCP(raw json.RawMessage, target any) error {
 	if len(raw) == 0 || string(raw) == "null" {
-		return errors.New("Missing MCP arguments")
+		return reasonError("mcp.missingArguments", "Missing MCP arguments")
 	}
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if err := d.Decode(target); err != nil {
-		return errors.New("Invalid or unsupported MCP arguments")
+		return reasonError("mcp.unsupportedArguments", "Invalid or unsupported MCP arguments")
 	}
 	if d.Decode(new(any)) != io.EOF {
-		return errors.New("Invalid MCP arguments")
+		return reasonError("mcp.invalidArguments", "Invalid MCP arguments")
 	}
 	return nil
 }
@@ -86,14 +85,15 @@ func decodeMCP(raw json.RawMessage, target any) error {
 func mcpResult(value any, failed bool) map[string]any {
 	b, err := json.Marshal(value)
 	if err != nil {
-		b = []byte(`{"error":"Unable to encode MCP result"}`)
+		b = []byte(`{"error":"Unable to encode MCP result","reason":"mcp.encodeFailure"}`)
 		failed = true
 	}
 	return map[string]any{"content": []any{map[string]any{"type": "text", "text": string(b)}}, "isError": failed}
 }
 
 func mcpFailure(err error) map[string]any {
-	value := map[string]any{"error": err.Error()}
+	detail := errorDetail(err)
+	value := map[string]any{"error": err.Error(), "reason": detail.Reason, "args": detail.Args}
 	if e, ok := err.(*serviceError); ok {
 		value["status"], value["activity_id"], value["retry_after_ms"] = e.status, e.activityID, e.retryAfter
 	}
@@ -107,11 +107,11 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 		Lifecycle request         `json:"lifecycle"`
 	}
 	if json.Unmarshal(raw, &call) != nil {
-		return mcpFailure(errors.New("Invalid MCP call"))
+		return mcpFailure(reasonError("mcp.invalidCall", "Invalid MCP call"))
 	}
 	allowed := map[string]bool{"container_info": true, "query": true, "read_document": true, "cached_partition_keys": true}
 	if !allowed[call.Tool] {
-		return mcpFailure(errors.New("Unknown or non-read-only MCP tool"))
+		return mcpFailure(reasonError("mcp.unsupportedTool", "Unknown or non-read-only MCP tool"))
 	}
 	var args mcpArgs
 	if err := decodeMCP(call.Arguments, &args); err != nil {
@@ -123,14 +123,14 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 	_ = json.Unmarshal(call.Arguments, &fields)
 	for _, value := range fields {
 		if string(value) == "null" {
-			return mcpFailure(errors.New("MCP arguments cannot be null"))
+			return mcpFailure(reasonError("mcp.nullArgument", "MCP arguments cannot be null"))
 		}
 	}
 	if _, present := fields["page_size"]; present && args.PageSize == 0 {
-		return mcpFailure(errors.New("page_size must be between 1 and 100"))
+		return mcpFailure(reasonError("mcp.pageSize", "page_size must be between 1 and 100"))
 	}
 	if _, present := fields["limit"]; present && args.Limit == 0 {
-		return mcpFailure(errors.New("limit must be between 1 and 100"))
+		return mcpFailure(reasonError("mcp.limit", "limit must be between 1 and 100"))
 	}
 	for _, entry := range listing {
 		t := entry.(map[string]any)
@@ -140,16 +140,16 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 		props := t["inputSchema"].(map[string]any)["properties"].(map[string]any)
 		for key := range fields {
 			if _, ok := props[key]; !ok {
-				return mcpFailure(errors.New("Unsupported argument for this tool"))
+				return mcpFailure(reasonError("mcp.unsupportedField", "Unsupported argument for this tool"))
 			}
 		}
 	}
 	r := call.Lifecycle
 	if r.Connection.ID == "" || args.ConnectionID != r.Connection.ID {
-		return mcpFailure(errors.New("A matching host-bound connection lifecycle is required"))
+		return mcpFailure(reasonError("mcp.lifecycleRequired", "A matching host-bound connection lifecycle is required"))
 	}
 	if (len(r.Runtime.Proxy) > 0 && string(r.Runtime.Proxy) != "null") || (r.Runtime.Host != "" && r.Runtime.Host != r.Connection.Host) || (r.Runtime.Port != 0 && r.Connection.Port != 0 && r.Runtime.Port != r.Connection.Port) {
-		return mcpFailure(errors.New("Proxy and SSH routes are not supported"))
+		return mcpFailure(reasonError("mcp.unsupportedRoute", "Proxy and SSH routes are not supported"))
 	}
 	c, err := newClient(r.Connection.Host, r.Connection.Secrets["account_key"], true)
 	if err != nil {
@@ -161,7 +161,7 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 		return mcpFailure(err)
 	}
 	if !location.valid() {
-		return mcpFailure(errors.New("Select a database and container in the DBX workbench before using MCP"))
+		return mcpFailure(reasonError("mcp.scopeRequired", "Select a database and container in the DBX workbench before using MCP"))
 	}
 	db, container := location.Database, location.Container
 	c.database, c.container = db, container
@@ -171,11 +171,11 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 			args.Limit = 20
 		}
 		if args.Offset < 0 || args.Limit < 1 || args.Limit > 100 || len(args.Filter) > 4096 {
-			return mcpFailure(errors.New("Invalid cache filter, offset or limit"))
+			return mcpFailure(reasonError("mcp.invalidCacheFilter", "Invalid cache filter, offset or limit"))
 		}
 		cache, err := c.readPartitionCache(db, container)
 		if err != nil {
-			return mcpFailure(errors.New("Unable to read partition cache; use the DBX workbench to refresh it"))
+			return mcpFailure(reasonError("mcp.cacheUnavailable", "Unable to read partition cache; use the DBX workbench to refresh it"))
 		}
 		matches := []string{}
 		for _, key := range cache.Keys {
@@ -194,13 +194,13 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 		value := map[string]any{"keys": matches[start:end], "found": cache.Found, "complete": cache.Complete, "updated_at": cache.UpdatedAt, "matched_count": len(matches), "has_more": end < len(matches), "next_offset": end, "ru": 0, "source": "local_cache", "database": db, "container": container}
 		b, _ := json.Marshal(value)
 		if len(b) > mcpOutputLimit {
-			return mcpFailure(errors.New("Cached keys exceed output budget; reduce limit or narrow filter"))
+			return mcpFailure(reasonError("mcp.cacheOutputBudget", "Cached keys exceed output budget; reduce limit or narrow filter"))
 		}
 		return mcpResult(value, false)
 	}
 	if call.Tool == "query" || call.Tool == "read_document" {
 		if strings.TrimSpace(args.PartitionKey) == "" || len(args.PartitionKey) > 8192 {
-			return mcpFailure(errors.New("An explicit partition_key_text JSON array is required"))
+			return mcpFailure(reasonError("mcp.partitionRequired", "An explicit partition_key_text JSON array is required"))
 		}
 		r.PartitionKey = json.RawMessage(args.PartitionKey)
 		if _, err = partitionHeader(r.PartitionKey); err != nil {
@@ -208,22 +208,22 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 		}
 	}
 	if call.Tool == "read_document" && validID(r.ID) != nil {
-		return mcpFailure(errors.New("A valid document id is required"))
+		return mcpFailure(reasonError("mcp.invalidDocumentId", "A valid document id is required"))
 	}
 	var fingerprint [32]byte
 	if call.Tool == "query" {
 		if strings.TrimSpace(r.Query) == "" || len(r.Query) > 64*1024 || len(args.Parameters) > 64*1024 {
-			return mcpFailure(errors.New("SQL is required; SQL and parameter text must each fit within 64 KiB"))
+			return mcpFailure(reasonError("mcp.sqlSize", "SQL is required; SQL and parameter text must each fit within 64 KiB"))
 		}
 		if r.PageSize == 0 {
 			r.PageSize = 20
 		}
 		if r.PageSize < 1 || r.PageSize > 100 {
-			return mcpFailure(errors.New("page_size must be between 1 and 100"))
+			return mcpFailure(reasonError("mcp.pageSize", "page_size must be between 1 and 100"))
 		}
 		if args.Parameters != "" {
 			if json.Unmarshal([]byte(args.Parameters), &r.Parameters) != nil || strings.TrimSpace(args.Parameters) == "null" {
-				return mcpFailure(errors.New("parameters_text must be a JSON array"))
+				return mcpFailure(reasonError("mcp.invalidParameters", "parameters_text must be a JSON array"))
 			}
 		}
 		// Bind cursors to all request semantics and credential identity without
@@ -235,7 +235,7 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 			cursor, ok := p.mcpCursors[args.Cursor]
 			p.mcpMu.Unlock()
 			if !ok || time.Now().After(cursor.Expires) || cursor.Fingerprint != fingerprint {
-				return mcpFailure(errors.New("Cursor expired or does not match this query; restart from the first page"))
+				return mcpFailure(reasonError("mcp.cursorMismatch", "Cursor expired or does not match this query; restart from the first page"))
 			}
 			r.Continuation = cursor.Continuation
 		}
@@ -265,7 +265,7 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 			if source == "cache" {
 				p.invalidateDefinition(c)
 			}
-			return mcpResult(map[string]any{"error": "A full partition key matching every container partition-key path is required", "ru": metadataRU, "duration_ms": metadataMS, "activity_id": meta.ActivityID}, true)
+			return mcpResult(map[string]any{"error": "A full partition key matching every container partition-key path is required", "reason": "mcp.full-partition-key-required", "ru": metadataRU, "duration_ms": metadataMS, "activity_id": meta.ActivityID}, true)
 		}
 	}
 	var page page
@@ -304,10 +304,10 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 	if call.Tool == "query" {
 		var docs []json.RawMessage
 		if json.Unmarshal([]byte(page.JSON), &docs) != nil {
-			return mcpFailure(errors.New("Invalid query response"))
+			return mcpFailure(reasonError("mcp.invalidResponse", "Invalid query response"))
 		}
 		if len(docs) > r.PageSize {
-			return mcpFailure(errors.New("Service page exceeds requested row budget; narrow the query"))
+			return mcpFailure(reasonError("mcp.rowBudget", "Service page exceeds requested row budget; narrow the query"))
 		}
 		value["documents_json"], value["count"], value["has_more"] = page.JSON, len(docs), page.Continuation != ""
 	} else {
@@ -315,15 +315,15 @@ func (p *plugin) mcpCall(raw json.RawMessage) map[string]any {
 	}
 	encoded, _ := json.Marshal(value)
 	if len(encoded) > mcpOutputLimit {
-		return mcpResult(map[string]any{"error": "Result exceeds MCP output budget; reduce page_size or project fewer fields. Full documents cannot be truncated.", "ru": page.RU, "duration_ms": page.DurationMS, "activity_id": page.ActivityID, "has_more": page.Continuation != ""}, true)
+		return mcpResult(map[string]any{"error": "Result exceeds MCP output budget; reduce page_size or project fewer fields. Full documents cannot be truncated.", "reason": "mcp.output-budget", "ru": page.RU, "duration_ms": page.DurationMS, "activity_id": page.ActivityID, "has_more": page.Continuation != ""}, true)
 	}
 	if call.Tool == "query" && page.Continuation != "" {
 		if len(page.Continuation) > 128*1024 {
-			return mcpFailure(errors.New("Service continuation exceeds cursor budget"))
+			return mcpFailure(reasonError("mcp.cursorBudget", "Service continuation exceeds cursor budget"))
 		}
 		var random [24]byte
 		if _, err = rand.Read(random[:]); err != nil {
-			return mcpFailure(errors.New("Unable to create cursor"))
+			return mcpFailure(reasonError("mcp.cursorUnavailable", "Unable to create cursor"))
 		}
 		token := hex.EncodeToString(random[:])
 		now := time.Now()

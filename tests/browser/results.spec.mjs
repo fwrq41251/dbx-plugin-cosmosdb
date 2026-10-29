@@ -1,8 +1,8 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
 
 test.beforeEach(async ({ request }) => {
-  await request.get("http://127.0.0.1:18081/test/reset");
+  await request.get(mockURL + "/test/reset");
 });
 
 test("all fields, column preferences, local filter and exact copy", async ({
@@ -10,7 +10,7 @@ test("all fields, column preferences, local filter and exact copy", async ({
   request,
 }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-  await request.get("http://127.0.0.1:18081/test/wide-document");
+  await request.get(mockURL + "/test/wide-document");
   const name = `table-prefs-${Date.now()}`;
   let oldLayoutRead = false;
   await page.route("**/api/bridge", async (route) => {
@@ -76,14 +76,10 @@ test("all fields, column preferences, local filter and exact copy", async ({
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain('"total": 9223372036854775807');
-  const before = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  const before = await (await request.get(mockURL + "/test/state")).json();
   await frame.locator("#result-filter").fill("not-a-match");
   await expect(frame.locator("#row-count")).toHaveText("0 / 1 条（仅当前页）");
-  const after = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  const after = await (await request.get(mockURL + "/test/state")).json();
   expect(after.queryCalls).toBe(before.queryCalls);
   await page.reload();
   await page.getByRole("button", { name, exact: true }).click();
@@ -96,7 +92,7 @@ test("all fields, column preferences, local filter and exact copy", async ({
     reopened.getByRole("separator", { name: "调整 id 列宽", exact: true }),
   ).toHaveAttribute("aria-valuenow", "200");
   await page.screenshot({
-    path: "/tmp/dbx-results-improvements.png",
+    path: capturePath("dbx-results-improvements.png"),
     fullPage: true,
   });
 });
@@ -107,7 +103,7 @@ test("cancel reaches HTTP, allows another query, and late work cannot replace re
 }) => {
   const frame = await connect(page, false, true);
   await query(frame);
-  await request.get("http://127.0.0.1:18081/test/slow-query");
+  await request.get(mockURL + "/test/slow-query");
   await frame.locator("#run").click();
   await expect(frame.locator("#status")).toContainText("查询执行中");
   await frame.locator("#cancel-query").click();
@@ -120,7 +116,7 @@ test("cancel reaches HTTP, allows another query, and late work cannot replace re
   await expect
     .poll(
       async () =>
-        (await (await request.get("http://127.0.0.1:18081/test/state")).json())
+        (await (await request.get(mockURL + "/test/state")).json())
           .canceledQueries,
     )
     .toBe(1);
@@ -161,9 +157,7 @@ test("cell selection and keyboard copy preserve dirty drafts; metrics stay visib
   await f.locator("#document-json-view").click();
   const editor = f.locator("#editor .cm-content");
   await editor.fill('{"id":"order-001","tenant":"demo","status":"unsaved"}');
-  const before = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  const before = await (await request.get(mockURL + "/test/state")).json();
   const cell = f.getByRole("cell", { name: "order-001", exact: true });
   await cell.click();
   await expect(cell).toHaveClass(/cell-selected/);
@@ -178,9 +172,7 @@ test("cell selection and keyboard copy preserve dirty drafts; metrics stay visib
   await cell.press("ArrowRight");
   await expect(f.locator("td.cell-selected")).toHaveText("demo");
   await expect(f.locator("td.cell-selected")).toBeFocused();
-  const after = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  const after = await (await request.get(mockURL + "/test/state")).json();
   expect(after.writeCount).toBe(before.writeCount);
   expect(after.queryCalls).toBe(before.queryCalls);
 });
@@ -191,9 +183,7 @@ test("local filtering agrees across table, JSON and exported documents", async (
 }) => {
   const f = await connect(page);
   await query(f);
-  const before = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  const before = await (await request.get(mockURL + "/test/state")).json();
   await f.locator("#result-filter").fill("missing-value");
   await expect(f.locator("#table")).toContainText("当前页没有匹配的结果");
   await expect(f.locator("#table")).not.toContainText("当前页为空");
@@ -237,9 +227,7 @@ test("local filtering agrees across table, JSON and exported documents", async (
   await expect(f.locator("#clear-filter")).toBeVisible();
   await query(f);
   await expect(f.locator("#result-filter")).toHaveValue("");
-  const after = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  const after = await (await request.get(mockURL + "/test/state")).json();
   expect(after.queryCalls).toBe(before.queryCalls + 2);
 });
 
@@ -248,7 +236,7 @@ test("query origin survives cancellation", async ({ page, request }) => {
   await query(f);
   await f.locator("#sql .cm-content").fill("SELECT * FROM c WHERE true");
   await expect(f.locator("#result-origin")).toHaveText("查询条件已修改");
-  await request.get("http://127.0.0.1:18081/test/slow-query");
+  await request.get(mockURL + "/test/slow-query");
   await f.locator("#run").click();
   await f.locator("#cancel-query").click();
   await expect(f.locator("#result-origin")).toHaveText("显示上次查询结果");
@@ -273,7 +261,7 @@ test("documents open on demand and closing retains the draft and restores result
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/query-workspace.png" });
+    .screenshot({ path: capturePath("query-workspace.png") });
   await expect(f.locator(".row-read").first()).toHaveText("");
   await expect(f.locator(".row-read svg").first()).toBeVisible();
   await expect(f.locator("#result-filter")).toHaveAttribute(
@@ -311,7 +299,7 @@ test("documents open on demand and closing retains the draft and restores result
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "/tmp/dbx-ux-refinement.png" });
+    .screenshot({ path: capturePath("dbx-ux-refinement.png") });
 });
 
 test("successful queries clear the document panel and manual lookup remains available", async ({

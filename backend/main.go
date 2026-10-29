@@ -74,7 +74,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	}
 	var r request
 	if json.Unmarshal(raw, &r) != nil {
-		return nil, sdk.NewError(-32602, "Invalid request parameters")
+		return nil, rpcReason(-32602, "main.invalidParameters", "Invalid request parameters")
 	}
 	if method == "cosmos/viewPreferences" {
 		value, err := p.viewPreferences(&cosmosClient{}, r.Views)
@@ -98,16 +98,16 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	}
 	if method == "connection/test" || method == "connection/connect" {
 		if r.Connection.ID == "" {
-			return nil, sdk.NewError(-32602, "Missing connection id")
+			return nil, rpcReason(-32602, "main.connectionIdRequired", "Missing connection id")
 		}
 		if len(r.Runtime.Proxy) > 0 && string(r.Runtime.Proxy) != "null" {
-			return nil, sdk.NewError(-32602, "Proxy and SSH routes are not supported in this version")
+			return nil, rpcReason(-32602, "main.unsupportedRoute", "Proxy and SSH routes are not supported in this version")
 		}
 		if r.Runtime.Host != "" && r.Runtime.Host != r.Connection.Host {
-			return nil, sdk.NewError(-32602, "SSH forwarding is not supported in this version")
+			return nil, rpcReason(-32602, "main.unsupportedSSH", "SSH forwarding is not supported in this version")
 		}
 		if r.Runtime.Port != 0 && r.Connection.Port != 0 && r.Runtime.Port != r.Connection.Port {
-			return nil, sdk.NewError(-32602, "Port forwarding is not supported in this version")
+			return nil, rpcReason(-32602, "main.unsupportedPort", "Port forwarding is not supported in this version")
 		}
 		readOnly := true
 		if r.Connection.Config.ReadOnly != nil {
@@ -115,15 +115,15 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		}
 		c, err := newClient(r.Connection.Host, r.Connection.Secrets["account_key"], readOnly || r.Connection.ReadOnly)
 		if err != nil {
-			return nil, sdk.NewError(-32602, err.Error())
+			return nil, rpcError(err)
 		}
 		c.database, c.container = r.Connection.Config.Database, r.Connection.Config.Container
 		c.cacheID = r.Connection.ID
 		if (c.database == "") != (c.container == "") {
-			return nil, sdk.NewError(-32602, "Database ID and Container ID must be configured together")
+			return nil, rpcReason(-32602, "main.incompleteScope", "Database ID and Container ID must be configured together")
 		}
 		if c.database != "" && (validID(c.database) != nil || validID(c.container) != nil) {
-			return nil, sdk.NewError(-32602, "Invalid legacy database or container")
+			return nil, rpcReason(-32602, "main.invalidLegacyScope", "Invalid legacy database or container")
 		}
 		location, stored, locationErr := c.selectedScope()
 		if locationErr == nil && location.valid() {
@@ -154,7 +154,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	c := p.connections[r.ConnectionID]
 	p.mu.RUnlock()
 	if c == nil {
-		return nil, sdk.NewError(-32010, "Connection is not active. Reopen the saved Cosmos DB connection.")
+		return nil, rpcReason(-32010, "main.inactiveConnection", "Connection is not active. Reopen the saved Cosmos DB connection.")
 	}
 	if method == "cosmos/cancel" {
 		return p.cancelQuery(r.ConnectionID, r.QueryID)
@@ -170,13 +170,13 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	if method == "cosmos/info" {
 		location, _, err := c.selectedScope()
 		if err != nil || (location.Revision != "" && location.Revision == c.unavailableRevision) {
-			return map[string]any{"readOnly": c.readOnly, "database": "", "container": "", "scopeWarning": "保存的位置不可用，请重新选择数据库和容器"}, nil
+			return map[string]any{"readOnly": c.readOnly, "database": "", "container": "", "scopeWarning": "保存的位置不可用，请重新选择数据库和容器", "scopeWarningDetail": reasonDetail{Reason: "warning.scopeUnavailable"}}, nil
 		}
 		return map[string]any{"readOnly": c.readOnly, "database": location.Database, "container": location.Container}, nil
 	}
 	if method == "cosmos/selectScope" {
 		if validID(r.Database) != nil || validID(r.Container) != nil {
-			return nil, sdk.NewError(-32602, "A database and container must be selected together")
+			return nil, rpcReason(-32602, "selectedscope.selectionRequired", "A database and container must be selected together")
 		}
 		metadata, err := c.containerMetadata(r.Database, r.Container)
 		if err != nil {
@@ -184,7 +184,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		}
 		location, err := c.saveSelectedScope(r.Database, r.Container, false)
 		if err != nil {
-			return nil, sdk.NewError(-32602, "位置保存失败，未切换数据库或容器")
+			return nil, rpcReason(-32602, "main.scopeSaveFailed", "位置保存失败，未切换数据库或容器")
 		}
 		return map[string]any{"database": location.Database, "container": location.Container, "revision": location.Revision, "ru": metadata.RU}, nil
 	}
@@ -192,14 +192,14 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		r.PageSize = 100
 	}
 	if r.PageSize < 1 || r.PageSize > 1000 {
-		return nil, sdk.NewError(-32602, "Page size must be between 1 and 1000")
+		return nil, rpcReason(-32602, "main.pageSize", "Page size must be between 1 and 1000")
 	}
 	var result any
 	var err error
 	switch method {
 	case "cosmos/tablePreferences":
 		if validID(r.Database) != nil || validID(r.Container) != nil {
-			err = errors.New("A database and container are required")
+			err = reasonError("main.scopeRequired", "A database and container are required")
 		} else {
 			result, err = c.tablePreferences(r.Database, r.Container, r.Preferences)
 		}
@@ -238,6 +238,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 				if err == nil {
 					if cacheErr := c.savePartitionCache(r, keys); cacheErr != nil {
 						keys.CacheWarning = "本地缓存保存失败，重开后可能需要重新加载。"
+						keys.CacheWarningDetail = &reasonDetail{Reason: "warning.cacheSave"}
 					}
 					result = keys
 				}
@@ -254,12 +255,12 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		}
 		if r.ParametersText != "" {
 			if json.Unmarshal([]byte(r.ParametersText), &r.Parameters) != nil {
-				return nil, sdk.NewError(-32602, "Parameters must be a JSON array")
+				return nil, rpcReason(-32602, "main.invalidQueryParameters", "Parameters must be a JSON array")
 			}
 		}
 		if r.OperationsText != "" {
 			if json.Unmarshal([]byte(r.OperationsText), &r.Operations) != nil {
-				return nil, sdk.NewError(-32602, "局部更新操作必须是 JSON 数组")
+				return nil, rpcReason(-32602, "main.invalidPatchOperations", "局部更新操作必须是 JSON 数组")
 			}
 		}
 		if err = validID(r.Database); err == nil {
@@ -277,6 +278,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 				document.RU += ru
 				if cacheErr != nil {
 					document.CacheWarning = "文档写入已成功，但分区键缓存更新失败；需要时请刷新列表。"
+					document.CacheWarningDetail = &reasonDetail{Reason: "warning.mutationCache"}
 				}
 			}
 			result = document
@@ -290,16 +292,19 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	return result, nil
 }
 func rpcError(err error) *sdk.PluginError {
+	detail := errorDetail(err)
 	if errors.Is(err, context.Canceled) {
-		return sdk.NewError(-32800, "查询已取消；已产生的 RU 不会退回，未收到响应的消耗未知")
+		return &sdk.PluginError{Code: -32800, Message: "查询已取消；已产生的 RU 不会退回，未收到响应的消耗未知", Data: detail}
 	}
-	if e, ok := err.(*serviceError); ok {
-		return &sdk.PluginError{Code: -32000, Message: e.Error(), Data: map[string]any{"status": e.status, "activityId": e.activityID, "retryAfterMs": e.retryAfter, "category": e.category, "serviceCode": e.errorCode, "position": e.position}}
+	var e *serviceError
+	if errors.As(err, &e) {
+		return &sdk.PluginError{Code: -32000, Message: e.Error(), Data: map[string]any{"reason": detail.Reason, "args": detail.Args, "status": e.status, "activityId": e.activityID, "retryAfterMs": e.retryAfter, "category": e.category, "serviceCode": e.errorCode, "position": e.position}}
 	}
-	return sdk.NewError(-32602, err.Error())
+	return &sdk.PluginError{Code: -32602, Message: err.Error(), Data: detail}
 }
+
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.19.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.23.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

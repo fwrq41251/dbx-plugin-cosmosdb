@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -35,13 +35,13 @@ test("container context replaces the sidebar and metadata opens without extra da
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/container-workspace.png" });
+    .screenshot({ path: capturePath("container-workspace.png") });
   await page.getByRole("button", { name: "深色主题", exact: true }).click();
   await expect(f.locator("body")).not.toHaveClass(/light/);
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "/tmp/dbx-polish-scoped-dark.png" });
+    .screenshot({ path: capturePath("dbx-polish-scoped-dark.png") });
   const after = await snapshot(request);
   expect(after.accountLists).toBe(1);
   expect(after.queryCalls).toBe(1);

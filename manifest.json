@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.fwrq41251.cosmosdb",
   "name": "Cosmos DB NoSQL",
-  "version": "0.19.0",
+  "version": "0.23.0",
   "publisher": "fwrq41251",
   "source": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
@@ -33,7 +33,7 @@
       "fields": [
         {
           "key": "display_name",
-          "label": "连接名称",
+          "label": "Connection name",
           "type": "text",
           "binding": "name",
           "required": true,
@@ -56,7 +56,7 @@
         },
         {
           "key": "read_only",
-          "label": "只读（关闭后允许文档增删改）",
+          "label": "Read-only (disable to allow document writes)",
           "type": "boolean",
           "binding": "config",
           "default": true
@@ -95,5 +95,70 @@
         }
       }
     }
-  ]
+  ],
+  "localizations": {
+    "en": {
+      "description": "Query and edit Azure Cosmos DB for NoSQL documents.",
+      "contributions": {
+        "io.github.fwrq41251.cosmosdb.connection": {
+          "fields": {
+            "display_name": {
+              "label": "Connection name"
+            },
+            "host": {
+              "label": "Account Endpoint"
+            },
+            "account_key": {
+              "label": "Account Key"
+            },
+            "read_only": {
+              "label": "Read-only (disable to allow document writes)"
+            }
+          }
+        }
+      }
+    },
+    "zh-CN": {
+      "description": "查询和编辑 Azure Cosmos DB for NoSQL 文档。",
+      "contributions": {
+        "io.github.fwrq41251.cosmosdb.connection": {
+          "fields": {
+            "display_name": {
+              "label": "连接名称"
+            },
+            "host": {
+              "label": "账号地址（Account Endpoint）"
+            },
+            "account_key": {
+              "label": "账号密钥（Account Key）"
+            },
+            "read_only": {
+              "label": "只读（关闭后允许文档增删改）"
+            }
+          }
+        }
+      }
+    },
+    "zh": {
+      "description": "查询和编辑 Azure Cosmos DB for NoSQL 文档。",
+      "contributions": {
+        "io.github.fwrq41251.cosmosdb.connection": {
+          "fields": {
+            "display_name": {
+              "label": "连接名称"
+            },
+            "host": {
+              "label": "账号地址（Account Endpoint）"
+            },
+            "account_key": {
+              "label": "账号密钥（Account Key）"
+            },
+            "read_only": {
+              "label": "只读（关闭后允许文档增删改）"
+            }
+          }
+        }
+      }
+    }
+  }
 }

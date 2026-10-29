@@ -1,9 +1,11 @@
 // Prevent the CLI's bundled SDK from silently replacing our pinned DBX 0.6.49 SDK.
 import { cp, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 const root = new URL("../", import.meta.url);
-const sdkRoot = new URL(".dbx-build/sdk-root/", root);
+const sdkRoot = process.env.COSMOS_E2E_SDK_ROOT
+  ? pathToFileURL(process.env.COSMOS_E2E_SDK_ROOT + "/")
+  : new URL(".dbx-build/sdk-root/", root);
 const target = new URL("plugins/sdk/go/dbx-plugin-sdk/", sdkRoot);
 await mkdir(target, { recursive: true });
 await cp(new URL("backend/third_party/dbx-plugin-sdk/", root), target, {
@@ -25,9 +27,9 @@ const result = spawnSync(
       DBX_PLUGIN_SDK_ROOT: fileURLToPath(sdkRoot),
       ...(process.argv[2] === "dev"
         ? {
-            DBX_PLUGIN_DATA_DIR: fileURLToPath(
-              new URL(".dbx-dev/plugin-data/", root),
-            ),
+            DBX_PLUGIN_DATA_DIR:
+              process.env.DBX_PLUGIN_DATA_DIR ||
+              fileURLToPath(new URL(".dbx-dev/plugin-data/", root)),
           }
         : {}),
     },

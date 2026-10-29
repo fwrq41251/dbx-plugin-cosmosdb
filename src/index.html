@@ -23,12 +23,19 @@
         </svg>
         <div>
           <strong>Cosmos DB <span class="muted">/ NoSQL</span></strong
-          ><small id="connection-name"
-            >从 DBX 打开已保存的 Cosmos DB 连接</small
+          ><small
+            id="connection-name"
+            data-i18n-text="ui.openASavedCosmosDbConnectionFrom"
+            >Open a saved Cosmos DB connection from DBX</small
           >
         </div>
       </div>
-      <nav id="scope-context" aria-label="当前容器" hidden>
+      <nav
+        id="scope-context"
+        aria-label="Current container"
+        hidden
+        data-i18n-aria-label="scope.currentContainer"
+      >
         <span id="scope-connection"></span
         ><span
           id="scope-connection-divider"
@@ -40,29 +47,33 @@
           id="scope-database"
           type="button"
           class="scope-select"
-          aria-label="选择数据库"
+          aria-label="Select database"
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="scope-picker"
+          data-i18n-aria-label="scope.selectDatabase"
         ></button
         ><span class="scope-divider" aria-hidden="true">/</span>
         <button
           id="scope-container"
           type="button"
           class="scope-select"
-          aria-label="选择容器"
+          aria-label="Select container"
           aria-haspopup="dialog"
           aria-expanded="false"
           aria-controls="scope-picker"
+          data-i18n-aria-label="scope.selectContainer"
         ></button>
         <button
           id="scope-info"
           type="button"
           class="icon-button"
-          aria-label="容器信息"
-          title="容器信息"
+          aria-label="Container info"
+          title="Container info"
           aria-expanded="false"
           aria-controls="scope-panel"
+          data-i18n-aria-label="scope.containerInfo"
+          data-i18n-title="scope.containerInfo"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
@@ -70,17 +81,26 @@
           </svg>
         </button>
       </nav>
-      <span id="mode" class="badge">未连接</span>
+      <span id="mode" class="badge" data-i18n-text="connection.disconnected"
+        >Disconnected</span
+      >
     </header>
     <div class="workspace document-hidden">
-      <aside id="scope-panel" aria-label="数据库与容器">
+      <aside
+        id="scope-panel"
+        aria-label="Database and container"
+        data-i18n-aria-label="scope.title"
+      >
         <div class="section-title">
-          <span id="scope-panel-title">数据库与容器</span
+          <span id="scope-panel-title" data-i18n-text="scope.title"
+            >Database and container</span
           ><button
             id="refresh"
             class="icon-button"
-            aria-label="刷新数据库列表"
-            title="刷新数据库列表"
+            aria-label="Refresh database list"
+            title="Refresh database list"
+            data-i18n-aria-label="ui.refreshDatabaseList"
+            data-i18n-title="ui.refreshDatabaseList"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 7v5h-5M4 17v-5h5" />
@@ -88,31 +108,64 @@
             </svg>
           </button>
         </div>
-        <label
-          >数据库<select id="database" aria-label="数据库">
-            <option value="">选择数据库</option>
+        <label data-i18n-text="scope.database"
+          >Database<select
+            id="database"
+            aria-label="Database"
+            data-i18n-aria-label="scope.database"
+          >
+            <option value="" data-i18n-text="scope.selectDatabase">
+              Select database
+            </option>
           </select></label
-        ><label
-          >容器<select id="container" aria-label="容器">
-            <option value="">选择容器</option>
+        ><label data-i18n-text="scope.container"
+          >Container<select
+            id="container"
+            aria-label="Container"
+            data-i18n-aria-label="scope.container"
+          >
+            <option value="" data-i18n-text="scope.selectContainer">
+              Select container
+            </option>
           </select></label
         >
-        <div id="container-info" class="info">连接后选择容器开始查询。</div>
+        <div
+          id="container-info"
+          class="info"
+          data-i18n-text="ui.connectAndSelectAContainerToQuery"
+        >
+          Connect and select a container to query.
+        </div>
         <details id="scope-metadata">
-          <summary>容器元数据</summary>
+          <summary data-i18n-text="ui.containerMetadata">
+            Container metadata
+          </summary>
           <pre id="metadata">—</pre>
         </details>
-        <div class="aside-note">
-          查询按页读取。RU 与耗时为当前页；导出仅包含当前页。
+        <div
+          class="aside-note"
+          data-i18n-text="ui.queriesArePagedRuAndDurationApply"
+        >
+          Queries are paged. RU and duration apply to the current page; exports
+          include this page only.
         </div>
       </aside>
       <main>
         <section class="query-panel">
           <div class="section-title query-heading">
-            <span>SQL 查询</span>
+            <span data-i18n-text="query.title">SQL query</span>
             <div class="toolbar">
-              <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
-              <button id="cancel-query" type="button" hidden>取消查询</button>
+              <span class="muted shortcut" data-i18n-text="ui.ctrlEnterToRun"
+                >⌘ / Ctrl + Enter to run</span
+              >
+              <button
+                id="cancel-query"
+                type="button"
+                hidden
+                data-i18n-text="ui.cancelQuery"
+              >
+                Cancel query
+              </button>
             </div>
           </div>
           <div id="query-body">
@@ -126,85 +179,131 @@
                 id="sql-diagnostic"
                 class="compact"
                 type="button"
-                aria-label="定位 SQL 错误"
+                aria-label="Locate SQL error"
                 hidden
+                data-i18n-aria-label="ui.locateSqlError"
+                data-i18n-text="ui.locate"
               >
-                定位
+                Locate
               </button>
             </div>
             <div class="query-options">
-              <label
-                >每页<select id="page-size" aria-label="每页条数">
+              <label data-i18n-text="ui.pageSize"
+                >Page size<select
+                  id="page-size"
+                  aria-label="Rows per page"
+                  data-i18n-aria-label="ui.rowsPerPage"
+                >
                   <option>25</option>
                   <option selected>100</option>
                   <option>250</option>
                   <option>1000</option>
                 </select></label
               ><label class="grow"
-                ><span
-                  >分区键 <span class="label-hint">可选 · JSON 数组</span></span
+                ><span data-i18n-text="partition.key"
+                  >Partition key
+                  <span class="label-hint" data-i18n-text="ui.optionalJsonArray"
+                    >Optional · JSON array</span
+                  ></span
                 ><span class="pk-input"
                   ><input
                     id="query-pk"
                     role="combobox"
-                    aria-label="查询分区键"
+                    aria-label="Query partition key"
                     aria-expanded="false"
                     aria-controls="pk-options"
                     aria-autocomplete="list"
                     autocomplete="off"
-                    placeholder="输入 JSON 分区键或搜索候选；留空跨分区"
+                    placeholder="Enter a JSON partition key or filter known keys; leave blank for cross-partition"
                     spellcheck="false"
+                    data-i18n-aria-label="partition.queryKey"
+                    data-i18n-placeholder="ui.enterAJsonPartitionKeyOrFilter"
                   /><button
                     id="query-pk-choose"
                     type="button"
-                    aria-label="选择查询分区键"
+                    aria-label="Select query partition key"
                     aria-expanded="false"
                     aria-controls="pk-picker"
+                    data-i18n-aria-label="partition.chooseQueryKey"
                   >
                     ▾
                   </button></span
                 ></label
-              ><button id="run" class="primary">运行查询</button>
+              ><button id="run" class="primary" data-i18n-text="query.run">
+                Run query
+              </button>
             </div>
-            <details>
-              <summary>查询参数</summary>
+            <details id="query-parameters" hidden>
+              <summary data-i18n-text="query.parameters">
+                Query parameters
+              </summary>
               <textarea
                 id="parameters"
-                aria-label="查询参数"
+                aria-label="Query parameters"
                 spellcheck="false"
                 placeholder='[{"name":"@id","value":"example"}]'
+                data-i18n-aria-label="query.parameters"
               >
-[]</textarea
-              >
+[]</textarea>
             </details>
           </div>
         </section>
-        <div id="status" role="status" aria-live="polite">等待连接</div>
+        <div
+          id="status"
+          role="status"
+          aria-live="polite"
+          data-i18n-text="ui.waitingForConnection"
+        >
+          Waiting for connection
+        </div>
         <section class="results-panel">
           <div class="section-title">
-            <div class="result-heading">
-              查询结果 <span id="row-count" class="muted">0 条</span
+            <div class="result-heading" data-i18n-text="query.results">
+              Query results
+              <span id="row-count" class="muted" data-i18n-text="ui.rows"
+                >0 rows</span
               ><span id="query-metrics" class="muted"></span
               ><span id="execution-source" class="muted" hidden></span
               ><span id="result-origin" class="muted" hidden></span>
             </div>
             <div class="toolbar">
-              <div class="segmented" role="group" aria-label="查询结果视图">
-                <button id="table-view" class="active" aria-pressed="true">
-                  表格
+              <div
+                class="segmented"
+                role="group"
+                aria-label="Query result view"
+                data-i18n-aria-label="ui.queryResultView"
+              >
+                <button
+                  id="table-view"
+                  class="active"
+                  aria-pressed="true"
+                  data-i18n-text="results.table"
+                >
+                  Table
                 </button>
                 <button id="json-view" aria-pressed="false">JSON</button>
               </div>
-              <button id="export">导出当前页</button>
-              <button id="new" class="compact" type="button">新建文档</button>
+              <button id="export" data-i18n-text="ui.exportCurrentPage">
+                Export current page
+              </button>
+              <button
+                id="new"
+                class="compact"
+                type="button"
+                data-i18n-text="document.create"
+              >
+                New document
+              </button>
               <button
                 id="document-toggle"
                 type="button"
                 aria-expanded="false"
                 aria-controls="document-panel"
                 class="icon-button"
-                aria-label="文档面板"
-                title="打开文档面板：按 id 读取或返回草稿"
+                aria-label="Document panel"
+                title="Open document panel: read by ID or return to draft"
+                data-i18n-aria-label="ui.documentPanel"
+                data-i18n-title="ui.openDocumentPanelReadByIdOr"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <rect x="3" y="4" width="18" height="16" rx="2" />
@@ -218,14 +317,18 @@
               <input
                 type="search"
                 id="result-filter"
-                aria-label="筛选当前页"
-                placeholder="在本页结果中查找…"
-                title="仅搜索已加载的这一页，匹配所有字段；不查询其他页或数据库。查全库请使用 SQL WHERE。"
+                aria-label="Filter current page"
+                placeholder="Find on this page…"
+                title="Search all fields on the loaded page only. Other pages and the database are not searched. Use SQL WHERE to search the database."
+                data-i18n-aria-label="ui.filterCurrentPage"
+                data-i18n-placeholder="ui.findOnThisPage"
+                data-i18n-title="ui.searchAllFieldsOnTheLoadedPage"
               /><button
                 id="clear-filter"
                 type="button"
-                aria-label="清除结果筛选"
+                aria-label="Clear result filter"
                 hidden
+                data-i18n-aria-label="ui.clearResultFilter"
               >
                 ×
               </button>
@@ -235,12 +338,14 @@
                 id="copy-selection"
                 type="button"
                 class="icon-button"
-                aria-label="复制所选内容"
-                title="复制所选内容"
+                aria-label="Copy selected content"
+                title="Copy selected content"
                 aria-haspopup="menu"
                 aria-expanded="false"
                 aria-controls="copy-menu"
                 disabled
+                data-i18n-aria-label="ui.copySelectedContent"
+                data-i18n-title="ui.copySelectedContent"
               ></button>
             </div>
             <div id="result-json-tools" class="toolbar" hidden>
@@ -248,27 +353,45 @@
                 id="result-json-search"
                 type="button"
                 class="icon-button"
-                aria-label="搜索查询结果"
-                title="搜索当前页 JSON（⌘ / Ctrl + F）"
+                aria-label="Search query results"
+                title="Search current page JSON (⌘ / Ctrl + F)"
                 disabled
+                data-i18n-aria-label="ui.searchQueryResults"
+                data-i18n-title="ui.searchCurrentPageJsonCtrlF"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="10.5" cy="10.5" r="6.5" />
                   <path d="m16 16 4.5 4.5" />
                 </svg>
               </button>
-              <button id="copy-results-json" type="button" disabled>
-                复制 JSON
+              <button
+                id="copy-results-json"
+                type="button"
+                disabled
+                data-i18n-text="ui.copyJson"
+              >
+                Copy JSON
               </button>
             </div>
-            <div class="toolbar pagination" aria-label="查询结果分页">
-              <button id="previous">上一页</button>
-              <span id="page-label">第 0 页</span>
-              <button id="next">下一页</button>
+            <div
+              class="toolbar pagination"
+              aria-label="Query result pagination"
+              data-i18n-aria-label="ui.queryResultPagination"
+            >
+              <button id="previous" data-i18n-text="ui.previousPage">
+                Previous page
+              </button>
+              <span id="page-label" data-i18n-text="ui.page">Page 0</span>
+              <button id="next" data-i18n-text="ui.nextPage">Next page</button>
             </div>
           </div>
           <div id="table" class="table-scroll">
-            <div class="empty">选择容器后运行查询</div>
+            <div
+              class="empty"
+              data-i18n-text="ui.selectAContainerThenRunAQuery"
+            >
+              Select a container, then run a query
+            </div>
           </div>
           <div id="raw-results" class="code-editor" hidden></div>
         </section>
@@ -276,32 +399,45 @@
       <div
         id="document-resize"
         role="separator"
-        aria-label="调整文档面板宽度"
+        aria-label="Resize document panel"
         aria-orientation="vertical"
         tabindex="0"
         aria-valuemin="290"
         aria-valuemax="900"
         aria-valuenow="400"
+        data-i18n-aria-label="ui.resizeDocumentPanel"
       ></div>
       <section id="document-panel" class="document-panel">
         <div class="section-title">
-          <div>文档 <span id="document-state" class="muted">未选择</span></div>
+          <div data-i18n-text="document.title">
+            Document
+            <span
+              id="document-state"
+              class="muted"
+              data-i18n-text="document.notSelected"
+              >Not selected</span
+            >
+          </div>
           <div class="toolbar">
             <button
               id="document-expand"
               class="compact"
               type="button"
               aria-pressed="false"
-              title="放大文档面板"
+              title="Expand document panel"
+              data-i18n-title="ui.expandDocumentPanel"
+              data-i18n-text="ui.expand"
             >
-              放大
+              Expand
             </button>
             <button
               id="document-close"
               class="icon-button"
               type="button"
-              aria-label="关闭文档面板"
-              title="关闭文档面板（保留草稿）"
+              aria-label="Close document panel"
+              title="Close document panel (keep draft)"
+              data-i18n-aria-label="ui.closeDocumentPanel"
+              data-i18n-title="ui.closeDocumentPanelKeepDraft"
             >
               ×
             </button>
@@ -309,50 +445,73 @@
         </div>
         <details id="document-location" open>
           <summary>
-            <span>文档定位</span
-            ><span id="document-identity" class="muted"
-              >按 id 与分区键读取</span
+            <span data-i18n-text="ui.documentLookup">Document lookup</span
+            ><span
+              id="document-identity"
+              class="muted"
+              data-i18n-text="ui.readByIdAndPartitionKey"
+              >Read by ID and partition key</span
             >
           </summary>
           <div class="document-fields">
-            <label
-              >文档 id<input
+            <label data-i18n-text="ui.documentId"
+              >Document ID<input
                 id="document-id"
-                placeholder="文档 id"
-                spellcheck="false" /></label
-            ><label
-              >完整分区键（JSON 数组）<span class="pk-input"
+                placeholder="Document ID"
+                spellcheck="false"
+                data-i18n-placeholder="ui.documentId" /></label
+            ><label data-i18n-text="ui.completePartitionKeyJsonArray"
+              >Complete partition key (JSON array)<span class="pk-input"
                 ><input
                   id="document-pk"
                   role="combobox"
-                  aria-label="文档分区键"
+                  aria-label="Document partition key"
                   aria-expanded="false"
                   aria-controls="pk-options"
                   aria-autocomplete="list"
                   autocomplete="off"
-                  placeholder="输入 JSON 分区键或搜索候选"
+                  placeholder="Enter a JSON partition key or filter known keys"
                   spellcheck="false"
+                  data-i18n-aria-label="partition.documentKey"
+                  data-i18n-placeholder="ui.enterAJsonPartitionKeyOrFilter2"
                 /><button
                   id="document-pk-choose"
                   type="button"
-                  aria-label="选择文档分区键"
+                  aria-label="Select document partition key"
                   aria-expanded="false"
                   aria-controls="pk-picker"
+                  data-i18n-aria-label="partition.chooseDocumentKey"
                 >
                   ▾
                 </button></span
               ></label
             >
             <div class="toolbar">
-              <button id="read">读取完整文档</button>
+              <button id="read" data-i18n-text="document.readFull">
+                Read full document
+              </button>
             </div>
-            <small id="write-hint">连接后可查看文档操作权限。</small>
+            <small
+              id="write-hint"
+              data-i18n-text="ui.connectToViewDocumentPermissions"
+              >Connect to view document permissions.</small
+            >
           </div>
         </details>
         <div class="document-view-toolbar">
-          <div class="segmented" role="group" aria-label="文档视图">
-            <button id="fields-view" type="button" aria-pressed="false">
-              字段
+          <div
+            class="segmented"
+            role="group"
+            aria-label="Document view"
+            data-i18n-aria-label="ui.documentView"
+          >
+            <button
+              id="fields-view"
+              type="button"
+              aria-pressed="false"
+              data-i18n-text="document.fields"
+            >
+              Fields
             </button>
             <button
               id="document-json-view"
@@ -368,8 +527,10 @@
               id="document-search"
               type="button"
               class="icon-button"
-              aria-label="搜索文档"
-              title="搜索文档（⌘ / Ctrl + F）"
+              aria-label="Search document"
+              title="Search document (⌘ / Ctrl + F)"
+              data-i18n-aria-label="ui.searchDocument"
+              data-i18n-title="ui.searchDocumentCtrlF"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="10.5" cy="10.5" r="6.5" />
@@ -381,11 +542,13 @@
                 id="document-more"
                 type="button"
                 class="icon-button"
-                aria-label="JSON 更多操作"
+                aria-label="More JSON actions"
                 aria-haspopup="menu"
                 aria-expanded="false"
                 aria-controls="document-menu"
-                title="JSON 更多操作"
+                title="More JSON actions"
+                data-i18n-aria-label="ui.moreJsonActions"
+                data-i18n-title="ui.moreJsonActions"
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="5" cy="12" r="1" />
@@ -393,20 +556,38 @@
                   <circle cx="19" cy="12" r="1" />
                 </svg>
               </button>
-              <div id="document-menu" role="menu" aria-label="JSON 操作" hidden>
-                <button id="document-format" type="button" role="menuitem">
-                  格式化 JSON
+              <div
+                id="document-menu"
+                role="menu"
+                aria-label="JSON actions"
+                hidden
+                data-i18n-aria-label="ui.jsonActions"
+              >
+                <button
+                  id="document-format"
+                  type="button"
+                  role="menuitem"
+                  data-i18n-text="ui.formatJson"
+                >
+                  Format JSON
                 </button>
                 <button
                   id="document-fold"
                   type="button"
                   role="menuitem"
-                  title="收起嵌套对象与数组，保留顶层字段"
+                  title="Fold nested objects and arrays, keeping top-level fields visible"
+                  data-i18n-title="ui.foldNestedObjectsAndArraysKeepingTop"
+                  data-i18n-text="ui.foldNestedValues"
                 >
-                  折叠嵌套
+                  Fold nested values
                 </button>
-                <button id="document-unfold" type="button" role="menuitem">
-                  展开所有层级
+                <button
+                  id="document-unfold"
+                  type="button"
+                  role="menuitem"
+                  data-i18n-text="ui.unfoldAll"
+                >
+                  Unfold all
                 </button>
               </div>
             </div>
@@ -418,48 +599,72 @@
           type="button"
           hidden
         ></button>
-        <section id="field-editor" hidden aria-label="文档字段编辑">
+        <section
+          id="field-editor"
+          hidden
+          aria-label="Document field editor"
+          data-i18n-aria-label="ui.documentFieldEditor"
+        >
           <input
             id="field-filter"
             type="search"
-            aria-label="筛选文档字段"
-            placeholder="按字段路径筛选…"
+            aria-label="Filter document fields"
+            placeholder="Filter by field path…"
+            data-i18n-aria-label="ui.filterDocumentFields"
+            data-i18n-placeholder="ui.filterByFieldPath"
           />
           <div id="field-list"></div>
           <details id="add-field-section">
-            <summary>添加字段</summary>
+            <summary data-i18n-text="ui.addField">Add field</summary>
             <input
               id="add-field-path"
-              aria-label="新字段路径"
-              placeholder="/remark 或 /address/city"
+              aria-label="New field path"
+              placeholder="/remark or /address/city"
+              data-i18n-aria-label="ui.newFieldPath"
+              data-i18n-placeholder="ui.remarkOrAddressCity"
             />
             <textarea
               id="add-field-value"
-              aria-label="新字段值（JSON）"
+              aria-label="New field value (JSON)"
               rows="2"
+              data-i18n-aria-label="ui.newFieldValueJson"
             >
-""</textarea
-            >
-            <button id="add-field" type="button">添加到草稿</button>
+""</textarea>
+            <button id="add-field" type="button" data-i18n-text="ui.addToDraft">
+              Add to draft
+            </button>
           </details>
         </section>
         <div id="editor" class="code-editor"></div>
         <div class="document-footer">
           <small id="draft-summary" role="status" hidden></small>
-          <small id="etag">读取完整文档后才能更新或删除。</small>
+          <small
+            id="etag"
+            data-i18n-text="ui.readTheFullDocumentBeforeUpdatingOr"
+            >Read the full document before updating or deleting it.</small
+          >
           <div class="toolbar">
-            <button id="save" class="primary">保存</button
-            ><button id="delete" class="danger">删除</button>
+            <button id="save" class="primary" data-i18n-text="document.save">
+              Save</button
+            ><button
+              id="delete"
+              class="danger"
+              data-i18n-text="document.delete"
+            >
+              Delete
+            </button>
             <button
               id="document-actions"
               type="button"
               class="icon-button"
-              aria-label="更多文档操作"
-              title="更多文档操作"
+              aria-label="More document actions"
+              title="More document actions"
               aria-haspopup="menu"
               aria-expanded="false"
               aria-controls="document-actions-menu"
               hidden
+              data-i18n-aria-label="ui.moreDocumentActions"
+              data-i18n-title="ui.moreDocumentActions"
             ></button>
           </div>
         </div>
@@ -469,51 +674,82 @@
       id="copy-menu"
       class="action-menu"
       role="menu"
-      aria-label="复制所选内容"
+      aria-label="Copy selected content"
       hidden
+      data-i18n-aria-label="ui.copySelectedContent"
     >
-      <button id="copy-cell" type="button" role="menuitem" disabled>
-        复制单元格
+      <button
+        id="copy-cell"
+        type="button"
+        role="menuitem"
+        disabled
+        data-i18n-text="ui.copyCell"
+      >
+        Copy cell
       </button>
-      <button id="copy-row" type="button" role="menuitem" disabled>
-        复制行 JSON
+      <button
+        id="copy-row"
+        type="button"
+        role="menuitem"
+        disabled
+        data-i18n-text="ui.copyRowJson"
+      >
+        Copy row JSON
       </button>
     </div>
     <div
       id="document-actions-menu"
       class="action-menu"
       role="menu"
-      aria-label="更多文档操作"
+      aria-label="More document actions"
       hidden
+      data-i18n-aria-label="ui.moreDocumentActions"
     >
-      <button id="replace-document" type="button" role="menuitem">
-        完整替换文档…
+      <button
+        id="replace-document"
+        type="button"
+        role="menuitem"
+        data-i18n-text="ui.replaceFullDocument2"
+      >
+        Replace full document…
       </button>
-      <button id="generate-id" type="button" role="menuitem" hidden>
-        重新生成 UUID
+      <button
+        id="generate-id"
+        type="button"
+        role="menuitem"
+        hidden
+        data-i18n-text="ui.generateNewUuid"
+      >
+        Generate new UUID
       </button>
     </div>
     <section
       id="scope-picker"
       role="dialog"
-      aria-label="切换数据库或容器"
+      aria-label="Switch database or container"
       hidden
+      data-i18n-aria-label="ui.switchDatabaseOrContainer"
     >
       <div class="section-title">
-        <span id="scope-picker-title">选择容器</span>
+        <span id="scope-picker-title" data-i18n-text="scope.selectContainer"
+          >Select container</span
+        >
         <div class="toolbar">
           <button
             id="scope-reload"
             type="button"
             class="compact"
-            title="重新加载列表"
+            title="Reload list"
+            data-i18n-title="ui.reloadList"
+            data-i18n-text="ui.refreshList"
           >
-            刷新列表</button
+            Refresh list</button
           ><button
             id="scope-close"
             type="button"
             class="icon-button"
-            aria-label="关闭选择器"
+            aria-label="Close picker"
+            data-i18n-aria-label="ui.closePicker"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m6 6 12 12M6 18 18 6" />
@@ -524,61 +760,110 @@
       <input
         id="scope-filter"
         type="search"
-        aria-label="搜索数据库或容器"
-        placeholder="输入名称筛选…"
+        aria-label="Search databases or containers"
+        placeholder="Filter by name…"
         autocomplete="off"
         spellcheck="false"
+        data-i18n-aria-label="ui.searchDatabasesOrContainers"
+        data-i18n-placeholder="ui.filterByName"
       />
       <div
         id="scope-options"
         role="listbox"
-        aria-label="可选数据库或容器"
+        aria-label="Available databases or containers"
+        data-i18n-aria-label="ui.availableDatabasesOrContainers"
       ></div>
       <div id="scope-picker-status" class="muted" role="status"></div>
-      <small>选定的数据库和容器由插件保存，重开连接及 MCP 都使用此位置。</small>
+      <small data-i18n-text="ui.thePluginSavesTheSelectedDatabaseAnd"
+        >The plugin saves the selected database and container. Reopened
+        connections and MCP use this location.</small
+      >
     </section>
-    <div id="result-item-menu" role="menu" aria-label="结果项操作" hidden>
+    <div
+      id="result-item-menu"
+      role="menu"
+      aria-label="Result item actions"
+      hidden
+      data-i18n-aria-label="ui.resultItemActions"
+    >
       <div id="result-item-summary" class="muted"></div>
-      <button id="copy-result-item" type="button" role="menuitem">
-        复制此项 JSON
+      <button
+        id="copy-result-item"
+        type="button"
+        role="menuitem"
+        data-i18n-text="ui.copyItemJson"
+      >
+        Copy item JSON
       </button>
       <button
         id="read-result-item"
         type="button"
         role="menuitem"
         aria-describedby="result-item-hint"
+        data-i18n-text="document.openFull"
       >
-        打开完整文档
+        Open full document
       </button>
       <div id="result-item-hint" class="muted"></div>
     </div>
-    <section id="pk-picker" aria-label="分区键候选列表" hidden>
+    <section
+      id="pk-picker"
+      aria-label="Partition key list"
+      hidden
+      data-i18n-aria-label="ui.partitionKeyList"
+    >
       <div id="pk-count" class="muted" aria-live="polite"></div>
-      <div id="pk-options" role="listbox" aria-label="分区键候选"></div>
+      <div
+        id="pk-options"
+        role="listbox"
+        aria-label="Partition keys"
+        data-i18n-aria-label="ui.partitionKeys"
+      ></div>
       <div class="pk-discovery">
-        <div id="pk-progress" class="info" aria-live="polite">
-          正在自动加载全部分区键…
+        <div
+          id="pk-progress"
+          class="info"
+          aria-live="polite"
+          data-i18n-text="ui.loadingAllPartitionKeys"
+        >
+          Loading all partition keys…
         </div>
         <div class="toolbar">
-          <button id="pk-load" type="button">暂停加载</button
-          ><button id="pk-reload" type="button">刷新列表</button
-          ><button id="pk-clear" type="button">清除选择</button>
+          <button id="pk-load" type="button" data-i18n-text="ui.pauseLoading">
+            Pause loading</button
+          ><button id="pk-reload" type="button" data-i18n-text="ui.refreshList">
+            Refresh list</button
+          ><button
+            id="pk-clear"
+            type="button"
+            data-i18n-text="ui.clearSelection"
+          >
+            Clear selection
+          </button>
         </div>
-        <small>输入框内直接筛选；下拉时自动续读，关闭后暂停。</small>
+        <small data-i18n-text="ui.filterDirectlyInTheInputOpeningResumes"
+          >Filter directly in the input. Opening resumes loading; closing pauses
+          it.</small
+        >
       </div>
     </section>
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
-      <h3 id="confirm-title">确认操作</h3>
+      <h3 id="confirm-title" data-i18n-text="ui.confirmOperation">
+        Confirm operation
+      </h3>
       <p id="confirm-message"></p>
       <div id="confirm-changes" hidden>
         <div id="change-count" class="info"></div>
         <div class="changes-scroll">
-          <table aria-label="文档修改预览">
+          <table
+            aria-label="Document changes"
+            data-i18n-aria-label="ui.documentChanges"
+          >
             <thead>
               <tr>
-                <th>字段</th>
-                <th>原值</th>
-                <th>新值</th>
+                <th data-i18n-text="document.fields">Fields</th>
+                <th data-i18n-text="ui.before">Before</th>
+                <th data-i18n-text="ui.after">After</th>
               </tr>
             </thead>
             <tbody id="change-rows"></tbody>
@@ -586,8 +871,20 @@
         </div>
       </div>
       <div class="toolbar">
-        <button id="confirm-cancel" type="button">取消</button
-        ><button id="confirm-accept" type="button" class="primary">确认</button>
+        <button
+          id="confirm-cancel"
+          type="button"
+          data-i18n-text="common.cancel"
+        >
+          Cancel</button
+        ><button
+          id="confirm-accept"
+          type="button"
+          class="primary"
+          data-i18n-text="common.confirm"
+        >
+          Confirm
+        </button>
       </div>
     </dialog>
     <script type="module">

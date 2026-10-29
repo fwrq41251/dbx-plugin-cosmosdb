@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -105,7 +105,10 @@ test("read-only JSON supports search counts, folding and panel expansion without
   await f.locator("#document-expand").click();
   await expect(f.locator("main")).toBeHidden();
   await expect(editor).toBeVisible();
-  await page.screenshot({ path: "docs/json-editor.png", fullPage: true });
+  await page.screenshot({
+    path: capturePath("json-editor.png"),
+    fullPage: true,
+  });
   await f.locator("#document-expand").click();
   await expect(f.locator("main")).toBeVisible();
   await expect(editor).toHaveAttribute("contenteditable", "false");
@@ -137,7 +140,8 @@ test("SQL offers Cosmos keywords, learned fields and parameters without remote d
   await expect(f.locator(".cm-completionDetail")).toHaveCount(0);
   await f.getByRole("option", { name: "status", exact: true }).click();
   await expect(sql).toHaveText("SELECT * FROM c WHERE c.status");
-  await f.locator(".query-panel details summary").click();
+  await fillCode(sql, "SELECT * FROM c WHERE c.id = @member");
+  await expect(f.locator("#query-parameters")).toHaveAttribute("open", "");
   await f.locator("#parameters").fill('[{"name":"@member","value":"example"}]');
   await fillCode(sql, "SELECT * FROM c WHERE c.id = @m");
   await sql.press("Control+Space");
@@ -146,7 +150,10 @@ test("SQL offers Cosmos keywords, learned fields and parameters without remote d
   const after = await (await request.get(base + "state")).json();
   expect(after.discoveryCalls).toBe(before.discoveryCalls);
   expect(after.writeCount).toBe(0);
-  await page.screenshot({ path: "docs/sql-editor.png", fullPage: true });
+  await page.screenshot({
+    path: capturePath("sql-editor.png"),
+    fullPage: true,
+  });
   // A new container has no inherited field candidates.
   await f.locator("#container").selectOption("Archive");
   await fillCode(sql, "SELECT * FROM c WHERE c.st");
@@ -168,4 +175,56 @@ test("SQL keeps completion, selection and undo without a search panel", async ({
   await sql.press("Escape");
   await sql.press("ControlOrMeta+z");
   await expect(sql).not.toHaveText("SELECT * FROM c WHERE true");
+});
+
+test("JSON hierarchy guides and counted folds share accessible expansion without changing source", async ({
+  page,
+}) => {
+  const f = await connect(page),
+    editor = await open(f);
+  await editor.fill("");
+  await editor.pressSequentially("{");
+  await expect(editor).toHaveText("{}");
+  await editor.press("Backspace");
+  await expect(f.locator("#editor .cm-placeholder")).toBeVisible();
+  const text =
+    '{\n  "id": "order-001",\n  "tenant": "demo",\n  "nested": {\n    "amount": 9223372036854775807,\n    "items": [1, 2, 3]\n  }\n}';
+  await editor.fill(text);
+  await expect(f.locator("#editor .cm-json-guides").first()).toBeVisible();
+  await editor.press("ControlOrMeta+Home");
+  await editor.press("ArrowDown");
+  await expect(
+    f.locator('#editor .cm-json-guides[style*="var(--accent)"]').first(),
+  ).toBeVisible();
+  await menuAction(f, "document-fold");
+  const summary = f.locator("#editor .cm-json-fold-summary");
+  await expect(summary).toHaveText("… 2 个字段");
+  await summary.focus();
+  await summary.press("Enter");
+  await expect(summary).toHaveCount(0);
+  await expect(editor).toContainText("9223372036854775807");
+  expect(await editor.innerText()).toBe(text);
+  await menuAction(f, "document-fold");
+  await f
+    .locator("#document-panel")
+    .screenshot({ path: capturePath("json-structure.png") });
+});
+
+test("query parameters stay out of ordinary SQL and appear only when useful", async ({
+  page,
+}) => {
+  const f = await connect(page),
+    sql = f.locator("#sql .cm-content");
+  const panel = f.locator("#query-parameters");
+  await expect(panel).toBeHidden();
+  await fillCode(sql, `SELECT * FROM c WHERE c.email="a@b" -- @ignored`);
+  await expect(panel).toBeHidden();
+  await fillCode(sql, "SELECT * FROM c WHERE c.id=@id");
+  await expect(panel).toBeVisible();
+  await expect(f.locator("#parameters")).toBeVisible();
+  await f.locator("#parameters").fill("invalid draft");
+  await fillCode(sql, "SELECT * FROM c");
+  await expect(panel).toBeVisible();
+  await f.locator("#parameters").fill("[ ]");
+  await expect(panel).toBeHidden();
 });

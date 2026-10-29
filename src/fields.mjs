@@ -1,16 +1,17 @@
+import { message as msg, LocalizedError } from "./i18n.mjs";
 import { parseJSON, encodeJSON } from "./model.mjs";
 import { editableDocument, documentChanges } from "./documents.mjs";
 import { isLosslessNumber } from "lossless-json";
 
 export function pointerTokens(path) {
   if (!path.startsWith("/"))
-    throw new Error("字段路径必须以 / 开头，例如 /remark 或 /address/city");
+    throw new LocalizedError(msg("ui.fieldPathsMustStartWithEG"));
   return path
     .slice(1)
     .split("/")
     .map((part) => {
       if (/~(?![01])/.test(part))
-        throw new Error("字段路径中的 ~ 和 / 需要转义为 ~0 和 ~1");
+        throw new LocalizedError(msg("ui.escapeAndInFieldPathsAsAnd"));
       return part.replace(/~1/g, "/").replace(/~0/g, "~");
     });
 }
@@ -74,9 +75,9 @@ export function parseFieldInput(text, kind) {
   if (kind === "string") return text;
   const value = parseJSON(text);
   if (kind === "number" && fieldKind(value) !== "number")
-    throw new Error("数值字段需要有效 JSON 数字，不要加引号");
+    throw new LocalizedError(msg("ui.numberFieldsRequireAValidJsonNumber"));
   if (kind === "boolean" && typeof value !== "boolean")
-    throw new Error("布尔字段必须为 true 或 false");
+    throw new LocalizedError(msg("ui.booleanFieldsMustBeTrueOrFalse"));
   return value;
 }
 export function editDocumentField(
@@ -87,20 +88,19 @@ export function editDocumentField(
   remove = false,
 ) {
   if (protectedField(path, paths))
-    throw new Error("不能修改 id、分区键或系统字段；请重新读取目标文档");
+    throw new LocalizedError(msg("ui.cannotModifyIdPartitionKeyOrSystem"));
   const doc = parseJSON(encodeJSON(editableDocument(document))),
     parts = pointerTokens(path);
   let parent = doc;
   for (const part of parts.slice(0, -1)) {
     if (!Object.hasOwn(parent, part) || !object(parent[part]))
-      throw new Error(
-        "父字段不存在或不是对象，请先在 JSON 视图添加父对象；数组请整体编辑",
-      );
+      throw new LocalizedError(msg("ui.parentFieldIsMissingOrIsNot"));
     parent = parent[part];
   }
   const last = parts.at(-1);
   if (remove) {
-    if (!Object.hasOwn(parent, last)) throw new Error("要删除的字段不存在");
+    if (!Object.hasOwn(parent, last))
+      throw new LocalizedError(msg("ui.theFieldToDeleteDoesNotExist"));
     delete parent[last];
   } else
     Object.defineProperty(parent, last, {
@@ -114,13 +114,15 @@ export function editDocumentField(
 export function buildDocumentPatch(before, after, paths) {
   const changes = documentChanges(before, after);
   if (changes.length > 10)
-    throw new Error(
-      `本次有 ${changes.length} 个操作，局部更新最多 10 个。请减少改动，或在保存方式中明确选择完整替换。`,
+    throw new LocalizedError(
+      msg("ui.operationsRequestedPatchSupportsAtMostReduce", () => [
+        changes.length,
+      ]),
     );
   return changes.map((change) => {
     if (protectedField(change.path, paths))
-      throw new Error("局部更新不能修改 id、分区键或系统字段");
-    return change.after === "（删除）"
+      throw new LocalizedError(msg("ui.patchCannotModifyIdPartitionKeyOr"));
+    return change.kind === "remove"
       ? { op: "remove", path: change.path }
       : { op: "set", path: change.path, value: parseJSON(change.after) };
   });

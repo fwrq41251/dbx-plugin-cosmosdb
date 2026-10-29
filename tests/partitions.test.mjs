@@ -1,3 +1,4 @@
+import { setLocale } from "../src/i18n.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -84,7 +85,7 @@ test("pause stops subsequent requests, resume keeps the cursor, and duplicate cu
   assert.equal(cache.stats.distinct.continuation, "next");
   await loader.start();
   assert.equal(calls, 2);
-  assert.match(loader.error, /重复分页/);
+  assert.match(String(loader.error), /重复分页/);
   assert.equal(cache.keys.size, 1);
 });
 
@@ -99,7 +100,7 @@ test("unsupported seek surfaces an error without falling back to a scan", async 
   await loader.start();
   assert.deepEqual(modes, ["seek"]);
   assert.equal(cache.keys.size, 1);
-  assert.match(loader.error, /HTTP 400/);
+  assert.match(String(loader.error), /HTTP 400/);
 });
 test("sample and enumeration have independent progress; empty pages can have more", () => {
   const c = new PartitionCandidates();
@@ -144,5 +145,16 @@ test("automatic discovery pauses at its RU budget without losing the resume curs
   await loader.start();
   assert.equal(calls, 2);
   assert.equal(cache.stats.seek.continuation, "2");
-  assert.match(loader.notice, /2000 RU/);
+  assert.match(String(loader.notice), /2000 RU/);
+});
+
+test("cached undefined-key labels follow language without translating string keys", () => {
+  const cache = new PartitionCandidates();
+  cache.add("[{}]");
+  cache.add('["未定义"]');
+  setLocale("en");
+  assert.equal(cache.keys.get("[{}]").label, "Undefined");
+  assert.equal(cache.keys.get('["未定义"]').label, "未定义");
+  setLocale("zh-CN");
+  assert.equal(cache.keys.get("[{}]").label, "未定义");
 });

@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ page, request }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await request.get(base + "reset");
@@ -156,7 +156,7 @@ test("folded and filtered items keep their identity; menu navigation and invalid
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "/tmp/dbx-result-item-menu.png" });
+    .screenshot({ path: capturePath("dbx-result-item-menu.png") });
   await f.locator("#read-result-item").press("Escape");
   await expect(
     f.getByRole("textbox", { name: "JSON 查询结果", exact: true }),

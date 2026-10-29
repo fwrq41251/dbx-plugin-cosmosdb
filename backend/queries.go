@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	sdk "github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk"
 	"time"
 )
@@ -15,7 +14,7 @@ type queryJob struct {
 
 func queryKey(connection, id string) (string, error) {
 	if id == "" || len(id) > 128 {
-		return "", errors.New("A bounded queryId is required")
+		return "", reasonError("queries.invalidId", "A bounded queryId is required")
 	}
 	return connection + "\x00" + id, nil
 }
@@ -39,10 +38,10 @@ func (p *plugin) beginQuery(connection, id string) (context.Context, func(), err
 		if j.done {
 			return nil, nil, context.Canceled
 		}
-		return nil, nil, errors.New("Query id is already running")
+		return nil, nil, reasonError("queries.alreadyRunning", "Query id is already running")
 	}
 	if len(p.queries) >= 1024 {
-		return nil, nil, errors.New("Too many recent queries; retry later")
+		return nil, nil, reasonError("queries.capacity", "Too many recent queries; retry later")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &queryJob{cancel: cancel}
@@ -79,7 +78,7 @@ func (p *plugin) cancelQuery(connection, id string) (any, *sdk.PluginError) {
 	}
 	// SDK requests are concurrent: cancellation can arrive before registration.
 	if len(p.queries) >= 1024 {
-		return nil, sdk.NewError(-32602, "Too many recent queries")
+		return nil, rpcReason(-32602, "queries.retryCapacity", "Too many recent queries")
 	}
 	p.queries[key] = &queryJob{done: true, expires: time.Now().Add(time.Minute)}
 	return map[string]any{"canceled": true}, nil

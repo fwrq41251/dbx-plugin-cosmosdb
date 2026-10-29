@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 const snapshot = async (request) => (await request.get(base + "state")).json();
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
@@ -42,7 +42,10 @@ test("failed position persistence leaves the active scope and document draft int
   await f.getByLabel("字段 /status", { exact: true }).fill("unsaved");
   await page.route("**/api/bridge", async (route) => {
     if (route.request().postDataJSON().params?.method === "cosmos/selectScope")
-      return route.fulfill({ status: 500, json: { error: { message: "位置保存失败" } } });
+      return route.fulfill({
+        status: 500,
+        json: { error: { message: "位置保存失败" } },
+      });
     return route.continue();
   });
   await select(f, "container", "Archive");
@@ -158,7 +161,7 @@ test("listing failures retain the working default and explicit retry loads optio
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/scope-picker.png" });
+    .screenshot({ path: capturePath("scope-picker.png") });
   await f.locator("#scope-filter").press("Escape");
   await f.locator("#scope-database").click();
   await expect(

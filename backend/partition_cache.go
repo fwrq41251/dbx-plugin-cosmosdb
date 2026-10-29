@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -53,19 +52,19 @@ func (c *cosmosClient) readPartitionCache(database, container string) (partition
 	const limit = 8 * 1024 * 1024
 	data, err := io.ReadAll(io.LimitReader(f, limit+1))
 	if err != nil || len(data) > limit {
-		return empty, errors.New("Invalid partition cache size")
+		return empty, reasonError("partitioncache.invalidSize", "Invalid partition cache size")
 	}
 	var cache partitionCache
 	if json.Unmarshal(data, &cache) != nil || cache.Version != 1 || len(cache.Keys) > 20000 || len(cache.Continuation) > 128*1024 || (cache.Complete && cache.Continuation != "") {
-		return empty, errors.New("Invalid partition cache")
+		return empty, reasonError("partitioncache.invalidCache", "Invalid partition cache")
 	}
 	for _, key := range cache.Keys {
 		if _, err := partitionHeader(json.RawMessage(key)); err != nil {
-			return empty, errors.New("Invalid cached partition key")
+			return empty, reasonError("partitioncache.invalidKey", "Invalid cached partition key")
 		}
 	}
 	if _, err := time.Parse(time.RFC3339, cache.UpdatedAt); err != nil {
-		return empty, errors.New("Invalid partition cache timestamp")
+		return empty, reasonError("partitioncache.invalidTimestamp", "Invalid partition cache timestamp")
 	}
 	cache.Found = true
 	return cache, nil
@@ -84,7 +83,7 @@ func (c *cosmosClient) savePartitionCache(r request, p keyPage) error {
 			return err
 		}
 		if !cache.Found || cache.Continuation != r.Continuation {
-			return errors.New("Partition cache cursor changed; refresh the list")
+			return reasonError("partitioncache.cursorChanged", "Partition cache cursor changed; refresh the list")
 		}
 	}
 	keys := map[string]bool{}
@@ -92,7 +91,7 @@ func (c *cosmosClient) savePartitionCache(r request, p keyPage) error {
 		keys[key] = true
 	}
 	if len(keys) > 20000 {
-		return errors.New("Partition cache exceeds 20000 keys")
+		return reasonError("partitioncache.keyLimit", "Partition cache exceeds 20000 keys")
 	}
 	cache.Keys = make([]string, 0, len(keys))
 	for key := range keys {
@@ -114,7 +113,7 @@ func (c *cosmosClient) writePartitionCache(database, container string, cache par
 		return err
 	}
 	if len(data) > 8*1024*1024 || len(cache.Keys) > 20000 {
-		return errors.New("Partition cache limit exceeded")
+		return reasonError("partitioncache.storageLimit", "Partition cache limit exceeded")
 	}
 	path, err := c.partitionCachePath(database, container)
 	if err != nil {

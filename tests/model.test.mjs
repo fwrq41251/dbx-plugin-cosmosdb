@@ -41,3 +41,20 @@ test("formatting is lexical and keeps precise numbers and escaped strings", () =
   assert.ok(formatted.includes("0.12345678901234567890"));
   assert.deepEqual(JSON.parse(formatted), JSON.parse(source));
 });
+
+test("formatting a broad JSON page and whitespace-only empty containers preserves every token", () => {
+  const source = JSON.stringify(
+    Array.from({ length: 12000 }, (_, i) => ({
+      id: String(i),
+      nested: { value: i },
+    })),
+  );
+  const formatted = formatJSON(source);
+  assert.deepEqual(JSON.parse(formatted), JSON.parse(source));
+  assert.equal(
+    formatJSON(
+      '{ "a": { \n }, "b": [ \t ], "s": "space  ] }", "n": 1.2300e+20 }',
+    ),
+    '{\n  "a": {},\n  "b": [],\n  "s": "space  ] }",\n  "n": 1.2300e+20\n}',
+  );
+});

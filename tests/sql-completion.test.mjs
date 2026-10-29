@@ -84,3 +84,12 @@ test("only root projections can be used as document field evidence; caches are i
   );
   assert.equal(other.count, 2000);
 });
+
+import { sqlParameterNames } from "../src/sql-completion.mjs";
+test("parameter visibility recognizes real placeholders while ignoring comments and strings", () => {
+  assert.deepEqual(
+    sqlParameterNames(`SELECT * FROM c WHERE c.id=@id AND c.n=@数 AND c.x=@id -- @comment
+    /* @block */ AND c.email="a@b" AND c.s='@quoted'`),
+    ["@id", "@数"],
+  );
+});

@@ -1,3 +1,4 @@
+import { t, message as msg, LocalizedError } from "./i18n.mjs";
 // CodeMirror and the bridge use zero-based string offsets. Preserve the exact
 // submitted text, including leading whitespace, to map service diagnostics.
 export function sqlExecution(document, selection) {
@@ -19,12 +20,12 @@ export function sqlExecution(document, selection) {
 
 export function validateSQLExecution(execution) {
   if (execution.rangeCount > 1)
-    throw new Error("请只保留一个 SQL 选区后运行；不会自动合并多个选区。");
+    throw new LocalizedError(msg("ui.keepOnlyOneSqlSelectionBeforeRunning"));
   if (!execution.query.trim())
-    throw new Error(
+    throw new LocalizedError(
       execution.selected
-        ? "选中的 SQL 只有空白，请重新选择；未执行全文。"
-        : "请输入 SQL 后运行。",
+        ? msg("ui.selectedSqlIsBlankSelectSqlAgain")
+        : msg("ui.enterSqlBeforeRunning"),
     );
 }
 
@@ -55,6 +56,8 @@ export function sqlErrorDiagnostic(execution, currentDocument, error) {
     from,
     to: Math.min(from + 1, execution.to),
     severity: "error",
-    message: `SQL 语法错误：第 ${line} 行，第 ${column} 列附近（点击定位）`,
+    get message() {
+      return t("sql.syntaxLocation", () => [line, column]);
+    },
   };
 }

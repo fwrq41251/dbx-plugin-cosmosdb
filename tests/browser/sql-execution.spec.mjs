@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -67,7 +67,7 @@ test("selected syntax error maps to the document line, click focuses it, edits c
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "/tmp/dbx-sql-error.png" });
+    .screenshot({ path: capturePath("dbx-sql-error.png") });
   await f.locator("#sql-diagnostic").click();
   await expect(sql).toBeFocused();
   await expect(f.locator("#sql .editor-status")).toContainText(

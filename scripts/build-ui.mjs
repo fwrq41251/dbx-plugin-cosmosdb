@@ -1,13 +1,30 @@
+import { localizeManifest } from "./localize-manifest.mjs";
 import {
   readFile,
   writeFile,
   mkdir,
   copyFile,
   readdir,
+  rename,
+  rm,
 } from "node:fs/promises";
 import { build } from "esbuild";
+async function atomicWrite(path, data) {
+  const temporary = new URL(path.href + `.${process.pid}.tmp`);
+  try {
+    await writeFile(temporary, data);
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
 const root = new URL("../", import.meta.url);
 const read = (p) => readFile(new URL(p, root), "utf8");
+const manifestSource = await read("manifest.json");
+const manifest =
+  JSON.stringify(localizeManifest(JSON.parse(manifestSource)), null, 2) + "\n";
+if (manifest !== manifestSource)
+  await atomicWrite(new URL("manifest.json", root), manifest);
 const styles = await read("src/styles.css");
 const bundle = await build({
   entryPoints: [new URL("src/app.mjs", root).pathname],
@@ -24,7 +41,7 @@ const html = (await read("src/index.html"))
   .replace("/* STYLE */", () => styles)
   .replace("/* SCRIPT */", () => script);
 await mkdir(new URL("ui/", root), { recursive: true });
-await writeFile(new URL("ui/index.html", root), html);
+await atomicWrite(new URL("ui/index.html", root), html);
 await mkdir(new URL("ui/licenses/", root), { recursive: true });
 for (const [source, target] of [
   ["LICENSE", "plugin-MIT.txt"],

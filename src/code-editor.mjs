@@ -1,5 +1,7 @@
+import { t, setText, onLocaleChange, renderMessage } from "./i18n.mjs";
+import { jsonStructure } from "./json-structure.mjs";
 import { nestedJSONFolds } from "./json-folding.mjs";
-import { basicSetup, minimalSetup } from "codemirror";
+import { minimalSetup } from "codemirror";
 import {
   EditorState,
   Compartment,
@@ -13,16 +15,26 @@ import {
   lineNumbers,
   highlightActiveLineGutter,
   highlightActiveLine,
+  dropCursor,
+  rectangularSelection,
+  crosshairCursor,
 } from "@codemirror/view";
 import { indentWithTab, isolateHistory } from "@codemirror/commands";
 import { json, jsonLanguage } from "@codemirror/lang-json";
 import { sql, SQLDialect } from "@codemirror/lang-sql";
-import { linter, setDiagnostics, setDiagnosticsEffect } from "@codemirror/lint";
+import {
+  linter,
+  lintKeymap,
+  setDiagnostics,
+  setDiagnosticsEffect,
+} from "@codemirror/lint";
 import { sqlExecution } from "./sql-execution.mjs";
 import {
   openSearchPanel,
   getSearchQuery,
   searchPanelOpen,
+  highlightSelectionMatches,
+  searchKeymap,
 } from "@codemirror/search";
 import {
   autocompletion,
@@ -31,6 +43,7 @@ import {
   completionKeymap,
 } from "@codemirror/autocomplete";
 import {
+  foldKeymap,
   foldEffect,
   foldedRanges,
   unfoldAll,
@@ -42,24 +55,24 @@ import {
 import { tags } from "@lezer/highlight";
 import { parseJSON, formatJSON } from "./model.mjs";
 
-const phrases = {
-  Find: "查找",
-  Replace: "替换",
-  next: "下一项",
-  previous: "上一项",
-  all: "全部",
-  "match case": "区分大小写",
-  "by word": "全词匹配",
-  regexp: "正则表达式",
-  replace: "替换",
-  "replace all": "全部替换",
-  close: "关闭",
-  "No diagnostics": "没有错误",
-  "Fold line": "折叠此行",
-  "Unfold line": "展开此行",
-  to: "至",
-  "on line": "所在行",
-};
+const phrases = () => ({
+  Find: t("editor.find"),
+  Replace: t("editor.replace"),
+  next: t("editor.nextMatch"),
+  previous: t("editor.previousMatch"),
+  all: t("editor.all"),
+  "match case": t("editor.matchCase"),
+  "by word": t("editor.wholeWord"),
+  regexp: t("editor.regexp"),
+  replace: t("editor.replace"),
+  "replace all": t("editor.replaceAll"),
+  close: t("common.close"),
+  "No diagnostics": t("editor.noDiagnostics"),
+  "Fold line": t("editor.foldLine"),
+  "Unfold line": t("editor.unfoldLine"),
+  to: t("editor.to"),
+  "on line": t("editor.onLine"),
+});
 const highlight = HighlightStyle.define([
   { tag: tags.keyword, color: "var(--syntax-keyword)" },
   {
@@ -105,7 +118,9 @@ export function jsonDiagnostic(text) {
       from,
       to,
       severity: "error",
-      message: `JSON 格式错误：第 ${line} 行，第 ${column} 列。请检查逗号、引号、括号或字段值。`,
+      get message() {
+        return t("json.invalidLocation", () => [line, column]);
+      },
     };
   }
 }
@@ -124,6 +139,7 @@ export function createCodeEditor(
   } = {},
 ) {
   const access = new Compartment();
+  const localization = new Compartment();
   let locked = readOnly,
     onChange = () => {},
     onSelection = () => {},
@@ -174,14 +190,28 @@ export function createCodeEditor(
       (m) => m.from === selection.from && m.to === selection.to,
     );
     const count = foldedRanges(state).size;
-    status.textContent =
-      `第 ${line.number} 行，第 ${selection.head - line.from + 1} 列${state.readOnly ? " · 只读" : ""}${count ? ` · 已折叠 ${count} 处` : ""}` +
-      (searchOpen && query.search
-        ? ` · 匹配 ${current >= 0 ? `${current + 1} / ` : ""}${matches.length}${capped ? "+" : ""} 项`
-        : "") +
-      (language === "sql" && !selection.empty
-        ? ` · 已选 ${selection.to - selection.from} 字符 · 执行选区`
-        : "");
+    setText(
+      status,
+      () =>
+        t("editor.position", () => [
+          line.number,
+          selection.head - line.from + 1,
+          state.readOnly ? t("ui.readOnly") : "",
+          count ? t("ui.folds", () => [count]) : "",
+        ]) +
+        (searchOpen && query.search
+          ? t("ui.matches", () => [
+              current >= 0 ? `${current + 1} / ` : "",
+              matches.length,
+              capped ? "+" : "",
+            ])
+          : "") +
+        (language === "sql" && !selection.empty
+          ? t("ui.charactersSelectedRunSelection", () => [
+              selection.to - selection.from,
+            ])
+          : ""),
+    );
   }
   const report = () => {
     if (!diagnostics) return;
@@ -202,7 +232,29 @@ export function createCodeEditor(
           closeBrackets(),
           keymap.of([...closeBracketsKeymap, ...completionKeymap]),
         ]
-      : [basicSetup]),
+      : [
+          keymap.of([
+            ...closeBracketsKeymap,
+            ...searchKeymap,
+            ...foldKeymap,
+            ...completionKeymap,
+            ...lintKeymap,
+          ]),
+          minimalSetup,
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightActiveLine(),
+          dropCursor(),
+          rectangularSelection(),
+          crosshairCursor(),
+          EditorState.allowMultipleSelections.of(true),
+          indentOnInput(),
+          bracketMatching(),
+          closeBrackets(),
+          autocompletion(),
+          highlightSelectionMatches(),
+          jsonStructure(),
+        ]),
     ...(language === "sql"
       ? [
           EditorState.transactionExtender.of((tr) =>
@@ -210,13 +262,16 @@ export function createCodeEditor(
           ),
         ]
       : []),
-    EditorState.phrases.of(phrases),
-    EditorView.contentAttributes.of({
-      "aria-label": label,
-      tabindex: "0",
-      spellcheck: "false",
-      autocapitalize: "off",
-    }),
+    localization.of([
+      EditorState.phrases.of(phrases()),
+      EditorView.contentAttributes.of({
+        "aria-label": renderMessage(label),
+        tabindex: "0",
+        spellcheck: "false",
+        autocapitalize: "off",
+      }),
+      placeholder(renderMessage(hint)),
+    ]),
     keymap.of([indentWithTab]),
     EditorView.lineWrapping,
     syntaxHighlighting(highlight),
@@ -229,7 +284,6 @@ export function createCodeEditor(
       }
       if (update.docChanged || update.selectionSet) onSelection();
     }),
-    placeholder(hint),
     language === "sql" ? sql({ dialect: cosmosDialect }) : json(),
     ...(completion ? [autocompletion({ override: [completion] })] : []),
     ...(diagnostics
@@ -260,6 +314,25 @@ export function createCodeEditor(
       ],
     });
   const view = new EditorView({ parent, state: makeState(value) });
+  onLocaleChange(() => {
+    view.dispatch({
+      effects: localization.reconfigure([
+        EditorState.phrases.of(phrases()),
+        EditorView.contentAttributes.of({
+          "aria-label": renderMessage(label),
+          tabindex: "0",
+          spellcheck: "false",
+          autocapitalize: "off",
+        }),
+        placeholder(renderMessage(hint)),
+      ]),
+    });
+    if (lastDiagnostic) {
+      view.dispatch(setDiagnostics(view.state, [lastDiagnostic]));
+    }
+    updateStatus(view.state);
+    report();
+  });
   if (contextMenu) {
     // Capture before CodeMirror widgets (fold placeholders ignore normal events).
     parent.addEventListener(

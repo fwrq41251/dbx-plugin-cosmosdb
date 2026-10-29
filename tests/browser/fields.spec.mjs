@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -33,13 +33,16 @@ test("fields edit strings and exact numbers; saving sends only the two changed p
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/field-editor.png" });
+    .screenshot({ path: capturePath("field-editor.png") });
   await save(f);
   await expect(f.locator("#confirm-title")).toHaveText("局部更新文档？");
   await expect(f.locator("#confirm-message")).toContainText(
     "仅提交 2 个字段操作",
   );
-  await page.screenshot({ path: "docs/patch-preview.png", fullPage: true });
+  await page.screenshot({
+    path: capturePath("patch-preview.png"),
+    fullPage: true,
+  });
   await f.locator("#confirm-accept").click();
   await expect(f.locator("#status")).toContainText("保存成功");
   const result = await snapshot(request);

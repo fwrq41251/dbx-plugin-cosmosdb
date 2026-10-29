@@ -1,7 +1,7 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
 
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -83,7 +83,10 @@ test("auto retries 429; closing pauses paging; reopening resumes; refresh update
   await expect(f.locator("#pk-progress")).toContainText("全部分区键已加载");
   await expect(f.locator("#pk-options")).toContainText("omega");
   await expect(f.locator("#pk-options")).toContainText("未定义");
-  await page.screenshot({ path: "docs/partition-picker.png", fullPage: true });
+  await page.screenshot({
+    path: capturePath("partition-picker.png"),
+    fullPage: true,
+  });
   await f.locator("#pk-reload").press("Space");
   await expect(f.locator("#pk-progress")).toContainText("自动加载中");
   await expect(f.locator("#pk-progress")).toContainText("全部分区键已加载");
@@ -201,5 +204,5 @@ test("typing directly filters local candidates without discovery and preserves m
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "/tmp/dbx-partition-combobox-narrow.png" });
+    .screenshot({ path: capturePath("dbx-partition-combobox-narrow.png") });
 });

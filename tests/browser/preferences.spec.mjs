@@ -1,10 +1,17 @@
+import {
+  capturePath,
+  pluginData,
+  mockURL,
+  connect,
+  query,
+} from "./support.mjs";
+import { join } from "node:path";
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 const savedViews = async () =>
   JSON.parse(
-    await readFile(".dbx-dev/plugin-data/view-preferences-v1.json", "utf8"),
+    await readFile(join(pluginData, "view-preferences-v1.json"), "utf8"),
   );
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
@@ -134,7 +141,7 @@ test("copy menus support context and keyboard access while auxiliary controls st
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/query-workspace.png" });
+    .screenshot({ path: capturePath("query-workspace.png") });
 });
 
 test("scalar previews use JSON without replacing the saved document preference", async ({

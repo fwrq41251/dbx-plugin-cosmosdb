@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -14,13 +13,14 @@ import (
 )
 
 type keyPage struct {
-	Keys         []string `json:"keys"` // JSON text preserves component types and numeric precision.
-	Continuation string   `json:"continuation"`
-	Mode         string   `json:"mode"`
-	Scanned      int      `json:"scanned"`
-	RU           float64  `json:"ru"`
-	DurationMS   int64    `json:"durationMs"`
-	CacheWarning string   `json:"cacheWarning,omitempty"`
+	Keys               []string      `json:"keys"` // JSON text preserves component types and numeric precision.
+	Continuation       string        `json:"continuation"`
+	Mode               string        `json:"mode"`
+	Scanned            int           `json:"scanned"`
+	RU                 float64       `json:"ru"`
+	DurationMS         int64         `json:"durationMs"`
+	CacheWarning       string        `json:"cacheWarning,omitempty"`
+	CacheWarningDetail *reasonDetail `json:"cacheWarningDetail,omitempty"`
 }
 type keyCursor struct {
 	Database  string   `json:"database"`
@@ -43,20 +43,20 @@ func (c *cosmosClient) partitionKeys(r request) (keyPage, error) {
 		mode = "sample"
 	}
 	if mode != "sample" && mode != "distinct" {
-		return keyPage{}, errors.New("Unknown partition discovery mode")
+		return keyPage{}, reasonError("partitions.unknownMode", "Unknown partition discovery mode")
 	}
 	// Keep each RPC bounded to one page; the UI owns automatic paging and pause.
 	if r.PageSize > 100 {
-		return keyPage{}, errors.New("Partition discovery page size cannot exceed 100")
+		return keyPage{}, reasonError("partitions.pageSize", "Partition discovery page size cannot exceed 100")
 	}
 	cursor := keyCursor{Database: r.Database, Container: r.Container, Mode: mode}
 	if r.Continuation != "" {
 		if len(r.Continuation) > 128*1024 {
-			return keyPage{}, errors.New("Partition cursor is too large")
+			return keyPage{}, reasonError("partitions.cursorTooLarge", "Partition cursor is too large")
 		}
 		data, err := base64.RawURLEncoding.DecodeString(r.Continuation)
 		if err != nil || json.Unmarshal(data, &cursor) != nil || cursor.Database != r.Database || cursor.Container != r.Container || cursor.Mode != mode {
-			return keyPage{}, errors.New("Partition cursor does not match this container and discovery mode; refresh candidates")
+			return keyPage{}, reasonError("partitions.cursorMismatch", "Partition cursor does not match this container and discovery mode; refresh candidates")
 		}
 	}
 	link := "dbs/" + r.Database + "/colls/" + r.Container
@@ -71,11 +71,11 @@ func (c *cosmosClient) partitionKeys(r request) (keyPage, error) {
 		} `json:"partitionKey"`
 	}
 	if json.Unmarshal(meta.Items, &container) != nil {
-		return keyPage{}, errors.New("Invalid container metadata")
+		return keyPage{}, reasonError("partitions.invalidMetadata", "Invalid container metadata")
 	}
 	paths := container.PartitionKey.Paths
 	if len(paths) > 3 {
-		return keyPage{}, errors.New("Unsupported partition key definition")
+		return keyPage{}, reasonError("partitions.unsupportedDefinition", "Unsupported partition key definition")
 	}
 	ru := meta.RU
 	h := http.Header{}
@@ -88,7 +88,7 @@ func (c *cosmosClient) partitionKeys(r request) (keyPage, error) {
 		p, err = c.request("GET", "docs", link, parent+"/docs", nil, h, link)
 	} else {
 		if len(paths) != 1 {
-			return keyPage{}, errors.New("Full enumeration currently supports one partition path. Use sampling or manual input for hierarchical keys")
+			return keyPage{}, reasonError("partitions.hierarchyUnsupported", "Full enumeration currently supports one partition path. Use sampling or manual input for hierarchical keys")
 		}
 		expression, exprErr := partitionExpression(paths[0])
 		if exprErr != nil {
@@ -103,7 +103,7 @@ func (c *cosmosClient) partitionKeys(r request) (keyPage, error) {
 			}
 		}
 		if len(cursor.Ranges) == 0 || len(cursor.Ranges) > 32000 || cursor.Range < 0 || cursor.Range >= len(cursor.Ranges) {
-			return keyPage{}, errors.New("Invalid physical partition cursor; refresh candidates")
+			return keyPage{}, reasonError("partitions.invalidPhysicalCursor", "Invalid physical partition cursor; refresh candidates")
 		}
 		if err = validID(cursor.Ranges[cursor.Range]); err != nil {
 			return keyPage{}, err
@@ -129,7 +129,7 @@ func (c *cosmosClient) partitionKeys(r request) (keyPage, error) {
 	}
 	var documents []json.RawMessage
 	if json.Unmarshal(p.Items, &documents) != nil {
-		return keyPage{}, errors.New("Invalid partition discovery results")
+		return keyPage{}, reasonError("partitions.invalidResults", "Invalid partition discovery results")
 	}
 	isMissingPage := cursor.Missing
 	keys := make(map[string]bool)
@@ -187,11 +187,11 @@ func (c *cosmosClient) partitionRanges(link, parent string) ([]string, float64, 
 			ID string `json:"id"`
 		}
 		if json.Unmarshal(p.Items, &ranges) != nil {
-			return nil, ru, errors.New("Invalid physical partition ranges")
+			return nil, ru, reasonError("partitions.invalidRanges", "Invalid physical partition ranges")
 		}
 		for _, r := range ranges {
 			if validID(r.ID) != nil {
-				return nil, ru, errors.New("Invalid physical partition id")
+				return nil, ru, reasonError("partitions.invalidRangeId", "Invalid physical partition id")
 			}
 			ids = append(ids, r.ID)
 		}
@@ -200,11 +200,11 @@ func (c *cosmosClient) partitionRanges(link, parent string) ([]string, float64, 
 			return ids, ru, nil
 		}
 		if seen[token] {
-			return nil, ru, errors.New("Repeated physical partition continuation")
+			return nil, ru, reasonError("partitions.repeatedContinuation", "Repeated physical partition continuation")
 		}
 		seen[token] = true
 	}
-	return nil, ru, errors.New("Too many physical partition ranges for candidate enumeration")
+	return nil, ru, reasonError("partitions.tooManyRanges", "Too many physical partition ranges for candidate enumeration")
 }
 
 func partitionExpression(path string) (string, error) {
@@ -221,7 +221,7 @@ func partitionExpression(path string) (string, error) {
 }
 func partitionPath(path string) ([]string, error) {
 	if !strings.HasPrefix(path, "/") {
-		return nil, errors.New("Invalid partition path")
+		return nil, reasonError("partitions.invalidPath", "Invalid partition path")
 	}
 	parts := strings.Split(path[1:], "/")
 	for i, p := range parts {
@@ -259,7 +259,7 @@ func partitionKeyFor(document json.RawMessage, paths []string) (string, error) {
 	}
 	encoded, err := json.Marshal(values)
 	if err != nil {
-		return "", fmt.Errorf("Invalid partition value: %w", err)
+		return "", annotateError("partitions.invalidValue", fmt.Errorf("Invalid partition value: %w", err))
 	}
 	return string(encoded), nil
 }

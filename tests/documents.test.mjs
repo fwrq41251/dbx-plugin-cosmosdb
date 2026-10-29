@@ -58,7 +58,12 @@ test("diffs distinguish missing, null, types, arrays, precise numbers and escape
   assert.equal(changes.length, 5);
   assert.deepEqual(
     changes.find((x) => x.path === "/n"),
-    { path: "/n", before: "9223372036854775807", after: "9223372036854775808" },
+    {
+      kind: "replace",
+      path: "/n",
+      before: "9223372036854775807",
+      after: "9223372036854775808",
+    },
   );
   assert.ok(changes.some((x) => x.path === "/a~1b/~0x"));
   assert.equal(changes.find((x) => x.path === "/added").before, "（不存在）");

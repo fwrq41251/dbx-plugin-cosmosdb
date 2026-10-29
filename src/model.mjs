@@ -1,3 +1,4 @@
+import { renderMessage, message as msg, LocalizedError } from "./i18n.mjs";
 import { parse, stringify, isLosslessNumber } from "lossless-json";
 export { parse as parseJSON, stringify as encodeJSON };
 // Document writes still send the editor's original text, never a reserialized preview.
@@ -22,14 +23,19 @@ export function keyFromDocument(document, paths) {
       !Number.isSafeInteger(value) &&
       Number.isInteger(value)
     )
-      throw new Error("分区键包含大整数，请手动填写精确的分区键 JSON。");
+      throw new LocalizedError(
+        msg("ui.partitionKeyContainsALargeIntegerEnter"),
+      );
     return value;
   });
   return stringify(values.length ? values : [{}]);
 }
 export function parseArray(text, label) {
   const value = parse(text);
-  if (!Array.isArray(value)) throw new Error(`${label}必须是 JSON 数组`);
+  if (!Array.isArray(value))
+    throw new LocalizedError(
+      msg("errors.arrayRequired", () => [renderMessage(label)]),
+    );
   return value;
 }
 export function columnsFor(rows) {
@@ -51,7 +57,8 @@ export function formatJSON(text) {
   let out = "",
     indent = 0,
     quoted = false,
-    escaped = false;
+    escaped = false,
+    previous = "";
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (quoted) {
@@ -59,6 +66,7 @@ export function formatJSON(text) {
       if (escaped) escaped = false;
       else if (ch === "\\") escaped = true;
       else if (ch === '"') quoted = false;
+      previous = ch;
       continue;
     }
     if (ch === '"') {
@@ -69,16 +77,19 @@ export function formatJSON(text) {
     } else if (ch === "{" || ch === "[") {
       out += ch;
       indent++;
-      if (text.slice(i + 1).trimStart()[0] !== (ch === "{" ? "}" : "]"))
+      let next = i + 1;
+      while (next < text.length && /\s/.test(text[next])) next++;
+      if (text[next] !== (ch === "{" ? "}" : "]"))
         out += "\n" + "  ".repeat(indent);
     } else if (ch === "}" || ch === "]") {
       indent--;
-      const prev = out.trimEnd().slice(-1);
-      if (prev !== "{" && prev !== "[") out += "\n" + "  ".repeat(indent);
+      if (previous !== "{" && previous !== "[")
+        out += "\n" + "  ".repeat(indent);
       out += ch;
     } else if (ch === ",") out += ",\n" + "  ".repeat(indent);
     else if (ch === ":") out += ": ";
     else out += ch;
+    previous = ch;
   }
   return out;
 }

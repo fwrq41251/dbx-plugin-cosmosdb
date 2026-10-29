@@ -1,3 +1,4 @@
+import { t, message as msg, LocalizedError } from "./i18n.mjs";
 import { parseJSON, encodeJSON } from "./model.mjs";
 import { isLosslessNumber } from "lossless-json";
 
@@ -10,7 +11,7 @@ export function partitionLabel(text) {
         : value !== null &&
             typeof value === "object" &&
             Object.keys(value).length === 0
-          ? "未定义"
+          ? t("partition.undefined")
           : encodeJSON(value),
     )
     .join(" / ");
@@ -30,7 +31,7 @@ export class PartitionCandidates {
   add(text) {
     const value = parseJSON(text);
     if (!Array.isArray(value) || value.length < 1 || value.length > 3)
-      throw new Error("分区键需要 1–3 个组件");
+      throw new LocalizedError(msg("ui.partitionKeyRequiresComponents"));
     if (
       value.some(
         (v) =>
@@ -46,9 +47,14 @@ export class PartitionCandidates {
           ),
       )
     )
-      throw new Error("分区键组件必须是标量或 {}");
+      throw new LocalizedError(msg("ui.partitionKeyComponentsMustBeScalarsOr"));
     const key = encodeJSON(value);
-    this.keys.set(key, { key, label: partitionLabel(key) });
+    this.keys.set(key, {
+      key,
+      get label() {
+        return partitionLabel(key);
+      },
+    });
   }
   merge(page) {
     for (const key of page.keys) this.add(key);
@@ -110,15 +116,16 @@ export class PartitionLoader {
       try {
         const page = await this.fetchPage(this.mode, stats.continuation);
         if (page.continuation && this.seen.has(page.continuation))
-          throw new Error("服务返回重复分页令牌，请刷新列表。");
+          throw new LocalizedError(
+            msg("ui.theServiceReturnedARepeatedContinuationToken2"),
+          );
         if (page.continuation) this.seen.add(page.continuation);
         this.cache.merge(page);
         runRU += page.ru;
         retries = 0;
         this.notice = page.cacheWarning || "";
         if (runRU >= 2000 && page.continuation) {
-          this.notice =
-            "本轮已达 2000 RU 自动加载预算，已暂停；可使用当前候选或继续加载。";
+          this.notice = msg("ui.theRuAutomaticLoadingBudgetIsReached");
           this.running = false;
         }
         this.changed();
@@ -127,7 +134,7 @@ export class PartitionLoader {
         const code =
           error?.data?.status || Number(/HTTP (\d+)/.exec(error.message)?.[1]);
         if (code === 429 && retries++ < 4) {
-          this.notice = "服务限流，正在等待后自动继续…";
+          this.notice = msg("ui.rateLimitedWaitingBeforeResuming");
           this.changed();
           const delay = Math.min(
             10000,
@@ -136,7 +143,7 @@ export class PartitionLoader {
           await this.wait(delay);
           continue;
         }
-        this.error = error.message || String(error);
+        this.error = error;
         break;
       }
     }

@@ -1,3 +1,4 @@
+import { message as msg, LocalizedError } from "./i18n.mjs";
 import {
   parseJSON,
   encodeJSON,
@@ -16,25 +17,29 @@ function object(value) {
   );
 }
 export function editableDocument(doc) {
-  if (!object(doc)) throw new Error("文档必须是 JSON 对象");
+  if (!object(doc))
+    throw new LocalizedError(msg("ui.documentMustBeAJsonObject"));
   return Object.fromEntries(
     Object.entries(doc).filter(([key]) => !systemFields.has(key)),
   );
 }
 function tokens(path) {
-  if (!path.startsWith("/")) throw new Error("无效的分区键路径");
+  if (!path.startsWith("/"))
+    throw new LocalizedError(msg("ui.invalidPartitionKeyPath"));
   return path
     .slice(1)
     .split("/")
     .map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
 }
 export function applyDocumentPartition(doc, text, paths) {
-  const values = parseArray(text, "分区键");
+  const values = parseArray(text, msg("partition.key"));
   if (values.length !== (paths.length || 1))
-    throw new Error("分区键组件数量与容器定义不一致");
+    throw new LocalizedError(msg("ui.partitionKeyComponentCountDoesNotMatch"));
   values.forEach((value, index) => {
     if (Array.isArray(value) || (object(value) && Object.keys(value).length))
-      throw new Error("分区键必须是标量、null 或 {}");
+      throw new LocalizedError(
+        msg("ui.partitionKeyComponentsMustBeScalarsNull"),
+      );
     if (!paths[index]) return;
     const parts = tokens(paths[index]),
       undefinedKey = object(value);
@@ -50,7 +55,9 @@ export function applyDocumentPartition(doc, text, paths) {
         });
       }
       if (!object(target[part]))
-        throw new Error("分区键路径与文档现有字段冲突");
+        throw new LocalizedError(
+          msg("ui.partitionKeyPathConflictsWithExistingDocument"),
+        );
       target = target[part];
     }
     const last = parts.at(-1);
@@ -73,22 +80,21 @@ export function newDocument(paths, partitionText, id) {
 export function prepareDocument(text, partitionText, paths, identity = null) {
   const doc = editableDocument(parseJSON(text));
   if (typeof doc.id !== "string" || !doc.id)
-    throw new Error("文档必须包含非空字符串 id");
-  const values = parseArray(partitionText, "分区键");
+    throw new LocalizedError(msg("ui.documentMustContainANonemptyStringId"));
+  const values = parseArray(partitionText, msg("partition.key"));
   if (values.length !== (paths.length || 1))
-    throw new Error("分区键组件数量与容器定义不一致");
+    throw new LocalizedError(msg("ui.partitionKeyComponentCountDoesNotMatch"));
   const key = encodeJSON(values),
     actual = keyFromDocument(doc, paths);
   if (key !== actual)
-    throw new Error(
-      "文档正文的分区键与所选分区键不一致，请修正文档或重新选择分区键",
-    );
+    throw new LocalizedError(msg("ui.documentPartitionKeyDoesNotMatchThe"));
   if (
     identity &&
     (doc.id !== identity.id ||
-      key !== encodeJSON(parseArray(identity.partitionKeyText, "分区键")))
+      key !==
+        encodeJSON(parseArray(identity.partitionKeyText, msg("partition.key"))))
   )
-    throw new Error("更新时不能更改 id 或分区键，请重新读取文档");
+    throw new LocalizedError(msg("ui.idAndPartitionKeyCannotChangeDuring"));
   return { doc, text: encodeJSON(doc), partitionKeyText: key };
 }
 export function documentChanges(before, after) {
@@ -96,6 +102,7 @@ export function documentChanges(before, after) {
   function visit(a, b, path, hasA = true, hasB = true) {
     if (!hasA || !hasB) {
       changes.push({
+        kind: hasA ? "remove" : "add",
         path: path || "/",
         before: hasA ? encodeJSON(a) : "（不存在）",
         after: hasB ? encodeJSON(b) : "（删除）",
@@ -115,6 +122,7 @@ export function documentChanges(before, after) {
       }
     } else if (encodeJSON(a) !== encodeJSON(b))
       changes.push({
+        kind: "replace",
         path: path || "/",
         before: encodeJSON(a),
         after: encodeJSON(b),

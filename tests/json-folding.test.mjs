@@ -36,3 +36,27 @@ test("folding finds objects throughout a long document and handles a root array"
     ['"id":1,"more":{"x":true}', '"id":2'],
   );
 });
+
+import { indexJSON } from "../src/json-structure.mjs";
+
+test("JSON structure counts direct syntax children without converting numbers or duplicate keys", () => {
+  const text =
+    '{"a":9223372036854775807,"a":1.2300e+20,"items":[null,true,false,1,"x",{},[]]}';
+  const index = indexJSON(text);
+  assert.equal(index.valid, true);
+  assert.deepEqual(
+    index.nodes.map((n) => [n.kind, n.count, n.parent]),
+    [
+      ["Object", 3, -1],
+      ["Array", 7, 0],
+      ["Object", 0, 1],
+      ["Array", 0, 1],
+    ],
+  );
+  assert.equal(
+    text.slice(index.nodes[1].from, index.nodes[1].to),
+    '[null,true,false,1,"x",{},[]]',
+  );
+  assert.equal(indexJSON('{"bad":}').valid, false);
+  assert.equal(indexJSON('"scalar"').nodes.length, 0);
+});

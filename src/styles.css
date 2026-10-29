@@ -1538,3 +1538,30 @@ body.light .sql-error {
 .action-menu button:focus-visible {
   background: #7cd4bf18;
 }
+
+/* Shared JSON structure cues for both results and document editors. */
+.code-editor .cm-foldGutter .cm-gutterElement {
+  padding: 0;
+}
+.code-editor .cm-json-fold-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-height: 22px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.code-editor .cm-json-fold-toggle:hover {
+  color: var(--accent);
+  background: var(--hover);
+}
+.code-editor .cm-json-fold-summary {
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.code-editor .cm-json-fold-summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

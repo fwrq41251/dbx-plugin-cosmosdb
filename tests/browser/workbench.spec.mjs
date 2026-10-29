@@ -1,5 +1,5 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
 
 async function activate(frame, name) {
   const button = frame.getByRole("button", { name, exact: true });
@@ -15,7 +15,7 @@ async function openDocument(frame) {
   await frame.locator("#document-json-view").click();
 }
 test.beforeEach(async ({ request }) => {
-  await request.get("http://127.0.0.1:18081/test/reset");
+  await request.get(mockURL + "/test/reset");
 });
 
 test("query, paging, lossless document edit, and ETag conflict", async ({
@@ -44,21 +44,18 @@ test("query, paging, lossless document edit, and ETag conflict", async ({
   await activate(frame, "保存");
   await frame.getByRole("button", { name: "确认", exact: true }).click();
   await expect(frame.locator("#status")).toContainText("保存成功");
-  await page.screenshot({ path: "docs/workbench.png", fullPage: true });
-  const saved = await (
-    await request.get("http://127.0.0.1:18081/test/state")
-  ).json();
+  await page.screenshot({ path: capturePath("workbench.png"), fullPage: true });
+  const saved = await (await request.get(mockURL + "/test/state")).json();
   expect(saved.document).toContain("9223372036854775807");
   expect(saved.writeCount).toBe(1);
-  await request.get("http://127.0.0.1:18081/test/conflict");
+  await request.get(mockURL + "/test/conflict");
   await frame.locator("#document-json-view").click();
   await editor.fill((await editor.innerText()).replace("paid", "shipped"));
   await activate(frame, "保存");
   await frame.getByRole("button", { name: "确认", exact: true }).click();
   await expect(frame.locator("#status")).toContainText("HTTP 412");
   expect(
-    (await (await request.get("http://127.0.0.1:18081/test/state")).json())
-      .writeCount,
+    (await (await request.get(mockURL + "/test/state")).json()).writeCount,
   ).toBe(1);
 });
 test("read-only connection allows querying and reading but disables writes", async ({
@@ -94,14 +91,12 @@ test("create and conditional delete require explicit confirmation", async ({
   await activate(frame, "删除");
   await frame.getByRole("button", { name: "取消", exact: true }).click();
   expect(
-    (await (await request.get("http://127.0.0.1:18081/test/state")).json())
-      .deleted,
+    (await (await request.get(mockURL + "/test/state")).json()).deleted,
   ).toBe(false);
   await activate(frame, "删除");
   await frame.getByRole("button", { name: "确认", exact: true }).click();
   await expect(frame.locator("#status")).toContainText("删除成功");
   expect(
-    (await (await request.get("http://127.0.0.1:18081/test/state")).json())
-      .deleted,
+    (await (await request.get(mockURL + "/test/state")).json()).deleted,
   ).toBe(true);
 });

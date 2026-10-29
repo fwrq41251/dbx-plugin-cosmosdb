@@ -1,3 +1,4 @@
+import { t } from "./i18n.mjs";
 import { isLosslessNumber } from "lossless-json";
 
 const identifier = /^[\p{L}_$][\p{L}\p{N}_$]*$/u;
@@ -186,7 +187,11 @@ export function sqlCompletions(
       from: pos - parameter[0].length,
       options: [...new Set(parameters)]
         .filter((x) => x.startsWith(parameter[0]))
-        .map((label) => ({ label, type: "variable", detail: "查询参数" })),
+        .map((label) => ({
+          label,
+          type: "variable",
+          detail: t("query.parameters"),
+        })),
     };
   const word = before.text.match(/[\p{L}_$][\p{L}\p{N}_$]*$/u);
   if (!word && !explicit) return null;
@@ -206,8 +211,15 @@ export function sqlCompletions(
     ...[...aliases.keys()].map((label) => ({
       label,
       type: "variable",
-      detail: "文档别名",
+      detail: t("ui.documentAlias"),
     })),
   ].filter((x) => x.label.toLowerCase().startsWith(prefix.toLowerCase()));
   return { from: pos - prefix.length, options };
+}
+
+// Mask strings and comments using the same scanner as SQL completion.
+export function sqlParameterNames(text) {
+  return [
+    ...new Set(codeAt(text).text.match(/@[\p{L}_$][\p{L}\p{N}_$]*/gu) || []),
+  ];
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"math"
 	"os"
@@ -41,11 +40,11 @@ func (c *cosmosClient) tablePreferences(database, container string, value *table
 	}
 	validate := func(v *tableLayout) error {
 		if len(v.Widths) > 500 {
-			return errors.New("Too many column preferences")
+			return reasonError("tablelayout.tooManyColumns", "Too many column preferences")
 		}
 		for name, width := range v.Widths {
 			if len(name) > 4096 || math.IsNaN(width) || math.IsInf(width, 0) || width < 80 || width > 800 {
-				return errors.New("Invalid column width")
+				return reasonError("tablelayout.invalidWidth", "Invalid column width")
 			}
 		}
 		return nil
@@ -64,7 +63,7 @@ func (c *cosmosClient) tablePreferences(database, container string, value *table
 			return empty, err
 		}
 		if len(data) > 128*1024 || json.Unmarshal(data, &empty) != nil {
-			return empty, errors.New("Invalid table preferences")
+			return empty, reasonError("tablelayout.invalidPreferences", "Invalid table preferences")
 		}
 		if err = validate(&empty); err != nil {
 			return empty, err
@@ -86,7 +85,7 @@ func (c *cosmosClient) tablePreferences(database, container string, value *table
 	}
 	data, err := json.Marshal(value)
 	if err != nil || len(data) > 128*1024 {
-		return empty, errors.New("Table preferences exceed storage limit")
+		return empty, reasonError("tablelayout.storageLimit", "Table preferences exceed storage limit")
 	}
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return empty, err

@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -40,7 +40,10 @@ test("new documents inherit partition fields, generate UUIDs, preview changes an
   await activate(f, "save");
   await expect(f.locator("#confirm-changes")).toBeVisible();
   await expect(f.locator("#change-rows")).toContainText("9223372036854775807");
-  await page.screenshot({ path: "docs/cud-preview.png", fullPage: true });
+  await page.screenshot({
+    path: capturePath("cud-preview.png"),
+    fullPage: true,
+  });
   await f.locator("#confirm-cancel").click();
   expect((await state(request)).writeCount).toBe(0);
   await expect(f.locator("#editor .cm-content")).toHaveText(/preview-document/);

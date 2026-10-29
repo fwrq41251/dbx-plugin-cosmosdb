@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -51,7 +50,7 @@ func (c *cosmosClient) selectedScope() (selectedScope, bool, error) {
 		}
 		legacy := selectedScope{1, c.database, c.container, "legacy"}
 		if !legacy.valid() {
-			return selectedScope{}, false, errors.New("Invalid legacy container position")
+			return selectedScope{}, false, reasonError("selectedscope.invalidLegacyPosition", "Invalid legacy container position")
 		}
 		return legacy, false, nil
 	}
@@ -62,7 +61,7 @@ func (c *cosmosClient) selectedScope() (selectedScope, bool, error) {
 	data, err := io.ReadAll(io.LimitReader(f, 8193))
 	var location selectedScope
 	if err != nil || len(data) > 8192 || json.Unmarshal(data, &location) != nil || !location.valid() {
-		return selectedScope{}, false, errors.New("Saved container position is invalid; select a container in the workbench")
+		return selectedScope{}, false, reasonError("selectedscope.invalidSavedPosition", "Saved container position is invalid; select a container in the workbench")
 	}
 	return location, true, nil
 }
@@ -74,7 +73,7 @@ func (c *cosmosClient) saveSelectedScope(database, container string, migrate boo
 	}
 	location.Revision = hex.EncodeToString(nonce)
 	if !location.valid() {
-		return location, errors.New("A database and container must be selected together")
+		return location, reasonError("selectedscope.selectionRequired", "A database and container must be selected together")
 	}
 	path, err := c.selectedScopePath()
 	if err != nil {

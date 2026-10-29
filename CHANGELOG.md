@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.23.0 — Session boundaries and stable error contracts
+
+- Separate query execution/cancellation, document writes/identity and scope transitions into controllers with independent state; retain draft, stale-response and write-confirmation safeguards.
+- Add stable reason/args to RPC and MCP failures and structured warning details while retaining legacy messages, codes and metadata. Translate by reason, with raw fallback for unknown errors.
+- Isolate each browser run’s host/plugin/SDK storage and ports, clean up after servers exit, and retain debugging artifacts separately. Write generated UI atomically.
+
+## 0.22.0 — Stable localization identities
+
+- Introduce stable message IDs, complete Chinese/English dictionaries and a locale registry. Generate manifest translations from the same catalogs; adding a language no longer requires changing the formatter, HTML or connection-form mappings.
+- Replace rendered-text reverse lookup with explicit message recipes and localized errors. Mark static UI nodes explicitly; preserve raw SQL, identifiers and document values. Repair detached-node rebinding and locale-sensitive cached partition labels.
+- Separate document change kinds from presentation labels, freeze completed-query durations, and make JSON formatting linear in input/output traversal without changing numeric tokens or output.
+
+## 0.21.0 — Follow the DBX language
+
+- Add Chinese and English UI messages, automatically following the DBX host locale and live environment changes. Other locales fall back to English; no plugin language preference or switch is added.
+- Translate connection form labels through manifest localizations, workbench actions, confirmations, accessibility labels, CodeMirror search/diagnostics and counted JSON folds. Preserve SQL, identifiers, document values, drafts, undo history and result state when the language changes.
+- Keep backend/MCP error contracts unchanged; localize recognized plugin explanations only at UI boundaries and preserve unknown service messages.
+
+## 0.20.0 — Clearer JSON structure
+
+- Add subtle JSON hierarchy guides and accent the current container in document and result readers. Fold summaries count direct object properties or array items without parsing numeric values into JavaScript numbers.
+- Enlarge gutter chevrons and support keyboard expansion of folded summaries. Preserve full-source copy, result-item context menus and existing fold shortcuts.
+- Hide query parameters for ordinary SQL; reveal and expand them when SQL uses a real parameter placeholder or parameter input is populated. Ignore placeholders inside quoted strings and comments.
+
 ## 0.19.0 — Persistent view choices and quieter tools
 
 - Persist independent result table/JSON and document fields/JSON choices as private plugin-wide enum preferences, reused on reload, reconnect, container changes, new documents and previews. Merge partial updates atomically; invalid records fall back and storage failures leave the current view usable.

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -52,7 +51,7 @@ func (p *plugin) viewPreferences(c *cosmosClient, patch *viewPreferencePatch) (v
 			proposed.Document = *patch.Document
 		}
 		if !proposed.valid() {
-			return value, errors.New("Invalid view preference")
+			return value, reasonError("viewpreferences.invalidView", "Invalid view preference")
 		}
 	}
 	path, err := c.viewPreferencesPath()

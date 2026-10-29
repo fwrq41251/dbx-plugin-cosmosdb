@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -66,13 +66,13 @@ test("query controls align and document tools stay in a single compact row", asy
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/workspace-layout.png" });
+    .screenshot({ path: capturePath("workspace-layout.png") });
   await page.getByRole("button", { name: "深色主题", exact: true }).click();
   await expect(f.locator("body")).not.toHaveClass(/light/);
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "docs/workspace-layout-dark.png" });
+    .screenshot({ path: capturePath("workspace-layout-dark.png") });
   expect((await (await request.get(base + "state")).json()).writeCount).toBe(0);
 });
 
@@ -122,7 +122,7 @@ for (const width of [1100, 900, 600]) {
       await page
         .locator("iframe")
         .last()
-        .screenshot({ path: "/tmp/dbx-ux-narrow.png" });
+        .screenshot({ path: capturePath("dbx-ux-narrow.png") });
   });
 }
 

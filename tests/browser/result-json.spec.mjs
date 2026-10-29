@@ -1,6 +1,6 @@
+import { capturePath, mockURL, connect, query } from "./support.mjs";
 import { test, expect } from "@playwright/test";
-import { connect, query } from "./support.mjs";
-const base = "http://127.0.0.1:18081/test/";
+const base = mockURL + "/test/";
 test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
@@ -72,7 +72,7 @@ test("result JSON is lazy, read-only, searchable and foldable without extra quer
   await page
     .locator("iframe")
     .last()
-    .screenshot({ path: "/tmp/dbx-result-json.png" });
+    .screenshot({ path: capturePath("dbx-result-json.png") });
 });
 
 test("current-page filters, page changes and scopes replace the JSON reader without stale data", async ({

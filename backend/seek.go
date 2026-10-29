@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"math/big"
 	"net/http"
 	"time"
@@ -41,11 +40,11 @@ func (c *cosmosClient) seekPartitionKeys(r request) (keyPage, error) {
 			} `json:"partitionKey"`
 		}
 		if json.Unmarshal(meta.Items, &container) != nil {
-			return result, errors.New("Invalid container metadata")
+			return result, reasonError("partitions.invalidMetadata", "Invalid container metadata")
 		}
 		cur.Paths = container.PartitionKey.Paths
 		if len(cur.Paths) != 1 {
-			return result, errors.New("索引跳读目前支持单路径分区键；此容器请使用已知候选或手动输入，不会自动扫描文档")
+			return result, reasonError("seek.hierarchyUnsupported", "索引跳读目前支持单路径分区键；此容器请使用已知候选或手动输入，不会自动扫描文档")
 		}
 		var ru float64
 		cur.Ranges, ru, err = c.partitionRanges(link, parent)
@@ -55,15 +54,15 @@ func (c *cosmosClient) seekPartitionKeys(r request) (keyPage, error) {
 		}
 	} else {
 		if len(r.Continuation) > 128*1024 {
-			return result, errors.New("Partition cursor is too large")
+			return result, reasonError("partitions.cursorTooLarge", "Partition cursor is too large")
 		}
 		data, err := base64.RawURLEncoding.DecodeString(r.Continuation)
 		if err != nil || json.Unmarshal(data, &cur) != nil || cur.Version != 1 || cur.Database != r.Database || cur.Container != r.Container {
-			return result, errors.New("Invalid seek cursor; refresh the partition list")
+			return result, reasonError("seek.invalidCursor", "Invalid seek cursor; refresh the partition list")
 		}
 	}
 	if len(cur.Paths) != 1 || len(cur.Ranges) == 0 || len(cur.Ranges) > 32000 || cur.Range < 0 || cur.Range >= len(cur.Ranges) || cur.Phase < 0 || cur.Phase > 5 {
-		return result, errors.New("Invalid seek cursor state; refresh the partition list")
+		return result, reasonError("seek.invalidCursorState", "Invalid seek cursor state; refresh the partition list")
 	}
 	if err := validID(cur.Ranges[cur.Range]); err != nil {
 		return result, err
@@ -84,7 +83,7 @@ func (c *cosmosClient) seekPartitionKeys(r request) (keyPage, error) {
 		if len(cur.After) > 0 {
 			var value any
 			if json.Unmarshal(cur.After, &value) != nil || (cur.Phase == 0 && !isJSONString(cur.After)) || (cur.Phase == 1 && !isJSONNumber(cur.After)) {
-				return result, errors.New("Invalid typed seek boundary")
+				return result, reasonError("seek.invalidBoundary", "Invalid typed seek boundary")
 			}
 			query += " AND " + expr + " > @after"
 			parameters = append(parameters, parameter{Name: "@after", Value: cur.After})
@@ -120,7 +119,7 @@ func (c *cosmosClient) seekPartitionKeys(r request) (keyPage, error) {
 	}
 	var docs []json.RawMessage
 	if json.Unmarshal(p.Items, &docs) != nil || len(docs) > 1 {
-		return result, errors.New("Invalid TOP 1 seek result")
+		return result, reasonError("seek.invalidResult", "Invalid TOP 1 seek result")
 	}
 	result.Scanned = len(docs)
 	cur.Token = p.Continuation
@@ -139,7 +138,7 @@ func (c *cosmosClient) seekPartitionKeys(r request) (keyPage, error) {
 			_ = json.Unmarshal(docs[0], &row)
 			next := row["k0"]
 			if (cur.Phase == 0 && !isJSONString(next)) || (cur.Phase == 1 && !isJSONNumber(next)) || !seekAdvanced(cur.After, next, cur.Phase) {
-				return result, errors.New("Index seek did not return a new value; refresh the partition list")
+				return result, reasonError("seek.repeatedValue", "Index seek did not return a new value; refresh the partition list")
 			}
 			cur.After = next
 		} else {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"math/big"
 	"reflect"
 )
@@ -14,14 +13,14 @@ func validateDocumentPartition(document, key, metadata json.RawMessage) error {
 		} `json:"partitionKey"`
 	}
 	if json.Unmarshal(metadata, &container) != nil {
-		return errors.New("Invalid container metadata")
+		return reasonError("partitions.invalidMetadata", "Invalid container metadata")
 	}
 	actual, err := partitionKeyFor(document, container.PartitionKey.Paths)
 	if err != nil {
 		return err
 	}
 	if !samePartitionKey(json.RawMessage(actual), key) {
-		return errors.New("文档正文的分区键与目标分区不一致，请检查分区键字段；更新不能移动文档到其他分区")
+		return reasonError("mutations.partitionMismatch", "文档正文的分区键与目标分区不一致，请检查分区键字段；更新不能移动文档到其他分区")
 	}
 	return nil
 }
@@ -75,7 +74,7 @@ func (c *cosmosClient) observeMutation(r request, deleted bool) (float64, error)
 			ru = p.RU
 			var docs []json.RawMessage
 			if json.Unmarshal(p.Items, &docs) != nil {
-				return ru, errors.New("Invalid remaining partition result")
+				return ru, reasonError("mutations.invalidRemainingResult", "Invalid remaining partition result")
 			}
 			if len(docs) == 0 && p.Continuation == "" {
 				delete(keys, key)

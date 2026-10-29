@@ -521,6 +521,5 @@ const server = http.createServer(async (req, res) => {
   }
   send({}, 404);
 });
-server.listen(18081, "127.0.0.1", () =>
-  console.log("Mock Cosmos: http://127.0.0.1:18081"),
-);
+const port=Number(process.env.COSMOS_E2E_MOCK_PORT || 18081);
+server.listen(port, "127.0.0.1", () => console.log(`Mock Cosmos: http://127.0.0.1:${port}`));

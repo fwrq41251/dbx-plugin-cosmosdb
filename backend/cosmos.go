@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -38,14 +37,15 @@ type parameter struct {
 	Value json.RawMessage `json:"value"`
 }
 type page struct {
-	Items        json.RawMessage `json:"-"`
-	JSON         string          `json:"json"`
-	Continuation string          `json:"continuation"`
-	RU           float64         `json:"ru"`
-	DurationMS   int64           `json:"durationMs"`
-	ActivityID   string          `json:"activityId"`
-	ETag         string          `json:"etag,omitempty"`
-	CacheWarning string          `json:"cacheWarning,omitempty"`
+	Items              json.RawMessage `json:"-"`
+	JSON               string          `json:"json"`
+	Continuation       string          `json:"continuation"`
+	RU                 float64         `json:"ru"`
+	DurationMS         int64           `json:"durationMs"`
+	ActivityID         string          `json:"activityId"`
+	ETag               string          `json:"etag,omitempty"`
+	CacheWarning       string          `json:"cacheWarning,omitempty"`
+	CacheWarningDetail *reasonDetail   `json:"cacheWarningDetail,omitempty"`
 }
 type serviceError struct {
 	status                    int
@@ -71,16 +71,16 @@ func newClient(endpoint, key string, readOnly bool) (*cosmosClient, error) {
 	}
 	u, err := url.Parse(endpoint)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-		return nil, errors.New("Endpoint must be an account URL, for example https://account.documents.azure.com:443/")
+		return nil, reasonError("cosmos.invalidEndpoint", "Endpoint must be an account URL, for example https://account.documents.azure.com:443/")
 	}
 	ip := net.ParseIP(u.Hostname())
 	local := u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback())
 	if u.Scheme != "https" && !(u.Scheme == "http" && local) {
-		return nil, errors.New("HTTPS is required (HTTP is allowed only for a loopback test service)")
+		return nil, reasonError("cosmos.httpsRequired", "HTTPS is required (HTTP is allowed only for a loopback test service)")
 	}
 	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(key))
 	if err != nil || len(decoded) == 0 {
-		return nil, errors.New("Account Key must be a non-empty base64 key")
+		return nil, reasonError("cosmos.invalidAccountKey", "Account Key must be a non-empty base64 key")
 	}
 	h := &http.Client{Timeout: 45 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return &cosmosClient{endpoint: strings.TrimRight(u.String(), "/"), key: decoded, http: h, readOnly: readOnly, sessions: make(map[string]string)}, nil
@@ -92,7 +92,7 @@ func authorization(key []byte, method, kind, link, date string) string {
 }
 func validID(id string) error {
 	if id == "" || strings.ContainsAny(id, "/\\?#") || strings.HasSuffix(id, " ") {
-		return errors.New("Resource id is empty or contains unsupported characters (/ \\ ? # or a trailing space)")
+		return reasonError("cosmos.invalidResourceId", "Resource id is empty or contains unsupported characters (/ \\ ? # or a trailing space)")
 	}
 	return nil
 }
@@ -114,7 +114,7 @@ func (c *cosmosClient) requestContext(ctx context.Context, method, kind, link, p
 	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, method, c.endpoint+"/"+path, bytes.NewReader(body))
 	if err != nil {
-		return page{}, errors.New("Could not construct Cosmos request")
+		return page{}, reasonError("cosmos.requestConstruction", "Could not construct Cosmos request")
 	}
 	if headers != nil {
 		req.Header = headers.Clone()
@@ -140,7 +140,7 @@ func (c *cosmosClient) requestContext(ctx context.Context, method, kind, link, p
 		if ctx.Err() != nil {
 			return page{}, ctx.Err()
 		}
-		return page{}, errors.New("Cosmos request failed or timed out. Check network access. For a write, its outcome may be unknown; reload before retrying.")
+		return page{}, reasonError("cosmos.networkFailure", "Cosmos request failed or timed out. Check network access. For a write, its outcome may be unknown; reload before retrying.")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -156,16 +156,16 @@ func (c *cosmosClient) requestContext(ctx context.Context, method, kind, link, p
 		if ctx.Err() != nil {
 			return page{}, ctx.Err()
 		}
-		return page{}, errors.New("Could not read service response; reload to verify any write outcome")
+		return page{}, reasonError("cosmos.responseRead", "Could not read service response; reload to verify any write outcome")
 	}
 	if len(data) > limit {
-		return page{}, errors.New("Result page exceeds 6 MiB; reduce page size (verify any write outcome before retrying)")
+		return page{}, reasonError("cosmos.responseSize", "Result page exceeds 6 MiB; reduce page size (verify any write outcome before retrying)")
 	}
 	if len(data) == 0 {
 		data = []byte("null")
 	}
 	if !json.Valid(data) {
-		return page{}, errors.New("Service returned invalid JSON")
+		return page{}, reasonError("cosmos.invalidJSON", "Service returned invalid JSON")
 	}
 	if sessionKey != "" {
 		if token := resp.Header.Get("x-ms-session-token"); token != "" {
@@ -196,11 +196,11 @@ func (c *cosmosClient) list(kind, link, parent, array, continuation string, size
 func unwrap(p page, key string) (page, error) {
 	var o map[string]json.RawMessage
 	if json.Unmarshal(p.Items, &o) != nil {
-		return p, errors.New("Invalid Cosmos result envelope")
+		return p, reasonError("cosmos.invalidEnvelope", "Invalid Cosmos result envelope")
 	}
 	items, ok := o[key]
 	if !ok || len(items) == 0 || items[0] != '[' {
-		return p, errors.New("Missing result array in Cosmos response")
+		return p, reasonError("cosmos.missingResultArray", "Missing result array in Cosmos response")
 	}
 	p.Items = items
 	p.JSON = string(items)
@@ -212,23 +212,23 @@ func partitionHeader(raw json.RawMessage) (string, error) {
 	}
 	var values []json.RawMessage
 	if json.Unmarshal(raw, &values) != nil || len(values) == 0 || len(values) > 3 {
-		return "", errors.New("Partition key must be a JSON array with 1–3 components; use [{}] for an undefined value")
+		return "", reasonError("cosmos.invalidPartitionArray", "Partition key must be a JSON array with 1–3 components; use [{}] for an undefined value")
 	}
 	for _, v := range values {
 		var x any
 		d := json.NewDecoder(bytes.NewReader(v))
 		d.UseNumber()
 		if d.Decode(&x) != nil {
-			return "", errors.New("Invalid partition key")
+			return "", reasonError("cosmos.invalidPartitionKey", "Invalid partition key")
 		}
 		switch value := x.(type) {
 		case nil, string, bool, json.Number:
 		case map[string]any:
 			if len(value) != 0 {
-				return "", errors.New("Undefined partition key must be {}")
+				return "", reasonError("cosmos.invalidUndefinedKey", "Undefined partition key must be {}")
 			}
 		default:
-			return "", errors.New("Partition key components must be scalar values or {}")
+			return "", reasonError("cosmos.invalidPartitionComponent", "Partition key components must be scalar values or {}")
 		}
 	}
 	var compact bytes.Buffer
@@ -248,14 +248,14 @@ func (c *cosmosClient) documents(method string, r request) (page, error) {
 	}
 	if method == "cosmos/query" {
 		if strings.TrimSpace(r.Query) == "" {
-			return page{}, errors.New("Query is required")
+			return page{}, reasonError("cosmos.queryRequired", "Query is required")
 		}
 		if r.Parameters == nil {
 			r.Parameters = []parameter{}
 		}
 		for _, p := range r.Parameters {
 			if !strings.HasPrefix(p.Name, "@") || !json.Valid(p.Value) {
-				return page{}, errors.New("Query parameters require @name and a JSON value")
+				return page{}, reasonError("cosmos.invalidParameters", "Query parameters require @name and a JSON value")
 			}
 		}
 		body, _ := json.Marshal(map[string]any{"query": r.Query, "parameters": r.Parameters})
@@ -273,27 +273,27 @@ func (c *cosmosClient) documents(method string, r request) (page, error) {
 		return unwrap(p, "Documents")
 	}
 	if method != "cosmos/read" && c.readOnly {
-		return page{}, errors.New("Connection is read-only. Disable Read only in the saved connection to enable document writes")
+		return page{}, reasonError("cosmos.readOnly", "Connection is read-only. Disable Read only in the saved connection to enable document writes")
 	}
 	if pk == "" {
-		return page{}, errors.New("An explicit partition-key array is required for point reads and writes")
+		return page{}, reasonError("cosmos.partitionRequired", "An explicit partition-key array is required for point reads and writes")
 	}
 	verb := "GET"
 	var body []byte
 	if method == "cosmos/create" || method == "cosmos/replace" {
 		var doc map[string]json.RawMessage
 		if json.Unmarshal(r.Document, &doc) != nil || doc == nil {
-			return page{}, errors.New("Document must be a JSON object")
+			return page{}, reasonError("cosmos.invalidDocument", "Document must be a JSON object")
 		}
 		var id string
 		if json.Unmarshal(doc["id"], &id) != nil {
-			return page{}, errors.New("Document requires a string id")
+			return page{}, reasonError("cosmos.documentIdRequired", "Document requires a string id")
 		}
 		if err := validID(id); err != nil {
 			return page{}, err
 		}
 		if method == "cosmos/replace" && id != r.ID {
-			return page{}, errors.New("Document id cannot change during replacement")
+			return page{}, reasonError("cosmos.immutableId", "Document id cannot change during replacement")
 		}
 		for _, f := range []string{"_rid", "_self", "_etag", "_attachments", "_ts"} {
 			delete(doc, f)
@@ -316,7 +316,7 @@ func (c *cosmosClient) documents(method string, r request) (page, error) {
 	}
 	if method == "cosmos/replace" || method == "cosmos/delete" {
 		if r.ETag == "" || r.ETag == "*" {
-			return page{}, errors.New("Reload the complete document first: its ETag is required for update and delete")
+			return page{}, reasonError("cosmos.etagRequired", "Reload the complete document first: its ETag is required for update and delete")
 		}
 		h.Set("If-Match", r.ETag)
 	}
