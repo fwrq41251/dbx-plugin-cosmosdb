@@ -16,16 +16,20 @@
 - 表格、JSON 编辑和传输保留大整数与小数原文精度。
 - 新增时继承当前分区键并生成 UUID；保存 / 删除前预览字段差异；写入后自动刷新上次查询与分区键缓存。
 - 字段视图支持筛选、类型保持的编辑与字段增删；默认使用带版本条件的 Patch 局部更新。
+- 中文/英文跟随 DBX 语言；独立记住结果和文档的查看格式。
+- 按容器自动保存并恢复 SQL、分区键、参数和每页数量；恢复后由用户执行查询。
 
 ![工作台（本地模拟数据）](docs/container-workspace.png)
 
+更多预览：[JSON 层级](docs/json-structure.png) · [英文界面](docs/workspace-english.png) · [深色主题](docs/dbx-polish-scoped-dark.png)
+
 ## 在 DBX 中安装
 
-`0.19.0` 开发候选版兼容目标为 DBX **0.6.59+**、Host API 1.x、sidecar protocol v1。首个商店版本 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
+`0.24.0` 发布候选版兼容目标为 DBX **0.6.59+**、Host API 1.x、sidecar protocol v1。首个商店版本 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
 
 打开 **DBX → 插件中心 → Marketplace**，搜索 **Cosmos DB NoSQL**，确认发布者为 `fwrq41251`，点击安装。官方商店自动验证安装包签名，无需开启“允许安装未签名开发包”。
 
-正式插件 ID 为 `io.github.fwrq41251.cosmosdb`，当前商店版为 `0.8.0`，支持 macOS ARM64（Apple Silicon）。其他平台暂未提供商店安装包。[上架记录](https://github.com/t8y2/dbx-store/pull/384)。更新或重装前先关闭使用此插件的连接；同一正式插件身份的连接可在安装后重新打开。
+正式插件 ID 为 `io.github.fwrq41251.cosmosdb`，截至本次发布准备，商店版为 `0.16.0`，支持 macOS ARM64（Apple Silicon）。其他平台暂未提供商店安装包。[0.16.0 上架记录](https://github.com/t8y2/dbx-store/pull/397)。更新或重装前先关闭使用此插件的连接；同一正式插件身份的连接可在安装后重新打开。
 
 新建连接时选择 **Azure Cosmos DB for NoSQL**：
 
