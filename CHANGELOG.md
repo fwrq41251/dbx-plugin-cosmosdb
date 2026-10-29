@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.25.0 — Independent native query workspaces
+
+- Isolate SQL, partition keys, parameters, page size and selected location by the host workbench id, in addition to connection/endpoint/container. Restore each native tab without executing a query.
+- Recognize the native New Query context: inherit the source workbench location, start with default query input, and never overwrite the ordinary connection-reopen fallback. Migrate existing input on first ordinary-workbench use.
+- Keep the connection default and MCP scope independent of restored tabs. Explicit container selections still update the shared default; failures to save a tab-specific location produce a localized warning.
+- On supported hosts, flush pending input saves and stop only this workbench’s query/discovery on close. No additional plugin-level tab bar or new-query button.
+- Requires a DBX host update to make its native New Query button force a new plugin workbench. Older hosts retain their previous behavior.
+
 ## 0.24.0 — Restore container query input
 
 - Automatically save SQL, partition text, parameter text and page size in private local storage, isolated by connection, endpoint, database and container. Restore input on reopening or returning to a container without executing queries or discovery.

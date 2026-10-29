@@ -122,12 +122,14 @@ export function createScopeController(dependencies) {
     }
   }
   async function selectContainer(next, persist = true) {
+    let scopeWarning;
     if (next && persist) {
       try {
-        await invoke("cosmos/selectScope", {
+        const result = await invoke("cosmos/selectScope", {
           database: scopeState.database,
           container: next,
         });
+        scopeWarning = result?.scopeWarning;
       } catch (error) {
         $("container").value = scopeState.container;
         throw error;
@@ -151,6 +153,7 @@ export function createScopeController(dependencies) {
     updateScopeContext();
     status(next ? msg("ui.readyToQuery") : msg("ui.selectAContainer"));
     if (next) await loadQueryInputs();
+    if (scopeWarning) status(scopeWarning, true);
   }
   return { listAll, loadDatabases, selectDatabase, selectContainer };
 }

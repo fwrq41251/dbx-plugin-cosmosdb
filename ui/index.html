@@ -2499,7 +2499,7 @@ body.light .sql-error {
   function createQueryInputs({ invoke: invoke2, read, apply, failed }) {
     const entries = /* @__PURE__ */ new Map();
     let current = null, generation = 0, applying = false;
-    const keyFor = (target) => JSON.stringify([target.connectionId, target.database, target.container]);
+    const keyFor = (target) => JSON.stringify([target.connectionId, target.workbenchId || "", target.database, target.container]);
     function display(value) {
       applying = true;
       try {
@@ -2584,7 +2584,8 @@ body.light .sql-error {
       display(defaultQueryInput());
       changed();
     }
-    return { activate, changed, deactivate, reset };
+    const flush = () => Promise.all([...entries.values()].map((entry) => entry.writes));
+    return { activate, changed, deactivate, reset, flush };
   }
 
   // src/i18n-core.mjs
@@ -3152,7 +3153,11 @@ body.light .sql-error {
     "query.restoreFailed": "Could not restore saved query input. You can continue editing.",
     "query.saveInputFailed": "Could not save query input. Current input remains available in this workbench.",
     "service.queryinput.invalidRecord": "Saved query input is invalid",
-    "service.queryinput.invalidInput": "Query input exceeds storage limits or has an invalid page size"
+    "service.queryinput.invalidInput": "Query input exceeds storage limits or has an invalid page size",
+    "service.warning.workbenchScopeSave": "Workspace position could not be saved; reopening this tab may restore its previous position.",
+    "service.workbench.invalidId": "Invalid workbench id",
+    "service.workbench.invalidRecord": "Invalid saved workbench position",
+    "service.workbench.notOpened": "Workbench must be opened before use"
   };
 
   // src/locales/zh-CN.json
@@ -3630,7 +3635,11 @@ body.light .sql-error {
     "query.restoreFailed": "\u65E0\u6CD5\u6062\u590D\u4FDD\u5B58\u7684\u67E5\u8BE2\u8F93\u5165\uFF0C\u53EF\u4EE5\u7EE7\u7EED\u7F16\u8F91\u3002",
     "query.saveInputFailed": "\u67E5\u8BE2\u8F93\u5165\u4FDD\u5B58\u5931\u8D25\uFF0C\u5F53\u524D\u5DE5\u4F5C\u53F0\u4E2D\u7684\u8F93\u5165\u4ECD\u4FDD\u7559\u3002",
     "service.queryinput.invalidRecord": "\u4FDD\u5B58\u7684\u67E5\u8BE2\u8F93\u5165\u65E0\u6548",
-    "service.queryinput.invalidInput": "\u67E5\u8BE2\u8F93\u5165\u8D85\u51FA\u5B58\u50A8\u9650\u5236\u6216\u6BCF\u9875\u6570\u91CF\u65E0\u6548"
+    "service.queryinput.invalidInput": "\u67E5\u8BE2\u8F93\u5165\u8D85\u51FA\u5B58\u50A8\u9650\u5236\u6216\u6BCF\u9875\u6570\u91CF\u65E0\u6548",
+    "service.warning.workbenchScopeSave": "\u5F53\u524D\u6807\u7B7E\u7684\u4F4D\u7F6E\u4FDD\u5B58\u5931\u8D25\uFF1B\u91CD\u65B0\u6253\u5F00\u8BE5\u6807\u7B7E\u65F6\u53EF\u80FD\u6062\u590D\u5230\u4E4B\u524D\u7684\u4F4D\u7F6E\u3002",
+    "service.workbench.invalidId": "\u5DE5\u4F5C\u53F0\u6807\u8BC6\u65E0\u6548",
+    "service.workbench.invalidRecord": "\u5DF2\u4FDD\u5B58\u7684\u5DE5\u4F5C\u53F0\u4F4D\u7F6E\u65E0\u6548",
+    "service.workbench.notOpened": "\u8BF7\u5148\u6253\u5F00\u6B64\u5DE5\u4F5C\u53F0"
   };
 
   // src/locales/index.mjs
@@ -3817,7 +3826,11 @@ body.light .sql-error {
     "warning.mutationCache": "ui.documentWriteSucceededButThePartitionKey",
     "partitions.invalidValue": "service.partitions.invalidValue",
     "queryinput.invalidRecord": "service.queryinput.invalidRecord",
-    "queryinput.invalidInput": "service.queryinput.invalidInput"
+    "queryinput.invalidInput": "service.queryinput.invalidInput",
+    "warning.workbenchScopeSave": "service.warning.workbenchScopeSave",
+    "workbench.invalidId": "service.workbench.invalidId",
+    "workbench.invalidRecord": "service.workbench.invalidRecord",
+    "workbench.notOpened": "service.workbench.notOpened"
   };
 
   // src/i18n.mjs
@@ -5432,12 +5445,14 @@ ${indent}}` : "}";
       }
     }
     async function selectContainer2(next, persist = true) {
+      let scopeWarning;
       if (next && persist) {
         try {
-          await invoke2("cosmos/selectScope", {
+          const result = await invoke2("cosmos/selectScope", {
             database: scopeState2.database,
             container: next
           });
+          scopeWarning = result?.scopeWarning;
         } catch (error) {
           $2("container").value = scopeState2.container;
           throw error;
@@ -5460,6 +5475,7 @@ ${indent}}` : "}";
       updateScopeContext2();
       status2(next ? message("ui.readyToQuery") : message("ui.selectAContainer"));
       if (next) await loadQueryInputs2();
+      if (scopeWarning) status2(scopeWarning, true);
     }
     return { listAll: listAll2, loadDatabases: loadDatabases2, selectDatabase: selectDatabase2, selectContainer: selectContainer2 };
   }
@@ -31724,6 +31740,7 @@ ${indent}}` : "}";
   var $ = (id) => document.getElementById(id);
   var state = {
     connectionId: "",
+    workbenchId: "",
     connectionName: "",
     readOnly: true,
     busy: false,
@@ -31878,7 +31895,7 @@ ${indent}}` : "}";
     }
   });
   function loadQueryInputs() {
-    return queryInputs.activate({ connectionId: state.connectionId, ...scope() });
+    return queryInputs.activate({ connectionId: state.connectionId, workbenchId: state.workbenchId, ...scope() });
   }
   var partitionScopes = /* @__PURE__ */ new Map();
   var partitionTarget = "query-pk";
@@ -32278,7 +32295,7 @@ ${indent}}` : "}";
     const epoch = state.epoch;
     const result = await host.invoke(
       method,
-      { connectionId: state.connectionId, ...params },
+      { connectionId: state.connectionId, workbenchId: state.workbenchId, ...params },
       { timeoutMs: 6e4 }
     );
     if (epoch !== state.epoch) throw new Error("STALE");
@@ -33875,7 +33892,8 @@ ${indent}}` : "}";
   );
   async function contextChanged(context) {
     const id = context?.connectionId || context?.connection?.id || "";
-    if (id === state.connectionId) return;
+    const workbenchId = context?.workbenchId || "";
+    if (id === state.connectionId && workbenchId === state.workbenchId) return;
     if (queryState.queryJob) cancelQuery();
     for (const cache2 of partitionScopes.values()) cache2.loader?.stop();
     partitionScopes.clear();
@@ -33884,6 +33902,7 @@ ${indent}}` : "}";
     queryInputs.deactivate(true);
     state.epoch++;
     state.connectionId = id;
+    state.workbenchId = workbenchId;
     scopeState.database = "";
     scopeState.container = "";
     activatePartitionScope();
@@ -33909,7 +33928,10 @@ ${indent}}` : "}";
     }
     state.busy = false;
     await action(async () => {
-      const info = await invoke("cosmos/info");
+      const info = await invoke("cosmos/info", {
+        newQuery: context?.newQuery === true,
+        sourceWorkbenchId: context?.sourceWorkbenchId || ""
+      });
       state.readOnly = info.readOnly;
       scopeState.savedDatabase = info.database || "";
       scopeState.savedContainer = info.container || "";
@@ -33925,6 +33947,12 @@ ${indent}}` : "}";
   }
   controls();
   if (host) {
+    host.workbench?.onClose(async () => {
+      const job = queryState.queryJob;
+      if (job) cancelQuery();
+      for (const cache2 of partitionScopes.values()) cache2.loader?.stop();
+      await queryInputs.flush();
+    });
     host.onContext(contextChanged);
     host.ready.then((context) => {
       syncLocale();

@@ -82,3 +82,35 @@ test("storage failures preserve input, permit reset and do not issue queries", a
   inputs.reset();
   assert.deepEqual(value, defaultQueryInput());
 });
+
+test("workbench identity isolates pending restores and writes on the same connection/container", async () => {
+  let value = defaultQueryInput();
+  const storage = new Map(), calls = [];
+  const inputs = createQueryInputs({
+    read: () => value,
+    apply: (next) => (value = next),
+    failed: () => assert.fail("unexpected storage error"),
+    invoke: async (_, params) => {
+      calls.push(params);
+      if (params.queryInput) storage.set(params.workbenchId, params.queryInput);
+      return storage.get(params.workbenchId) || defaultQueryInput();
+    },
+  });
+  const a = { ...target("Orders"), workbenchId: "a" };
+  const b = { ...a, workbenchId: "b" };
+  await inputs.activate(a);
+  value = { ...value, sql: "SELECT a" };
+  inputs.changed();
+  await inputs.activate(b);
+  assert.equal(value.sql, "SELECT * FROM c");
+  value = { ...value, sql: "SELECT b" };
+  inputs.changed();
+  await inputs.flush();
+  await inputs.activate(a);
+  assert.equal(value.sql, "SELECT a");
+  await inputs.activate(b);
+  assert.equal(value.sql, "SELECT b");
+  assert.equal(storage.get("a").sql, "SELECT a");
+  assert.equal(storage.get("b").sql, "SELECT b");
+  assert.ok(calls.every((p) => ["a", "b"].includes(p.workbenchId)));
+});

@@ -134,5 +134,9 @@
   "warning.mutationCache": "ui.documentWriteSucceededButThePartitionKey",
   "partitions.invalidValue": "service.partitions.invalidValue",
   "queryinput.invalidRecord": "service.queryinput.invalidRecord",
-  "queryinput.invalidInput": "service.queryinput.invalidInput"
+  "queryinput.invalidInput": "service.queryinput.invalidInput",
+  "warning.workbenchScopeSave": "service.warning.workbenchScopeSave",
+  "workbench.invalidId": "service.workbench.invalidId",
+  "workbench.invalidRecord": "service.workbench.invalidRecord",
+  "workbench.notOpened": "service.workbench.notOpened"
 }

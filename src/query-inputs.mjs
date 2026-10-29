@@ -15,7 +15,7 @@ export function createQueryInputs({ invoke, read, apply, failed }) {
     generation = 0,
     applying = false;
   const keyFor = (target) =>
-    JSON.stringify([target.connectionId, target.database, target.container]);
+    JSON.stringify([target.connectionId, target.workbenchId || "", target.database, target.container]);
   function display(value) {
     applying = true;
     try {
@@ -110,5 +110,6 @@ export function createQueryInputs({ invoke, read, apply, failed }) {
     display(defaultQueryInput());
     changed();
   }
-  return { activate, changed, deactivate, reset };
+  const flush = () => Promise.all([...entries.values()].map((entry) => entry.writes));
+  return { activate, changed, deactivate, reset, flush };
 }

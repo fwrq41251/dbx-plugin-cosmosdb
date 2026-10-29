@@ -472,5 +472,9 @@
   "query.restoreFailed": "无法恢复保存的查询输入，可以继续编辑。",
   "query.saveInputFailed": "查询输入保存失败，当前工作台中的输入仍保留。",
   "service.queryinput.invalidRecord": "保存的查询输入无效",
-  "service.queryinput.invalidInput": "查询输入超出存储限制或每页数量无效"
+  "service.queryinput.invalidInput": "查询输入超出存储限制或每页数量无效",
+  "service.warning.workbenchScopeSave": "当前标签的位置保存失败；重新打开该标签时可能恢复到之前的位置。",
+  "service.workbench.invalidId": "工作台标识无效",
+  "service.workbench.invalidRecord": "已保存的工作台位置无效",
+  "service.workbench.notOpened": "请先打开此工作台"
 }

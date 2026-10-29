@@ -44,3 +44,15 @@ The first published target is macOS ARM64. Authentication is Account Key only; E
 Please report reproducible bugs using [GitHub issues](https://github.com/fwrq41251/dbx-plugin-cosmosdb/issues). Do not include Account Keys, authorization headers, private endpoint addresses or business documents in public reports.
 
 UI query cancellation applies only to document queries, never mutations. Bounded per-connection query IDs handle cancellation arriving before request registration; completed/canceled entries expire after one minute. Cancellation closes the client HTTP request but does not refund RU or assert that the server stopped before doing any work.
+
+### Native query workspaces (0.25.0)
+
+`workbenches-v1` stores only each host workbench's selected database/container and
+whether it was created by New Query. `query-input-workbench-v1` stores the same
+plaintext SQL, parameter, partition-key and page-size inputs described above,
+isolated by endpoint, connection, workbench and container. Existing native tabs
+restore their own records; restoration never executes SQL. Query results,
+document content and unsaved document drafts remain in memory. Explicit New
+Query tabs do not overwrite the ordinary connection-reopen input fallback.
+Directories use 0700 and files 0600 on macOS/Linux; these are access permissions,
+not encryption. These UI records are not exposed through MCP.

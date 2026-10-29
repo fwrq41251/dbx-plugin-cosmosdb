@@ -490,5 +490,9 @@
   "query.restoreFailed": "Could not restore saved query input. You can continue editing.",
   "query.saveInputFailed": "Could not save query input. Current input remains available in this workbench.",
   "service.queryinput.invalidRecord": "Saved query input is invalid",
-  "service.queryinput.invalidInput": "Query input exceeds storage limits or has an invalid page size"
+  "service.queryinput.invalidInput": "Query input exceeds storage limits or has an invalid page size",
+  "service.warning.workbenchScopeSave": "Workspace position could not be saved; reopening this tab may restore its previous position.",
+  "service.workbench.invalidId": "Invalid workbench id",
+  "service.workbench.invalidRecord": "Invalid saved workbench position",
+  "service.workbench.notOpened": "Workbench must be opened before use"
 }

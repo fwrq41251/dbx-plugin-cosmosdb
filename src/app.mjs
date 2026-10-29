@@ -55,6 +55,7 @@ import {
 const $ = (id) => document.getElementById(id);
 const state = {
   connectionId: "",
+  workbenchId: "",
   connectionName: "",
   readOnly: true,
   busy: false,
@@ -212,7 +213,7 @@ const queryInputs = createQueryInputs({
   },
 });
 function loadQueryInputs() {
-  return queryInputs.activate({ connectionId: state.connectionId, ...scope() });
+  return queryInputs.activate({ connectionId: state.connectionId, workbenchId: state.workbenchId, ...scope() });
 }
 const partitionScopes = new Map();
 let partitionTarget = "query-pk",
@@ -699,7 +700,7 @@ async function invoke(method, params = {}) {
   const epoch = state.epoch;
   const result = await host.invoke(
     method,
-    { connectionId: state.connectionId, ...params },
+    { connectionId: state.connectionId, workbenchId: state.workbenchId, ...params },
     { timeoutMs: 60000 },
   );
   if (epoch !== state.epoch) throw new Error("STALE");
@@ -2513,7 +2514,8 @@ document.addEventListener(
 );
 async function contextChanged(context) {
   const id = context?.connectionId || context?.connection?.id || "";
-  if (id === state.connectionId) return;
+  const workbenchId = context?.workbenchId || "";
+  if (id === state.connectionId && workbenchId === state.workbenchId) return;
   if (queryState.queryJob) cancelQuery();
   for (const cache of partitionScopes.values()) cache.loader?.stop();
   partitionScopes.clear();
@@ -2522,6 +2524,7 @@ async function contextChanged(context) {
   queryInputs.deactivate(true);
   state.epoch++;
   state.connectionId = id;
+  state.workbenchId = workbenchId;
   scopeState.database = "";
   scopeState.container = "";
   activatePartitionScope();
@@ -2553,7 +2556,10 @@ async function contextChanged(context) {
   // Context switches invalidate all earlier RPC responses before initializing the new view.
   state.busy = false;
   await action(async () => {
-    const info = await invoke("cosmos/info");
+    const info = await invoke("cosmos/info", {
+      newQuery: context?.newQuery === true,
+      sourceWorkbenchId: context?.sourceWorkbenchId || "",
+    });
     state.readOnly = info.readOnly;
     scopeState.savedDatabase = info.database || "";
     scopeState.savedContainer = info.container || "";
@@ -2568,6 +2574,14 @@ async function contextChanged(context) {
 }
 controls();
 if (host) {
+  host.workbench?.onClose(async () => {
+    // Close only this iframe's job/loaders. The saved connection is shared by
+    // sibling workbenches and must remain connected.
+    const job = queryState.queryJob;
+    if (job) cancelQuery();
+    for (const cache of partitionScopes.values()) cache.loader?.stop();
+    await queryInputs.flush();
+  });
   host.onContext(contextChanged);
   host.ready
     .then((context) => {

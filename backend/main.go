@@ -22,17 +22,21 @@ type plugin struct {
 	mcpMetadata  map[string]metadataEntry
 	viewMu       sync.Mutex
 	queryInputMu sync.Mutex
+	workbenchMu  sync.Mutex
 }
 type request struct {
-	QueryInput   *queryInput          `json:"queryInput"`
-	Browse       bool                 `json:"browse"`
-	ConnectionID string               `json:"connectionId"`
-	QueryID      string               `json:"queryId"`
-	Context      context.Context      `json:"-"`
-	Preferences  *tableLayout         `json:"preferences"`
-	Views        *viewPreferencePatch `json:"views"`
-	Connection   connection           `json:"connection"`
-	Runtime      struct {
+	WorkbenchID       string               `json:"workbenchId"`
+	SourceWorkbenchID string               `json:"sourceWorkbenchId"`
+	NewQuery          bool                 `json:"newQuery"`
+	QueryInput        *queryInput          `json:"queryInput"`
+	Browse            bool                 `json:"browse"`
+	ConnectionID      string               `json:"connectionId"`
+	QueryID           string               `json:"queryId"`
+	Context           context.Context      `json:"-"`
+	Preferences       *tableLayout         `json:"preferences"`
+	Views             *viewPreferencePatch `json:"views"`
+	Connection        connection           `json:"connection"`
+	Runtime           struct {
 		Host  string          `json:"host"`
 		Port  int             `json:"port"`
 		Proxy json.RawMessage `json:"proxy"`
@@ -170,13 +174,28 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		r.Context = ctx
 	}
 	if method == "cosmos/info" {
-		location, _, err := c.selectedScope()
+		location, err := p.openWorkbench(c, r.WorkbenchID, r.SourceWorkbenchID, r.NewQuery)
+		if err != nil && r.WorkbenchID != "" {
+			// A blank, initialized workspace can recover a broken connection
+			// default. A broken workspace record must never silently fall back.
+			p.workbenchMu.Lock()
+			_, found, recordErr := c.readWorkbench(r.WorkbenchID)
+			p.workbenchMu.Unlock()
+			if recordErr != nil || !found {
+				return nil, rpcError(err)
+			}
+		}
 		if err != nil || (location.Revision != "" && location.Revision == c.unavailableRevision) {
 			return map[string]any{"readOnly": c.readOnly, "database": "", "container": "", "scopeWarning": "保存的位置不可用，请重新选择数据库和容器", "scopeWarningDetail": reasonDetail{Reason: "warning.scopeUnavailable"}}, nil
 		}
 		return map[string]any{"readOnly": c.readOnly, "database": location.Database, "container": location.Container}, nil
 	}
 	if method == "cosmos/selectScope" {
+		if r.WorkbenchID != "" {
+			if _, err := p.workbenchScope(c, r.WorkbenchID); err != nil {
+				return nil, rpcError(err)
+			}
+		}
 		if validID(r.Database) != nil || validID(r.Container) != nil {
 			return nil, rpcReason(-32602, "selectedscope.selectionRequired", "A database and container must be selected together")
 		}
@@ -188,7 +207,14 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		if err != nil {
 			return nil, rpcReason(-32602, "main.scopeSaveFailed", "位置保存失败，未切换数据库或容器")
 		}
-		return map[string]any{"database": location.Database, "container": location.Container, "revision": location.Revision, "ru": metadata.RU}, nil
+		result := map[string]any{"database": location.Database, "container": location.Container, "revision": location.Revision, "ru": metadata.RU}
+		if err := p.saveWorkbenchScope(c, r.WorkbenchID, location); err != nil {
+			// The connection default was saved successfully. Commit the UI switch
+			// too, but clearly report that this tab's restore record was not saved.
+			result["scopeWarning"] = "Workspace position could not be saved; reopening this tab may restore its previous position."
+			result["scopeWarningDetail"] = reasonDetail{Reason: "warning.workbenchScopeSave"}
+		}
+		return result, nil
 	}
 	if r.PageSize == 0 {
 		r.PageSize = 100
@@ -203,7 +229,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		if validID(r.Database) != nil || validID(r.Container) != nil {
 			err = reasonError("main.scopeRequired", "A database and container are required")
 		} else {
-			result, err = p.queryInputs(c, r.Database, r.Container, r.QueryInput)
+			result, err = p.queryInputs(c, r.Database, r.Container, r.QueryInput, r.WorkbenchID)
 		}
 	case "cosmos/tablePreferences":
 		if validID(r.Database) != nil || validID(r.Container) != nil {
@@ -212,7 +238,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 			result, err = c.tablePreferences(r.Database, r.Container, r.Preferences)
 		}
 	case "cosmos/databases":
-		location, _, scopeErr := c.selectedScope()
+		location, scopeErr := p.workbenchScope(c, r.WorkbenchID)
 		if scopeErr == nil && location.valid() && location.Revision != c.unavailableRevision && !r.Browse {
 			items, _ := json.Marshal([]map[string]string{{"id": location.Database}})
 			result = page{JSON: string(items)}
@@ -221,7 +247,7 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 		}
 	case "cosmos/containers":
 		if err = validID(r.Database); err == nil {
-			location, _, scopeErr := c.selectedScope()
+			location, scopeErr := p.workbenchScope(c, r.WorkbenchID)
 			if scopeErr == nil && location.valid() && location.Revision != c.unavailableRevision && r.Database == location.Database && !r.Browse {
 				var metadata page
 				metadata, err = c.containerMetadata(location.Database, location.Container)
@@ -312,7 +338,7 @@ func rpcError(err error) *sdk.PluginError {
 }
 
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.24.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.25.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }
