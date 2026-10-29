@@ -13,16 +13,18 @@ import (
 const pluginID = "io.github.fwrq41251.cosmosdb"
 
 type plugin struct {
-	mu          sync.RWMutex
-	connections map[string]*cosmosClient
-	mcpMu       sync.Mutex
-	mcpCursors  map[string]mcpCursor
-	queriesMu   sync.Mutex
-	queries     map[string]*queryJob
-	mcpMetadata map[string]metadataEntry
-	viewMu      sync.Mutex
+	mu           sync.RWMutex
+	connections  map[string]*cosmosClient
+	mcpMu        sync.Mutex
+	mcpCursors   map[string]mcpCursor
+	queriesMu    sync.Mutex
+	queries      map[string]*queryJob
+	mcpMetadata  map[string]metadataEntry
+	viewMu       sync.Mutex
+	queryInputMu sync.Mutex
 }
 type request struct {
+	QueryInput   *queryInput          `json:"queryInput"`
 	Browse       bool                 `json:"browse"`
 	ConnectionID string               `json:"connectionId"`
 	QueryID      string               `json:"queryId"`
@@ -197,6 +199,12 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	var result any
 	var err error
 	switch method {
+	case "cosmos/queryInput":
+		if validID(r.Database) != nil || validID(r.Container) != nil {
+			err = reasonError("main.scopeRequired", "A database and container are required")
+		} else {
+			result, err = p.queryInputs(c, r.Database, r.Container, r.QueryInput)
+		}
 	case "cosmos/tablePreferences":
 		if validID(r.Database) != nil || validID(r.Container) != nil {
 			err = reasonError("main.scopeRequired", "A database and container are required")
@@ -304,7 +312,7 @@ func rpcError(err error) *sdk.PluginError {
 }
 
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.23.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.24.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

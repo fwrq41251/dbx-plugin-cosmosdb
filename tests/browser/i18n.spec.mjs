@@ -140,6 +140,14 @@ test("a workbench opened in an English host starts in English", async ({
         .evaluate((node) => node.scrollWidth <= window.innerWidth + 1),
     ).toBe(true);
   }
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await f.locator("#run").click();
+  await expect(f.locator("#query-metrics")).toContainText("2.81 RU");
+  await f.locator("#table .row-read").first().click();
+  await expect(f.locator("#editor .cm-content")).toHaveAttribute(
+    "aria-label",
+    "JSON document",
+  );
 });
 
 test("field errors and an open write confirmation change language without changing input or submitting writes", async ({

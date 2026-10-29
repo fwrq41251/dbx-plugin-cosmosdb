@@ -1722,6 +1722,18 @@ body.light .sql-error {
           <div class="section-title query-heading">
             <span data-i18n-text="query.title">SQL query</span>
             <div class="toolbar">
+              <button
+                id="query-actions"
+                class="icon-button"
+                type="button"
+                aria-label="Query actions"
+                title="Query actions"
+                aria-haspopup="menu"
+                aria-controls="query-menu"
+                aria-expanded="false"
+                data-i18n-aria-label="query.actions"
+                data-i18n-title="query.actions"
+              ></button>
               <span class="muted shortcut" data-i18n-text="ui.ctrlEnterToRun"
                 >⌘ / Ctrl + Enter to run</span
               >
@@ -1734,6 +1746,23 @@ body.light .sql-error {
                 Cancel query
               </button>
             </div>
+          </div>
+          <div
+            id="query-menu"
+            class="action-menu"
+            role="menu"
+            aria-label="Query actions"
+            data-i18n-aria-label="query.actions"
+            hidden
+          >
+            <button
+              id="reset-query"
+              type="button"
+              role="menuitem"
+              data-i18n-text="query.reset"
+            >
+              Reset query
+            </button>
           </div>
           <div id="query-body">
             <div id="sql" class="code-editor"></div>
@@ -1811,7 +1840,8 @@ body.light .sql-error {
                 placeholder='[{"name":"@id","value":"example"}]'
                 data-i18n-aria-label="query.parameters"
               >
-[]</textarea>
+[]</textarea
+              >
             </details>
           </div>
         </section>
@@ -2196,7 +2226,8 @@ body.light .sql-error {
               rows="2"
               data-i18n-aria-label="ui.newFieldValueJson"
             >
-""</textarea>
+""</textarea
+            >
             <button id="add-field" type="button" data-i18n-text="ui.addToDraft">
               Add to draft
             </button>
@@ -2456,6 +2487,106 @@ body.light .sql-error {
     </dialog>
     <script type="module">
       (() => {
+  // src/query-inputs.mjs
+  function defaultQueryInput() {
+    return {
+      sql: "SELECT * FROM c",
+      partitionKeyText: "",
+      parametersText: "[]",
+      pageSize: 100
+    };
+  }
+  function createQueryInputs({ invoke: invoke2, read, apply, failed }) {
+    const entries = /* @__PURE__ */ new Map();
+    let current = null, generation = 0, applying = false;
+    const keyFor = (target) => JSON.stringify([target.connectionId, target.database, target.container]);
+    function display(value) {
+      applying = true;
+      try {
+        apply({ ...value });
+      } finally {
+        applying = false;
+      }
+    }
+    function prune() {
+      for (const [key, entry] of entries) {
+        if (entries.size <= 30) break;
+        if (entry !== current && entry.loaded && !entry.pending)
+          entries.delete(key);
+      }
+    }
+    async function activate(target) {
+      const generationAtStart = ++generation, key = keyFor(target);
+      let entry = entries.get(key);
+      if (!entry) {
+        entry = {
+          target: { ...target },
+          value: defaultQueryInput(),
+          revision: 0,
+          loaded: false,
+          pending: 0,
+          writes: Promise.resolve()
+        };
+        entries.set(key, entry);
+      }
+      current = entry;
+      display(entry.value);
+      const revision = entry.revision;
+      if (!entry.loading && !entry.loaded) {
+        entry.loading = (async () => {
+          try {
+            await entry.writes;
+            const value = await invoke2("cosmos/queryInput", entry.target);
+            if (entry.revision === revision) entry.value = value;
+          } catch (error) {
+            if (current === entry) failed("load", error);
+          } finally {
+            entry.loaded = true;
+          }
+        })();
+      }
+      await entry.loading;
+      if (current === entry && generation === generationAtStart && entry.revision === revision)
+        display(entry.value);
+      prune();
+    }
+    function changed() {
+      if (applying || !current) return;
+      const entry = current, value = read();
+      if (JSON.stringify(value) === JSON.stringify(entry.value)) return;
+      entry.value = { ...value };
+      const revision = ++entry.revision;
+      ++entry.pending;
+      entry.writes = entry.writes.catch(() => {
+      }).then(async () => {
+        if (entry.revision !== revision) return;
+        try {
+          await invoke2("cosmos/queryInput", {
+            ...entry.target,
+            queryInput: value
+          });
+        } catch (error) {
+          if (current === entry && entry.revision === revision)
+            failed("save", error);
+        }
+      }).finally(() => {
+        --entry.pending;
+        prune();
+      });
+    }
+    function deactivate(clear = false) {
+      ++generation;
+      current = null;
+      if (clear) entries.clear();
+      display(defaultQueryInput());
+    }
+    function reset() {
+      display(defaultQueryInput());
+      changed();
+    }
+    return { activate, changed, deactivate, reset };
+  }
+
   // src/i18n-core.mjs
   var messageBrand = Symbol("localized-message");
   var canonical = (value) => String(value || "").replaceAll("_", "-").toLowerCase();
@@ -3015,7 +3146,13 @@ body.light .sql-error {
     "service.main.inactiveConnection": "Connection is not active. Reopen the saved Cosmos DB connection.",
     "service.main.pageSize": "Page size must be between 1 and 1000",
     "service.main.invalidQueryParameters": "Parameters must be a JSON array",
-    "service.partitions.invalidValue": "Invalid partition value"
+    "service.partitions.invalidValue": "Invalid partition value",
+    "query.actions": "Query actions",
+    "query.reset": "Reset query",
+    "query.restoreFailed": "Could not restore saved query input. You can continue editing.",
+    "query.saveInputFailed": "Could not save query input. Current input remains available in this workbench.",
+    "service.queryinput.invalidRecord": "Saved query input is invalid",
+    "service.queryinput.invalidInput": "Query input exceeds storage limits or has an invalid page size"
   };
 
   // src/locales/zh-CN.json
@@ -3487,7 +3624,13 @@ body.light .sql-error {
     "service.main.inactiveConnection": "\u8FDE\u63A5\u672A\u6FC0\u6D3B\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u4FDD\u5B58\u7684 Cosmos DB \u8FDE\u63A5",
     "service.main.pageSize": "\u6BCF\u9875\u6570\u91CF\u5FC5\u987B\u5728 1\u20131000 \u4E4B\u95F4",
     "service.main.invalidQueryParameters": "\u67E5\u8BE2\u53C2\u6570\u5FC5\u987B\u662F JSON \u6570\u7EC4",
-    "service.partitions.invalidValue": "\u5206\u533A\u503C\u65E0\u6548"
+    "service.partitions.invalidValue": "\u5206\u533A\u503C\u65E0\u6548",
+    "query.actions": "\u67E5\u8BE2\u64CD\u4F5C",
+    "query.reset": "\u91CD\u7F6E\u67E5\u8BE2",
+    "query.restoreFailed": "\u65E0\u6CD5\u6062\u590D\u4FDD\u5B58\u7684\u67E5\u8BE2\u8F93\u5165\uFF0C\u53EF\u4EE5\u7EE7\u7EED\u7F16\u8F91\u3002",
+    "query.saveInputFailed": "\u67E5\u8BE2\u8F93\u5165\u4FDD\u5B58\u5931\u8D25\uFF0C\u5F53\u524D\u5DE5\u4F5C\u53F0\u4E2D\u7684\u8F93\u5165\u4ECD\u4FDD\u7559\u3002",
+    "service.queryinput.invalidRecord": "\u4FDD\u5B58\u7684\u67E5\u8BE2\u8F93\u5165\u65E0\u6548",
+    "service.queryinput.invalidInput": "\u67E5\u8BE2\u8F93\u5165\u8D85\u51FA\u5B58\u50A8\u9650\u5236\u6216\u6BCF\u9875\u6570\u91CF\u65E0\u6548"
   };
 
   // src/locales/index.mjs
@@ -3672,7 +3815,9 @@ body.light .sql-error {
     "warning.scopeUnavailable": "errors.savedScopeUnavailable",
     "warning.cacheSave": "ui.couldNotSaveTheLocalCacheReloading",
     "warning.mutationCache": "ui.documentWriteSucceededButThePartitionKey",
-    "partitions.invalidValue": "service.partitions.invalidValue"
+    "partitions.invalidValue": "service.partitions.invalidValue",
+    "queryinput.invalidRecord": "service.queryinput.invalidRecord",
+    "queryinput.invalidInput": "service.queryinput.invalidInput"
   };
 
   // src/i18n.mjs
@@ -5201,7 +5346,8 @@ ${indent}}` : "}";
       resetResults: resetResults2,
       updateScopeContext: updateScopeContext2,
       status: status2,
-      loadTablePreferences: loadTablePreferences2
+      loadTablePreferences: loadTablePreferences2,
+      loadQueryInputs: loadQueryInputs2
     } = dependencies;
     async function listAll2(method, params) {
       const items = [];
@@ -5313,6 +5459,7 @@ ${indent}}` : "}";
       );
       updateScopeContext2();
       status2(next ? message("ui.readyToQuery") : message("ui.selectAContainer"));
+      if (next) await loadQueryInputs2();
     }
     return { listAll: listAll2, loadDatabases: loadDatabases2, selectDatabase: selectDatabase2, selectContainer: selectContainer2 };
   }
@@ -31221,16 +31368,6 @@ ${indent}}` : "}";
           (tr) => tr.docChanged ? { effects: setDiagnosticsEffect.of([]) } : null
         )
       ] : [],
-      localization.of([
-        EditorState.phrases.of(phrases()),
-        EditorView.contentAttributes.of({
-          "aria-label": renderMessage(label),
-          tabindex: "0",
-          spellcheck: "false",
-          autocapitalize: "off"
-        }),
-        placeholder(renderMessage(hint))
-      ]),
       keymap.of([indentWithTab]),
       EditorView.lineWrapping,
       syntaxHighlighting(highlight),
@@ -31256,10 +31393,21 @@ ${indent}}` : "}";
         )
       ] : []
     ];
+    const localizedExtensions = () => [
+      EditorState.phrases.of(phrases()),
+      EditorView.contentAttributes.of({
+        "aria-label": renderMessage(label),
+        tabindex: "0",
+        spellcheck: "false",
+        autocapitalize: "off"
+      }),
+      placeholder(renderMessage(hint))
+    ];
     const makeState = (doc2) => EditorState.create({
       doc: doc2,
       extensions: [
         ...extensions,
+        localization.of(localizedExtensions()),
         access.of([
           EditorState.readOnly.of(locked),
           EditorView.editable.of(!locked)
@@ -31269,16 +31417,7 @@ ${indent}}` : "}";
     const view2 = new EditorView({ parent, state: makeState(value) });
     onLocaleChange(() => {
       view2.dispatch({
-        effects: localization.reconfigure([
-          EditorState.phrases.of(phrases()),
-          EditorView.contentAttributes.of({
-            "aria-label": renderMessage(label),
-            tabindex: "0",
-            spellcheck: "false",
-            autocapitalize: "off"
-          }),
-          placeholder(renderMessage(hint))
-        ])
+        effects: localization.reconfigure(localizedExtensions())
       });
       if (lastDiagnostic) {
         view2.dispatch(setDiagnostics(view2.state, [lastDiagnostic]));
@@ -31610,6 +31749,7 @@ ${indent}}` : "}";
     });
   var copyMenu;
   var documentWriteMenu;
+  var queryMenu;
   var viewPreferenceWrites = Promise.resolve();
   var viewPreferenceRevision = 0;
   var resultEditor = null;
@@ -31690,7 +31830,8 @@ ${indent}}` : "}";
     resetResults,
     updateScopeContext,
     status,
-    loadTablePreferences
+    loadTablePreferences,
+    loadQueryInputs
   });
   var { point, opened, saveDocument, deleteDocument } = createDocumentController({
     documentState,
@@ -31712,6 +31853,33 @@ ${indent}}` : "}";
     dirty,
     resetEditor
   });
+  var queryInputs = createQueryInputs({
+    invoke: (method, params) => host.invoke(method, params, { timeoutMs: 1e4 }),
+    read: () => ({
+      sql: sqlEditor.value,
+      partitionKeyText: $("query-pk").value,
+      parametersText: $("parameters").value,
+      pageSize: Number($("page-size").value)
+    }),
+    apply(value) {
+      if (sqlEditor.value !== value.sql) sqlEditor.value = value.sql;
+      $("query-pk").value = value.partitionKeyText;
+      $("parameters").value = value.parametersText;
+      $("page-size").value = String(value.pageSize);
+      updateParametersVisibility();
+      clearSQLError();
+      updateSQLExecution();
+    },
+    failed(kind) {
+      status(
+        message(kind === "load" ? "query.restoreFailed" : "query.saveInputFailed"),
+        true
+      );
+    }
+  });
+  function loadQueryInputs() {
+    return queryInputs.activate({ connectionId: state.connectionId, ...scope() });
+  }
   var partitionScopes = /* @__PURE__ */ new Map();
   var partitionTarget = "query-pk";
   var partitionFilter = "";
@@ -31754,6 +31922,7 @@ ${indent}}` : "}";
       $(id).setAttribute("aria-expanded", "false");
   }
   function activatePartitionScope() {
+    if (!scopeState.container) queryInputs.deactivate();
     for (const cache2 of partitionScopes.values()) cache2.loader?.stop();
     closePartitionPicker();
     $("query-pk").value = scopeState.container ? candidates().selected || "" : "";
@@ -31801,8 +31970,10 @@ ${indent}}` : "}";
         if (state.busy) return;
         $(partitionTarget).value = item.key;
         renderResultSummary();
-        if (partitionTarget === "query-pk") cache2.selected = item.key;
-        else if (documentState.creating) syncDraftPartition();
+        if (partitionTarget === "query-pk") {
+          cache2.selected = item.key;
+          queryInputs.changed();
+        } else if (documentState.creating) syncDraftPartition();
         closePartitionPicker();
         $(partitionTarget).focus();
       };
@@ -32026,7 +32197,8 @@ ${indent}}` : "}";
       "document-pk"
     ])
       $(id).disabled = busy || !ready;
-    for (const id of ["run", "read", "new"]) $(id).disabled = busy || !selected;
+    for (const id of ["run", "read", "new", "query-actions"])
+      $(id).disabled = busy || !selected;
     sqlEditor.readOnly = busy || !ready;
     documentEditor.readOnly = busy || state.readOnly || !documentState.snapshot && !documentState.creating;
     $("scope-container").disabled = busy || !ready || !scopeState.database;
@@ -32037,6 +32209,7 @@ ${indent}}` : "}";
       closePartitionPicker();
       copyMenu?.close();
       documentWriteMenu?.close();
+      queryMenu?.close();
       closeDocumentMenu();
       closeResultItemMenu();
       closeScopePicker();
@@ -33413,6 +33586,14 @@ ${indent}}` : "}";
     setAttr($(id), "title", () => renderMessage(label));
     setAttr($(id), "aria-label", () => renderMessage(label));
   }
+  $("query-actions").innerHTML = icon("more");
+  queryMenu = createMenu($("query-actions"), $("query-menu"));
+  $("reset-query").onclick = () => {
+    queryMenu.close();
+    if (state.busy || !scopeState.container) return;
+    queryInputs.reset();
+    sqlEditor.focus();
+  };
   copyMenu = createMenu($("copy-selection"), $("copy-menu"));
   documentWriteMenu = createMenu(
     $("document-actions"),
@@ -33535,7 +33716,10 @@ ${indent}}` : "}";
     if (!state.busy) {
       $(partitionTarget).value = "";
       renderResultSummary();
-      if (partitionTarget === "query-pk") candidates().selected = "";
+      if (partitionTarget === "query-pk") {
+        candidates().selected = "";
+        queryInputs.changed();
+      }
       closePartitionPicker();
       $(partitionTarget).focus();
     }
@@ -33697,6 +33881,7 @@ ${indent}}` : "}";
     partitionScopes.clear();
     fieldScopes.clear();
     if ($("confirm-dialog").open) $("confirm-dialog").close("cancel");
+    queryInputs.deactivate(true);
     state.epoch++;
     state.connectionId = id;
     scopeState.database = "";
@@ -33786,6 +33971,7 @@ ${indent}}` : "}";
   updateParametersVisibility();
   $("parameters").addEventListener("input", updateParametersVisibility);
   sqlEditor.onChange(() => {
+    queryInputs.changed();
     updateParametersVisibility();
     $("sql-diagnostic").hidden = true;
     $("sql-error").hidden = true;
@@ -33794,6 +33980,8 @@ ${indent}}` : "}";
   updateSQLExecution();
   $("sql-diagnostic").onclick = () => sqlEditor.focusError();
   for (const id of ["query-pk", "parameters", "page-size"]) {
+    $(id).addEventListener("input", queryInputs.changed);
+    $(id).addEventListener("change", queryInputs.changed);
     $(id).addEventListener("input", renderResultSummary);
     $(id).addEventListener("change", renderResultSummary);
   }

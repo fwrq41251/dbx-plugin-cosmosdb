@@ -155,6 +155,18 @@
           <div class="section-title query-heading">
             <span data-i18n-text="query.title">SQL query</span>
             <div class="toolbar">
+              <button
+                id="query-actions"
+                class="icon-button"
+                type="button"
+                aria-label="Query actions"
+                title="Query actions"
+                aria-haspopup="menu"
+                aria-controls="query-menu"
+                aria-expanded="false"
+                data-i18n-aria-label="query.actions"
+                data-i18n-title="query.actions"
+              ></button>
               <span class="muted shortcut" data-i18n-text="ui.ctrlEnterToRun"
                 >⌘ / Ctrl + Enter to run</span
               >
@@ -167,6 +179,23 @@
                 Cancel query
               </button>
             </div>
+          </div>
+          <div
+            id="query-menu"
+            class="action-menu"
+            role="menu"
+            aria-label="Query actions"
+            data-i18n-aria-label="query.actions"
+            hidden
+          >
+            <button
+              id="reset-query"
+              type="button"
+              role="menuitem"
+              data-i18n-text="query.reset"
+            >
+              Reset query
+            </button>
           </div>
           <div id="query-body">
             <div id="sql" class="code-editor"></div>
@@ -244,7 +273,8 @@
                 placeholder='[{"name":"@id","value":"example"}]'
                 data-i18n-aria-label="query.parameters"
               >
-[]</textarea>
+[]</textarea
+              >
             </details>
           </div>
         </section>
@@ -629,7 +659,8 @@
               rows="2"
               data-i18n-aria-label="ui.newFieldValueJson"
             >
-""</textarea>
+""</textarea
+            >
             <button id="add-field" type="button" data-i18n-text="ui.addToDraft">
               Add to draft
             </button>

@@ -484,5 +484,11 @@
   "service.main.inactiveConnection": "Connection is not active. Reopen the saved Cosmos DB connection.",
   "service.main.pageSize": "Page size must be between 1 and 1000",
   "service.main.invalidQueryParameters": "Parameters must be a JSON array",
-  "service.partitions.invalidValue": "Invalid partition value"
+  "service.partitions.invalidValue": "Invalid partition value",
+  "query.actions": "Query actions",
+  "query.reset": "Reset query",
+  "query.restoreFailed": "Could not restore saved query input. You can continue editing.",
+  "query.saveInputFailed": "Could not save query input. Current input remains available in this workbench.",
+  "service.queryinput.invalidRecord": "Saved query input is invalid",
+  "service.queryinput.invalidInput": "Query input exceeds storage limits or has an invalid page size"
 }

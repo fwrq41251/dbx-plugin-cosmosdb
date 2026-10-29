@@ -1,3 +1,4 @@
+import { createQueryInputs } from "./query-inputs.mjs";
 import { createQueryState, createQueryController } from "./query-session.mjs";
 import {
   createDocumentState,
@@ -78,7 +79,7 @@ if (host)
     if (event.type === "env") syncLocale();
   });
 
-let copyMenu, documentWriteMenu;
+let copyMenu, documentWriteMenu, queryMenu;
 let viewPreferenceWrites = Promise.resolve(),
   viewPreferenceRevision = 0;
 let resultEditor = null,
@@ -163,6 +164,7 @@ const { listAll, loadDatabases, selectDatabase, selectContainer } =
     updateScopeContext,
     status,
     loadTablePreferences,
+    loadQueryInputs,
   });
 const { point, opened, saveDocument, deleteDocument } =
   createDocumentController({
@@ -185,6 +187,33 @@ const { point, opened, saveDocument, deleteDocument } =
     dirty,
     resetEditor,
   });
+const queryInputs = createQueryInputs({
+  invoke: (method, params) => host.invoke(method, params, { timeoutMs: 10000 }),
+  read: () => ({
+    sql: sqlEditor.value,
+    partitionKeyText: $("query-pk").value,
+    parametersText: $("parameters").value,
+    pageSize: Number($("page-size").value),
+  }),
+  apply(value) {
+    if (sqlEditor.value !== value.sql) sqlEditor.value = value.sql;
+    $("query-pk").value = value.partitionKeyText;
+    $("parameters").value = value.parametersText;
+    $("page-size").value = String(value.pageSize);
+    updateParametersVisibility();
+    clearSQLError();
+    updateSQLExecution();
+  },
+  failed(kind) {
+    status(
+      msg(kind === "load" ? "query.restoreFailed" : "query.saveInputFailed"),
+      true,
+    );
+  },
+});
+function loadQueryInputs() {
+  return queryInputs.activate({ connectionId: state.connectionId, ...scope() });
+}
 const partitionScopes = new Map();
 let partitionTarget = "query-pk",
   partitionFilter = "",
@@ -231,6 +260,7 @@ function closePartitionPicker() {
     $(id).setAttribute("aria-expanded", "false");
 }
 function activatePartitionScope() {
+  if (!scopeState.container) queryInputs.deactivate();
   for (const cache of partitionScopes.values()) cache.loader?.stop();
   closePartitionPicker();
   $("query-pk").value = scopeState.container ? candidates().selected || "" : "";
@@ -283,8 +313,10 @@ function renderPartitionOptions() {
       if (state.busy) return;
       $(partitionTarget).value = item.key;
       renderResultSummary();
-      if (partitionTarget === "query-pk") cache.selected = item.key;
-      else if (documentState.creating) syncDraftPartition();
+      if (partitionTarget === "query-pk") {
+        cache.selected = item.key;
+        queryInputs.changed();
+      } else if (documentState.creating) syncDraftPartition();
       closePartitionPicker();
       $(partitionTarget).focus();
     };
@@ -555,7 +587,8 @@ function controls() {
     "document-pk",
   ])
     $(id).disabled = busy || !ready;
-  for (const id of ["run", "read", "new"]) $(id).disabled = busy || !selected;
+  for (const id of ["run", "read", "new", "query-actions"])
+    $(id).disabled = busy || !selected;
   sqlEditor.readOnly = busy || !ready;
   documentEditor.readOnly =
     busy ||
@@ -570,6 +603,7 @@ function controls() {
     closePartitionPicker();
     copyMenu?.close();
     documentWriteMenu?.close();
+    queryMenu?.close();
     closeDocumentMenu();
     closeResultItemMenu();
     closeScopePicker();
@@ -2167,6 +2201,14 @@ for (const [id, name, label] of [
   setAttr($(id), "title", () => renderMessage(label));
   setAttr($(id), "aria-label", () => renderMessage(label));
 }
+$("query-actions").innerHTML = icon("more");
+queryMenu = createMenu($("query-actions"), $("query-menu"));
+$("reset-query").onclick = () => {
+  queryMenu.close();
+  if (state.busy || !scopeState.container) return;
+  queryInputs.reset();
+  sqlEditor.focus();
+};
 copyMenu = createMenu($("copy-selection"), $("copy-menu"));
 documentWriteMenu = createMenu(
   $("document-actions"),
@@ -2294,7 +2336,10 @@ $("pk-clear").onclick = () => {
   if (!state.busy) {
     $(partitionTarget).value = "";
     renderResultSummary();
-    if (partitionTarget === "query-pk") candidates().selected = "";
+    if (partitionTarget === "query-pk") {
+      candidates().selected = "";
+      queryInputs.changed();
+    }
     closePartitionPicker();
     $(partitionTarget).focus();
   }
@@ -2474,6 +2519,7 @@ async function contextChanged(context) {
   partitionScopes.clear();
   fieldScopes.clear();
   if ($("confirm-dialog").open) $("confirm-dialog").close("cancel");
+  queryInputs.deactivate(true);
   state.epoch++;
   state.connectionId = id;
   scopeState.database = "";
@@ -2575,6 +2621,7 @@ function updateParametersVisibility() {
 updateParametersVisibility();
 $("parameters").addEventListener("input", updateParametersVisibility);
 sqlEditor.onChange(() => {
+  queryInputs.changed();
   updateParametersVisibility();
   $("sql-diagnostic").hidden = true;
   $("sql-error").hidden = true;
@@ -2583,6 +2630,8 @@ sqlEditor.onSelection(updateSQLExecution);
 updateSQLExecution();
 $("sql-diagnostic").onclick = () => sqlEditor.focusError();
 for (const id of ["query-pk", "parameters", "page-size"]) {
+  $(id).addEventListener("input", queryInputs.changed);
+  $(id).addEventListener("change", queryInputs.changed);
   $(id).addEventListener("input", renderResultSummary);
   $(id).addEventListener("change", renderResultSummary);
 }

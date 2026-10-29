@@ -262,16 +262,6 @@ export function createCodeEditor(
           ),
         ]
       : []),
-    localization.of([
-      EditorState.phrases.of(phrases()),
-      EditorView.contentAttributes.of({
-        "aria-label": renderMessage(label),
-        tabindex: "0",
-        spellcheck: "false",
-        autocapitalize: "off",
-      }),
-      placeholder(renderMessage(hint)),
-    ]),
     keymap.of([indentWithTab]),
     EditorView.lineWrapping,
     syntaxHighlighting(highlight),
@@ -302,11 +292,22 @@ export function createCodeEditor(
         ]
       : []),
   ];
+  const localizedExtensions = () => [
+    EditorState.phrases.of(phrases()),
+    EditorView.contentAttributes.of({
+      "aria-label": renderMessage(label),
+      tabindex: "0",
+      spellcheck: "false",
+      autocapitalize: "off",
+    }),
+    placeholder(renderMessage(hint)),
+  ];
   const makeState = (doc) =>
     EditorState.create({
       doc,
       extensions: [
         ...extensions,
+        localization.of(localizedExtensions()),
         access.of([
           EditorState.readOnly.of(locked),
           EditorView.editable.of(!locked),
@@ -316,16 +317,7 @@ export function createCodeEditor(
   const view = new EditorView({ parent, state: makeState(value) });
   onLocaleChange(() => {
     view.dispatch({
-      effects: localization.reconfigure([
-        EditorState.phrases.of(phrases()),
-        EditorView.contentAttributes.of({
-          "aria-label": renderMessage(label),
-          tabindex: "0",
-          spellcheck: "false",
-          autocapitalize: "off",
-        }),
-        placeholder(renderMessage(hint)),
-      ]),
+      effects: localization.reconfigure(localizedExtensions()),
     });
     if (lastDiagnostic) {
       view.dispatch(setDiagnostics(view.state, [lastDiagnostic]));

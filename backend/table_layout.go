@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	"math"
@@ -16,22 +14,9 @@ type tableLayout struct {
 }
 
 func (c *cosmosClient) layoutPath(database, container string) (string, error) {
-	root := os.Getenv("DBX_PLUGIN_DATA_DIR")
-	if c.cacheRoot != "" {
-		root = c.cacheRoot
-	}
-	if root == "" {
-		var err error
-		root, err = os.UserConfigDir()
-		if err != nil {
-			return "", err
-		}
-		root = filepath.Join(root, "dbx-plugin-cosmosdb")
-	}
-	identity, _ := json.Marshal([]string{c.endpoint, c.cacheID, database, container})
-	hash := sha256.Sum256(identity)
-	return filepath.Join(root, "table-layout-v1", hex.EncodeToString(hash[:])+".json"), nil
+	return c.scopedDataPath("table-layout-v1", database, container)
 }
+
 func (c *cosmosClient) tablePreferences(database, container string, value *tableLayout) (tableLayout, error) {
 	empty := tableLayout{Widths: map[string]float64{}}
 	path, err := c.layoutPath(database, container)

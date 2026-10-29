@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.0 — Restore container query input
+
+- Automatically save SQL, partition text, parameter text and page size in private local storage, isolated by connection, endpoint, database and container. Restore input on reopening or returning to a container without executing queries or discovery.
+- Preserve unfinished syntax and exact numeric text; coalesce local saves and reject late restores after edits or scope changes. Keep current input usable on storage failure.
+- Add Reset query in a compact query-actions menu. Reset input defaults without discarding results or a document draft.
+- Rebuild CodeMirror language extensions using the current host locale when loading another document or restoring SQL; avoid redundant SQL editor reconstruction when its text is unchanged.
+
 ## 0.23.0 — Session boundaries and stable error contracts
 
 - Separate query execution/cancellation, document writes/identity and scope transitions into controllers with independent state; retain draft, stale-response and write-confirmation safeguards.

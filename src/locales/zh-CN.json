@@ -466,5 +466,11 @@
   "service.main.inactiveConnection": "连接未激活，请重新打开保存的 Cosmos DB 连接",
   "service.main.pageSize": "每页数量必须在 1–1000 之间",
   "service.main.invalidQueryParameters": "查询参数必须是 JSON 数组",
-  "service.partitions.invalidValue": "分区值无效"
+  "service.partitions.invalidValue": "分区值无效",
+  "query.actions": "查询操作",
+  "query.reset": "重置查询",
+  "query.restoreFailed": "无法恢复保存的查询输入，可以继续编辑。",
+  "query.saveInputFailed": "查询输入保存失败，当前工作台中的输入仍保留。",
+  "service.queryinput.invalidRecord": "保存的查询输入无效",
+  "service.queryinput.invalidInput": "查询输入超出存储限制或每页数量无效"
 }

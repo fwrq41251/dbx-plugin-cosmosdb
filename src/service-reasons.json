@@ -132,5 +132,7 @@
   "warning.scopeUnavailable": "errors.savedScopeUnavailable",
   "warning.cacheSave": "ui.couldNotSaveTheLocalCacheReloading",
   "warning.mutationCache": "ui.documentWriteSucceededButThePartitionKey",
-  "partitions.invalidValue": "service.partitions.invalidValue"
+  "partitions.invalidValue": "service.partitions.invalidValue",
+  "queryinput.invalidRecord": "service.queryinput.invalidRecord",
+  "queryinput.invalidInput": "service.queryinput.invalidInput"
 }

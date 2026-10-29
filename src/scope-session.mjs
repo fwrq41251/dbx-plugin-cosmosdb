@@ -30,6 +30,7 @@ export function createScopeController(dependencies) {
     updateScopeContext,
     status,
     loadTablePreferences,
+    loadQueryInputs,
   } = dependencies;
   async function listAll(method, params) {
     const items = [];
@@ -149,6 +150,7 @@ export function createScopeController(dependencies) {
     );
     updateScopeContext();
     status(next ? msg("ui.readyToQuery") : msg("ui.selectAContainer"));
+    if (next) await loadQueryInputs();
   }
   return { listAll, loadDatabases, selectDatabase, selectContainer };
 }
