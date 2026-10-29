@@ -50,7 +50,7 @@ Key 由 DBX Secret Store 保存，只有连接生命周期的本地后端收到�
 
 ## Windows x64（0.26.0）
 
-Windows 用户在对应平台的 DBX 插件中心安装，使用方式和 macOS 相同；不需要另装 Node.js、Go 或 Python。开发版安装包由 Windows runner 原生构建，包含 `.exe` 后端及针对 WebView2 兼容目标构建的同一份界面。Windows 原生 DBX 实机测试本轮暂不执行，不能把 CI 的 Chromium 测试等同于 WebView2 实机验证。
+正式上架后，Windows 用户可在 DBX 插件中心安装，使用方式和 macOS 相同；不需要另装 Node.js、Go 或 Python。开发版安装包由 Windows runner 原生构建，包含 `.exe` 后端及针对 WebView2 兼容目标构建的同一份界面。Windows 原生 DBX 实机测试本轮暂不执行，不能把 CI 的 Chromium 测试等同于 WebView2 实机验证。
 
 CI 在 Linux 和 Windows 分别运行前端测试、Go race/vet、完整 Chromium 浏览器测试、原生打包及本地模拟服务协议/持久化校验。包含空格和中文的项目目录也参与构建测试。缓存使用操作系统用户缓存目录；查询输入、工作台位置和偏好优先使用 DBX 提供的插件数据目录。Windows 的访问控制依赖该目录的 ACL，不以 Unix `0600`/`0700` 模式位作为权限证明。
 

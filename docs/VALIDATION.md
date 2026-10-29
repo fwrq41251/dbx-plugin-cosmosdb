@@ -267,3 +267,5 @@
 
 - 首轮 Windows CI 的模型与 Go race/vet 已通过；浏览器启动暴露固定 CLI 0.1.9 的 verbatim cwd（`\\?\D:`）与 Node 相对脚本入口不兼容。新增仅开发宿主启动使用的路径适配器，保留固定官方 runtime 与 SDK，不修改已安装依赖或插件协议；增加 drive/UNC、中文与空格、参数保留和不修改原配置的测试。
 - 第二轮 Windows CI 已通过 78/79 项浏览器用例；唯一失败为测试统一按 Ctrl+Shift+Z 重做，而 CodeMirror 的 Windows 默认重做键为 Ctrl+Y。测试改为使用各平台标准快捷键，保留原有撤销/重做和草稿完整性断言；没有修改产品的键盘行为。CI 提前执行原生打包/运行校验，并在浏览器失败时保留调试产物。
+- 最新 Windows 原生构建已完成打包及包内后端执行校验（[CI 40828426244](https://github.com/fwrq41251/dbx-plugin-cosmosdb/actions/runs/40828426244)，功能提交 `9024b08`）。下载的 Windows x64 包版本为 0.26.0，5358608 字节，SHA-256 `5dcd1e931f0d28d9a8429fac7150d42242227cddacc96a579b623b00479b45bf`；27 个负载文件校验和与元数据一致，入口 `bin/windows-x64/dbx-plugin-dbx-plugin-cosmosdb.exe` 为 AMD64 PE。该包是 CI 未签名开发产物，不是商店正式签名包。
+- 最终同一功能提交的 Windows x64 与 Linux x64 CI 均成功：各 52 项前端测试、69 项 Go race 测试/vet、79 项完整 Chromium 浏览器回归，以及原生打包和包内后端运行校验全部通过。Windows 重做快捷键用例已实际通过；没有跳过或削弱该用例的草稿/精度断言。实际 Windows DBX/WebView2 测试仍按约定暂不执行。
