@@ -27,6 +27,13 @@ const result = spawnSync(
       DBX_PLUGIN_SDK_ROOT: fileURLToPath(sdkRoot),
       ...(process.argv[2] === "dev"
         ? {
+            ...(process.platform === "win32"
+              ? {
+                  DBX_PLUGIN_DEV_RUNTIME:
+                    process.env.DBX_PLUGIN_DEV_RUNTIME ||
+                    fileURLToPath(new URL("dev-runtime.mjs", import.meta.url)),
+                }
+              : {}),
             DBX_PLUGIN_DATA_DIR:
               process.env.DBX_PLUGIN_DATA_DIR ||
               fileURLToPath(new URL(".dbx-dev/plugin-data/", root)),

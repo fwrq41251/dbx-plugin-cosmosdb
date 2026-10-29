@@ -52,3 +52,5 @@
 - `npm run verify:package` 定位当前版本和原生目标的包，Windows 调用 `python`，macOS/Linux 调用 `python3`。校验 SHA-256、包内文件和许可证、平台/可执行入口、protocol v1、连接生命周期，以及两个工作台的精确输入保存、覆盖写入、位置隔离。仅使用临时目录和回环模拟服务。
 - CI 分别在 Linux 和 Windows 执行完整模型/Go race/vet/Chromium 浏览器测试。Windows CI 的协议和浏览器验证不代表 Windows 原生 DBX/WebView2 实机验证；本轮按用户要求跳过实机测试，发布说明必须保留这一限制。
 - 本轮没有发布 Release 或更新商店。当前多查询标签仍取决于 DBX 上游 [PR #13866](https://github.com/t8y2/dbx/pull/13866) 合并和发布，与 Windows 构建能力独立。
+
+Windows 开发宿主通过仓库内启动适配器将固定 CLI 的 verbatim 路径转成普通 Win32 路径，继续调用官方 runtime。该适配仅用于 `dev`，不进入插件包，也不改变 package/release 路径。
