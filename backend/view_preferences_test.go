@@ -32,10 +32,7 @@ func TestViewPreferencesPersistAndMergeAcrossConnections(t *testing.T) {
 		t.Fatalf("restart/merge: %v %v", v, err)
 	}
 	path, _ := a.viewPreferencesPath()
-	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
-		t.Fatalf("permissions: %v", info.Mode())
-	}
+	assertPrivatePermissions(t, path, 0600)
 	table := "table"
 	v, err = p.viewPreferences(b, &viewPreferencePatch{Results: &table})
 	if err != nil || v.Document != "json" || v.Results != "table" {

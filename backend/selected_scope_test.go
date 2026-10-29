@@ -94,10 +94,7 @@ func TestSelectedScopePersistenceIsolationAndMigration(t *testing.T) {
 		t.Fatal(actual, found, err)
 	}
 	path, _ := c.selectedScopePath()
-	stat, _ := os.Stat(path)
-	if stat.Mode().Perm() != 0600 {
-		t.Fatal(stat.Mode())
-	}
+	assertPrivatePermissions(t, path, 0600)
 	data, _ := os.ReadFile(path)
 	var fields map[string]json.RawMessage
 	json.Unmarshal(data, &fields)

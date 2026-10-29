@@ -25,11 +25,11 @@
 
 ## 在 DBX 中安装
 
-`0.25.0` 开发版兼容目标为 DBX **0.6.59+**、Host API 1.x、sidecar protocol v1。首个商店版本 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
+`0.26.0` 开发版兼容目标为 DBX **0.6.59+**、Host API 1.x、sidecar protocol v1。首个商店版本 `0.8.0` 支持 DBX 0.6.49+，不含下述 MCP 功能。
 
 打开 **DBX → 插件中心 → Marketplace**，搜索 **Cosmos DB NoSQL**，确认发布者为 `fwrq41251`，点击安装。官方商店自动验证安装包签名，无需开启“允许安装未签名开发包”。
 
-正式插件 ID 为 `io.github.fwrq41251.cosmosdb`，截至本次发布准备，商店版为 `0.16.0`，支持 macOS ARM64（Apple Silicon）。其他平台暂未提供商店安装包。[0.16.0 上架记录](https://github.com/t8y2/dbx-store/pull/397)。更新或重装前先关闭使用此插件的连接；同一正式插件身份的连接可在安装后重新打开。
+正式插件 ID 为 `io.github.fwrq41251.cosmosdb`。0.26.0 开发版的构建与发布目标为 macOS ARM64（Apple Silicon）和 Windows x64（Intel/AMD 64 位），Windows ARM64 暂未提供。Windows 包尚未发布到商店，商店可安装的平台与版本以插件中心为准。[既有上架记录](https://github.com/t8y2/dbx-store/pull/397)。更新或重装前先关闭使用此插件的连接；同一正式插件身份的连接可在安装后重新打开。
 
 新建连接时选择 **Azure Cosmos DB for NoSQL**：
 
@@ -48,6 +48,14 @@ Key 由 DBX Secret Store 保存，只有连接生命周期的本地后端收到�
 分区键以 JSON 数组填写，例如 `["tenant-a"]`、`[42]`、`[null]`；不存在的分区键值用 `[{}]`，层级分区键依次填写所有组件。
 参数示例：`[{"name":"@id","value":"order-001"}]`。
 
+## Windows x64（0.26.0）
+
+Windows 用户在对应平台的 DBX 插件中心安装，使用方式和 macOS 相同；不需要另装 Node.js、Go 或 Python。开发版安装包由 Windows runner 原生构建，包含 `.exe` 后端及针对 WebView2 兼容目标构建的同一份界面。Windows 原生 DBX 实机测试本轮暂不执行，不能把 CI 的 Chromium 测试等同于 WebView2 实机验证。
+
+CI 在 Linux 和 Windows 分别运行前端测试、Go race/vet、完整 Chromium 浏览器测试、原生打包及本地模拟服务协议/持久化校验。包含空格和中文的项目目录也参与构建测试。缓存使用操作系统用户缓存目录；查询输入、工作台位置和偏好优先使用 DBX 提供的插件数据目录。Windows 的访问控制依赖该目录的 ACL，不以 Unix `0600`/`0700` 模式位作为权限证明。
+
+发布时，同一版本分别生成 `darwin-arm64.dbxp` 和 `windows-x64.dbxp`，由既有商店审核签名流程处理；本轮仅准备构建能力，不自动发布 Release 或更新商店。
+
 ## 原生多查询标签（0.25.0）
 
 同一个 Cosmos DB 连接可以对应多个独立工作台。支持本功能的 DBX 中，标签栏的 **＋ / New Query** 新建标签；侧栏打开连接仍定位已有标签。新标签继承来源标签最后成功选择的数据库和容器，SQL 从 `SELECT * FROM c` 开始，分区键和参数为空，不复制结果或文档草稿，也不自动执行查询。
@@ -64,7 +72,7 @@ SQL、查询分区键、参数文本和每页数量按连接、Account Endpoint�
 
 SQL 标题旁的“查询操作”菜单提供“重置查询”：恢复 `SELECT * FROM c`、空查询分区键、`[]` 参数和每页 100 条，并保存这一选择。结果、文档面板及未保存的文档编辑不受重置影响。
 
-输入保存在插件私有目录 `query-input-v1` 中（目录 0700、文件 0600），包含 SQL 和参数原文；不会同步到 GitHub 或通过 MCP 提供。保存失败会提示，当前工作台仍可编辑和查询；强制退出或突然断电前尚未完成保存的输入不保证恢复。不会保存查询结果、文档正文或撤销历史。
+输入保存在插件私有目录 `query-input-v1` 中（Unix 系统目录 0700、文件 0600；Windows 依赖目录 ACL），包含 SQL 和参数原文；不会同步到 GitHub 或通过 MCP 提供。保存失败会提示，当前工作台仍可编辑和查询；强制退出或突然断电前尚未完成保存的输入不保证恢复。不会保存查询结果、文档正文或撤销历史。
 
 ## 结果表格与查询状态（0.15.0）
 
@@ -144,7 +152,7 @@ SQL 语法错误、分区键不匹配、跨分区管线限制、索引不足、�
 
 ## 开发与验证
 
-需要 Node.js 22+、Go 1.22+。最终用户安装 `.dbxp` 后无需这些运行时。
+需要 Node.js 22+、Go 1.22+；安装包校验还需要 Python 3。最终用户安装 `.dbxp` 后无需这些运行时。
 
 普通用户从商店安装即可。从源码构建的安装包生成在 `dist/`；源码仓库 Release 提供的是未签名审核候选包，仅用于开发验证。手动安装开发包时，在 DBX → 插件中心 → 设置 → 第三方与开发者选项启用“允许安装未签名开发包”，再选择 `.dbxp` 安装。正式发布流程见 [发布与商店审核](docs/RELEASING.md)。
 
@@ -158,6 +166,7 @@ go vet ./...
 cd ..
 npm run test:browser
 npm run package
+npm run verify:package
 ```
 
 `npm run test:browser -- tests/browser/i18n.spec.mjs` 可运行指定用例。每轮使用独立的临时宿主/插件/SDK 目录和端口，退出后自动清理；失败截图保留在 `test-results/<run-id>`。排查时可设置 `COSMOS_E2E_KEEP=1` 保留临时目录；仅需主动更新文档截图时设置 `COSMOS_UPDATE_SCREENSHOTS=1`。请通过此脚本启动测试，不直接运行 Playwright CLI。

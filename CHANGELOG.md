@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.0 — Windows x64 build support
+
+- Add native Windows x64 CI and release builds alongside the existing macOS ARM64 release target; no Windows ARM64 package yet. Windows native DBX/WebView2 device testing is deferred.
+- Fix UI build paths containing drive letters, spaces or non-ASCII characters, and declare Edge/WebView2 alongside Safari as a compilation target. Keep browser screenshots inside each isolated test run.
+- Make packaged-sidecar verification portable to Windows pipes; check native target/executable suffix, protocol, exact input persistence and independent workspaces using a disposable local service and data directory.
+- Retain Unix private-mode assertions while running persistence tests on Windows without treating synthetic Unix permission bits as ACL verification.
+
 ## 0.25.0 — Independent native query workspaces
 
 - Isolate SQL, partition keys, parameters, page size and selected location by the host workbench id, in addition to connection/endpoint/container. Restore each native tab without executing a query.

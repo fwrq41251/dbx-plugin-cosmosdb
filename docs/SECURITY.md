@@ -39,7 +39,7 @@ This document describes the release candidate for DBX Store review. The plugin s
 
 ## Known boundaries
 
-The first published target is macOS ARM64. Authentication is Account Key only; Entra ID, SSH/DBX proxy routing, automatic region failover, bulk operations and full SDK cross-partition query pipelines are not supported. Completion suggestions are based on a basic Cosmos SQL vocabulary and already-read document fields, not a complete container schema or SQL semantic validator.
+The first published target was macOS ARM64. Version 0.26.0 adds a Windows x64 build target; native Windows DBX/WebView2 device testing is deferred. On Windows, local file access relies on the host data directory/user-profile ACLs, not the synthesized Unix mode bits returned by Go. Authentication is Account Key only; Entra ID, SSH/DBX proxy routing, automatic region failover, bulk operations and full SDK cross-partition query pipelines are not supported. Completion suggestions are based on a basic Cosmos SQL vocabulary and already-read document fields, not a complete container schema or SQL semantic validator.
 
 Please report reproducible bugs using [GitHub issues](https://github.com/fwrq41251/dbx-plugin-cosmosdb/issues). Do not include Account Keys, authorization headers, private endpoint addresses or business documents in public reports.
 

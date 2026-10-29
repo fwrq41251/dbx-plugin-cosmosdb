@@ -192,7 +192,9 @@ func TestMCPCacheNeverUsesNetwork(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	cacheRoot := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cacheRoot)
-	// os.UserCacheDir uses HOME/Library/Caches on macOS and XDG_CACHE_HOME on Linux.
+	t.Setenv("LocalAppData", cacheRoot)
+	// os.UserCacheDir uses HOME/Library/Caches on macOS, XDG_CACHE_HOME
+	// on Linux, and LocalAppData on Windows. Keep all test caches isolated.
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("cache caused network I/O") }))
 	defer s.Close()
 	c, _ := newClient(s.URL, "dGVzdC1hY2NvdW50LWtleQ==", true)

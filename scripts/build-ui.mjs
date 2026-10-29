@@ -9,6 +9,7 @@ import {
   rm,
 } from "node:fs/promises";
 import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
 async function atomicWrite(path, data) {
   const temporary = new URL(path.href + `.${process.pid}.tmp`);
   try {
@@ -27,11 +28,11 @@ if (manifest !== manifestSource)
   await atomicWrite(new URL("manifest.json", root), manifest);
 const styles = await read("src/styles.css");
 const bundle = await build({
-  entryPoints: [new URL("src/app.mjs", root).pathname],
+  entryPoints: [fileURLToPath(new URL("src/app.mjs", root))],
   bundle: true,
   format: "iife",
   write: false,
-  target: "safari15",
+  target: ["safari15", "edge109"],
   legalComments: "inline",
 });
 const script = bundle.outputFiles[0].text

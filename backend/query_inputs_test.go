@@ -35,14 +35,8 @@ func TestQueryInputsPreserveTextAndIsolateTargets(t *testing.T) {
 		}
 	}
 	path, _ := c.scopedDataPath("query-input-v1", "Shop", "Orders")
-	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
-		t.Fatal("file permission", info.Mode())
-	}
-	info, _ = os.Stat(filepath.Dir(path))
-	if info.Mode().Perm() != 0700 {
-		t.Fatal("directory permission", info.Mode())
-	}
+	assertPrivatePermissions(t, path, 0600)
+	assertPrivatePermissions(t, filepath.Dir(path), 0700)
 	// The UI may save on a read-only connection. This method is not a Cosmos write.
 	p.connections = map[string]*cosmosClient{"saved-one": c}
 	raw, _ := json.Marshal(map[string]any{"connectionId": "saved-one", "database": "Shop", "container": "Orders"})

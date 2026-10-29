@@ -338,7 +338,7 @@ func rpcError(err error) *sdk.PluginError {
 }
 
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.25.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.26.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

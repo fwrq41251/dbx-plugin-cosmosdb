@@ -33,10 +33,7 @@ func TestPartitionCachePersistsAcrossClientsAndScopes(t *testing.T) {
 		t.Fatalf("%+v %v", cached, err)
 	}
 	path, _ := c.partitionCachePath("db", "items")
-	info, _ := os.Stat(path)
-	if info.Mode().Perm()&0077 != 0 {
-		t.Fatal("cache readable by other users")
-	}
+	assertPrivatePermissions(t, path, 0600)
 	data, _ := os.ReadFile(path)
 	if strings.Contains(string(data), testKey) || strings.Contains(string(data), "example.com") {
 		t.Fatal("identity or credential leaked")

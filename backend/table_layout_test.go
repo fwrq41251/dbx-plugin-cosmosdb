@@ -27,10 +27,7 @@ func TestTableLayoutPersistsByConnectionAndContainerWithoutDocumentData(t *testi
 		t.Fatal(other, err)
 	}
 	path, _ := c.layoutPath("Shop", "Orders")
-	stat, _ := os.Stat(path)
-	if stat.Mode().Perm() != 0600 {
-		t.Fatal(stat.Mode())
-	}
+	assertPrivatePermissions(t, path, 0600)
 	invalid := &tableLayout{Widths: map[string]float64{"id": 9999}}
 	if _, err = c.tablePreferences("Shop", "Orders", invalid); err == nil {
 		t.Fatal("invalid width accepted")

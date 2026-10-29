@@ -130,6 +130,6 @@ for (const width of [1100, 900, 600]) {
     await page
       .locator("iframe")
       .last()
-      .screenshot({ path: `/tmp/dbx-polish-scoped-${width}.png` });
+      .screenshot({ path: capturePath(`dbx-polish-scoped-${width}.png`) });
   });
 }
