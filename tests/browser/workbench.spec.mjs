@@ -72,7 +72,7 @@ test("read-only connection allows querying and reading but disables writes", asy
     "contenteditable",
     "false",
   );
-  for (const name of ["新建", "保存", "删除"])
+  for (const name of ["新建文档", "保存", "删除"])
     await expect(
       frame.getByRole("button", { name, exact: true }),
     ).toBeDisabled();
@@ -82,8 +82,9 @@ test("create and conditional delete require explicit confirmation", async ({
   request,
 }) => {
   const frame = await connect(page);
-  await frame.getByRole("button", { name: "新建", exact: true }).click();
+  await frame.getByRole("button", { name: "新建文档", exact: true }).click();
   await frame.locator("#document-pk").fill('["demo"]');
+  await frame.locator("#document-json-view").click();
   await frame
     .locator("#editor .cm-content")
     .fill('{"id":"new-document","tenant":"demo","value":1}');

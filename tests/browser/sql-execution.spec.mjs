@@ -5,7 +5,11 @@ test.beforeEach(async ({ request }) => {
   await request.get(base + "reset");
 });
 async function selectLastLine(sql, text) {
+  await sql.click();
+  await sql.press("ControlOrMeta+a");
+  await sql.press("Backspace");
   await sql.fill(text);
+  await expect.poll(() => sql.innerText()).toBe(text);
   await sql.press("ControlOrMeta+End");
   for (let i = 0; i < text.split("\n").at(-1).length; i++)
     await sql.press("Shift+ArrowLeft");
@@ -22,7 +26,8 @@ test("shortcut executes only selected SQL; pagination retains that snapshot afte
   await expect(f.locator("#run")).toHaveText("运行选中 SQL");
   await expect(f.locator("#sql .editor-status")).toContainText("执行选区");
   await sql.press("ControlOrMeta+Enter");
-  await expect(f.locator("#status")).toContainText("查询完成");
+  await expect(f.locator("#query-metrics")).toContainText("RU");
+  await expect(f.locator("#run")).toBeEnabled();
   expect(await sql.innerText()).toBe("BAD first statement\nSELECT * FROM c");
   await expect(f.locator("#execution-source")).toHaveText("选中 SQL · 第 2 行");
   await expect(f.locator("#result-origin")).toHaveText("当前页");
@@ -52,8 +57,12 @@ test("selected syntax error maps to the document line, click focuses it, edits c
     "-- 😀 中文\nSELECT c.id FROM c\nSELECT * FROM c WHERE c.BAD = true",
   );
   await f.locator("#run").click();
-  await expect(f.locator("#sql-diagnostic")).toContainText("第 3 行，第 25 列");
+  await expect(f.locator("#sql-error-message")).toContainText(
+    "第 3 行，第 25 列",
+  );
   await expect(f.locator("#sql .cm-lintRange-error")).toHaveCount(1);
+  await expect(f.locator("#status")).toBeHidden();
+  await expect(f.locator("#sql-error-meta")).toContainText("RU 未知");
   await expect(f.locator("#status")).not.toContainText("secret-upstream-value");
   await page
     .locator("iframe")
@@ -65,13 +74,13 @@ test("selected syntax error maps to the document line, click focuses it, edits c
     "第 3 行，第 25 列",
   );
   await sql.fill("SELECT * FROM c");
-  await expect(f.locator("#sql-diagnostic")).toBeHidden();
+  await expect(f.locator("#sql-error")).toBeHidden();
   await expect(f.locator("#sql .cm-lintRange-error")).toHaveCount(0);
   await query(f);
   await expect(f.locator("#execution-source")).toBeHidden();
 });
 
-test("blank selection never runs the whole editor; collapsed run uses the selected SQL", async ({
+test("blank selection never runs the whole editor; the run button preserves selected SQL", async ({
   page,
   request,
 }) => {
@@ -86,10 +95,10 @@ test("blank selection never runs the whole editor; collapsed run uses the select
   await expect(f.locator("#status")).toContainText("未执行全文");
   expect((await (await request.get(base + "state")).json()).queryCalls).toBe(0);
   await selectLastLine(sql, "BAD first statement\nSELECT * FROM c");
-  await f.locator("#query-collapse").click();
-  await expect(f.locator("#run-collapsed")).toHaveText("运行选中 SQL");
-  await f.locator("#run-collapsed").click();
-  await expect(f.locator("#status")).toContainText("查询完成");
+  await expect(f.locator("#run")).toHaveText("运行选中 SQL");
+  await f.locator("#run").click();
+  await expect(f.locator("#query-metrics")).toContainText("RU");
+  await expect(f.locator("#run")).toBeEnabled();
   expect(
     (await (await request.get(base + "state")).json()).queryRequests[0].query,
   ).toBe("SELECT * FROM c");
@@ -107,7 +116,15 @@ test("syntax errors without trustworthy offsets keep text feedback without a gue
   ]) {
     await sql.fill(text);
     await f.locator("#run").click();
-    await expect(f.locator("#status")).toContainText("查询失败");
+    if (text.includes("NEEDS_PIPELINE")) {
+      await expect(f.locator("#status")).toContainText("查询失败");
+      await expect(f.locator("#sql-error")).toBeHidden();
+    } else {
+      await expect(f.locator("#sql-error-message")).toContainText(
+        "SQL 语法错误",
+      );
+      await expect(f.locator("#status")).toBeHidden();
+    }
     await expect(f.locator("#sql-diagnostic")).toBeHidden();
     await expect(f.locator("#sql .cm-lintRange-error")).toHaveCount(0);
   }
@@ -127,7 +144,7 @@ test("canceled late syntax errors cannot mark a subsequent successful query", as
   await sql.fill("SELECT * FROM c");
   await query(f);
   await page.waitForTimeout(1600);
-  await expect(f.locator("#sql-diagnostic")).toBeHidden();
+  await expect(f.locator("#sql-error")).toBeHidden();
   await expect(f.locator("#sql .cm-lintRange-error")).toHaveCount(0);
   await expect(f.locator("#row-count")).toHaveText("1 条");
 });
@@ -140,7 +157,8 @@ test("post-write refresh retains the previously selected SQL and source", async 
     sql = f.locator("#sql .cm-content");
   await selectLastLine(sql, "BAD first statement\nSELECT * FROM c");
   await f.locator("#run").click();
-  await expect(f.locator("#status")).toContainText("查询完成");
+  await expect(f.locator("#query-metrics")).toContainText("RU");
+  await expect(f.locator("#run")).toBeEnabled();
   await f
     .getByRole("button", { name: "读取第 1 行完整文档", exact: true })
     .click();

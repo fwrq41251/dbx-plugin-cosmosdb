@@ -3,7 +3,7 @@
   "manifest_version": 1,
   "id": "io.github.fwrq41251.cosmosdb",
   "name": "Cosmos DB NoSQL",
-  "version": "0.16.0",
+  "version": "0.19.0",
   "publisher": "fwrq41251",
   "source": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",
   "homepage": "https://github.com/fwrq41251/dbx-plugin-cosmosdb",

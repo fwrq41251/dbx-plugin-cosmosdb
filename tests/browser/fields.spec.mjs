@@ -30,7 +30,10 @@ test("fields edit strings and exact numbers; saving sends only the two changed p
   await f
     .getByLabel("字段 /total", { exact: true })
     .fill("9223372036854775808");
-  await page.locator("iframe").last().screenshot({ path: "docs/field-editor.png" });
+  await page
+    .locator("iframe")
+    .last()
+    .screenshot({ path: "docs/field-editor.png" });
   await save(f);
   await expect(f.locator("#confirm-title")).toHaveText("局部更新文档？");
   await expect(f.locator("#confirm-message")).toContainText(
@@ -111,14 +114,29 @@ test("over ten changes require explicitly selecting full replacement", async ({
   await expect(f.locator("#status")).toContainText("局部更新最多 10");
   await expect(f.locator("#confirm-dialog")).toBeHidden();
   expect((await snapshot(request)).writeCount).toBe(0);
-  await f.locator("#save-method").selectOption("replace");
-  await save(f);
+  await f.locator("#document-actions").press("ArrowDown");
+  await expect(f.locator("#document-actions-menu")).toBeVisible();
+  await f.locator("#replace-document").press("Enter");
   await expect(f.locator("#confirm-title")).toHaveText("替换完整文档？");
   await f.locator("#confirm-accept").click();
   await expect(f.locator("#status")).toContainText("保存成功");
   const result = await snapshot(request);
   expect(result.replaceCount).toBe(1);
   expect(result.patchCount).toBe(0);
+  const editor = f.locator("#editor .cm-content");
+  await editor.fill(
+    (await editor.innerText()).replace(
+      '"status": "pending"',
+      '"status": "paid"',
+    ),
+  );
+  await save(f);
+  await expect(f.locator("#confirm-title")).toHaveText("局部更新文档？");
+  await f.locator("#confirm-accept").click();
+  await expect(f.locator("#status")).toContainText("保存成功");
+  const second = await snapshot(request);
+  expect(second.replaceCount).toBe(1);
+  expect(second.patchCount).toBe(1);
 });
 
 test("syntax and write permission errors are actionable without leaking upstream diagnostics", async ({
@@ -128,8 +146,11 @@ test("syntax and write permission errors are actionable without leaking upstream
   const f = await connect(page);
   await f.locator("#sql .cm-content").fill('SELECT * FROM c AND c.id = "one"');
   await f.locator("#run").click();
-  await expect(f.locator("#status")).toContainText("SQL 语法错误");
-  await expect(f.locator("#status")).toContainText("第 15 个字符");
+  await expect(f.locator("#sql-error-message")).toContainText("SQL 语法错误");
+  await expect(f.locator("#sql-error-message")).toContainText(
+    "第 1 行，第 15 列",
+  );
+  await expect(f.locator("#status")).toBeHidden();
   await expect(f.locator("#status")).not.toContainText("secret-upstream-value");
   await f.locator("#sql .cm-content").fill("SELECT * FROM c");
   await open(f);
@@ -152,5 +173,6 @@ test("read-only connections expose field viewing without editing controls", asyn
   await open(f);
   await expect(f.getByLabel("字段 /status", { exact: true })).toBeDisabled();
   await expect(f.locator("#add-field")).toBeDisabled();
-  await expect(f.locator("#save-method")).toBeDisabled();
+  await expect(f.locator("#document-actions")).toBeHidden();
+  await expect(f.locator("#replace-document")).toBeDisabled();
 });

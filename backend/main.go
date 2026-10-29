@@ -20,14 +20,16 @@ type plugin struct {
 	queriesMu   sync.Mutex
 	queries     map[string]*queryJob
 	mcpMetadata map[string]metadataEntry
+	viewMu      sync.Mutex
 }
 type request struct {
-	Browse       bool            `json:"browse"`
-	ConnectionID string          `json:"connectionId"`
-	QueryID      string          `json:"queryId"`
-	Context      context.Context `json:"-"`
-	Preferences  *tableLayout    `json:"preferences"`
-	Connection   connection      `json:"connection"`
+	Browse       bool                 `json:"browse"`
+	ConnectionID string               `json:"connectionId"`
+	QueryID      string               `json:"queryId"`
+	Context      context.Context      `json:"-"`
+	Preferences  *tableLayout         `json:"preferences"`
+	Views        *viewPreferencePatch `json:"views"`
+	Connection   connection           `json:"connection"`
 	Runtime      struct {
 		Host  string          `json:"host"`
 		Port  int             `json:"port"`
@@ -73,6 +75,13 @@ func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage
 	var r request
 	if json.Unmarshal(raw, &r) != nil {
 		return nil, sdk.NewError(-32602, "Invalid request parameters")
+	}
+	if method == "cosmos/viewPreferences" {
+		value, err := p.viewPreferences(&cosmosClient{}, r.Views)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		return value, nil
 	}
 	if method == "connection/disconnect" {
 		p.queriesMu.Lock()
@@ -290,7 +299,7 @@ func rpcError(err error) *sdk.PluginError {
 	return sdk.NewError(-32602, err.Error())
 }
 func main() {
-	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.16.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
+	if err := sdk.NewServer(sdk.Metadata{ID: pluginID, Version: "0.19.0", Capabilities: []string{"connections"}}, &plugin{connections: make(map[string]*cosmosClient)}).Serve(); err != nil {
 		log.Fatal(err)
 	}
 }

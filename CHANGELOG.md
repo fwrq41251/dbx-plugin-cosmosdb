@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.19.0 — Persistent view choices and quieter tools
+
+- Persist independent result table/JSON and document fields/JSON choices as private plugin-wide enum preferences, reused on reload, reconnect, container changes, new documents and previews. Merge partial updates atomically; invalid records fall back and storage failures leave the current view usable.
+- Merge cell/row copy into one icon menu with context-menu and keyboard access. Hide result filtering/copy/pagination before the first query; keep query metrics in the result heading without duplicate success notifications.
+- Move full replacement and UUID regeneration into a document action menu. Full replacement remains explicitly confirmed and applies to one save only; subsequent normal saves use Patch.
+- Standardize auxiliary icons, retain text for main actions and view/page choices, and remove the duplicate panel toggle while a document is visible.
+
+## 0.18.0 — Inline partition entry and compact document actions
+
+- Merge partition typing, candidate filtering and selection into an editable combobox with an embedded arrow. Typing reads/filters local candidates only; explicit dropdown or ArrowDown starts automatic cached/resumable discovery. Preserve typed JSON precision and keyboard access.
+- Remove the separate partition search field and simplify dropdown controls, keeping progress, RU, pause/resume and refresh. Position options above or below the input to fit the viewport.
+- Replace row document/preview text actions and the document-panel toggle with accessible icons; narrow the row action column while retaining manual point reads and hidden drafts.
+- Clarify that result search filters the loaded page only, without querying the database.
+
+## 0.17.0 — Focused query workspace
+
+- Remove SQL collapse, alternate run and search controls; keep selected SQL execution, completion and undo in a lean SQL editor. JSON search remains available.
+- Hide the document panel until explicitly opened, previewed, read or created. Close it without losing drafts, restore the result view from expanded mode, and hide an empty panel after successful queries or scope changes.
+- Move new-document access to the result toolbar and add a close action inside the document panel.
+- Show SQL syntax errors once below the editor, with a location action only for trustworthy offsets; clear obsolete hints on edits and retain separate execution errors for non-syntax failures.
+- Simplify learned-field completion to icons and field names without repeated explanatory text.
+
 ## 0.16.0 — Persistent plugin-managed location and current MCP compatibility
 
 - Remove database/container fields from the connection form; atomically persist validated selections in private plugin storage, isolated by connection and endpoint. Migrate existing defaults without rewriting credentials.

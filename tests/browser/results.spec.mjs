@@ -66,10 +66,12 @@ test("all fields, column preferences, local filter and exact copy", async ({
   await frame
     .getByRole("cell", { name: "9223372036854775807", exact: true })
     .click();
+  await frame.locator("#copy-selection").click();
   await frame.locator("#copy-cell").click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toBe("9223372036854775807");
+  await frame.locator("#copy-selection").click();
   await frame.locator("#copy-row").click();
   await expect
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
@@ -113,7 +115,8 @@ test("cancel reaches HTTP, allows another query, and late work cannot replace re
   await expect(frame.locator("#table")).toContainText("order-001");
   await expect(frame.locator("#run")).toBeEnabled();
   await query(frame);
-  await expect(frame.locator("#status")).toContainText("查询完成");
+  await expect(frame.locator("#query-metrics")).toContainText("RU");
+  await expect(frame.locator("#run")).toBeEnabled();
   await expect
     .poll(
       async () =>
@@ -122,7 +125,8 @@ test("cancel reaches HTTP, allows another query, and late work cannot replace re
     )
     .toBe(1);
   await page.waitForTimeout(1600);
-  await expect(frame.locator("#status")).toContainText("查询完成");
+  await expect(frame.locator("#query-metrics")).toContainText("RU");
+  await expect(frame.locator("#run")).toBeEnabled();
   await expect(frame.locator("#page-label")).toHaveText("第 1 页");
 });
 
@@ -196,7 +200,10 @@ test("local filtering agrees across table, JSON and exported documents", async (
   await f.locator("#json-view").click();
   await expect(f.locator("#raw-results .cm-content")).toHaveText("[]");
   await expect(f.locator("#table-tools")).toBeHidden();
-  await expect(f.locator("#export")).toHaveText("导出筛选结果");
+  await expect(f.locator("#export")).toHaveAttribute(
+    "aria-label",
+    "导出筛选结果",
+  );
   // The official dev host has no saveFile implementation. Capture the exact
   // bridge payload instead of pretending a native file dialog is available.
   let exported;
@@ -248,30 +255,82 @@ test("query origin survives cancellation", async ({ page, request }) => {
   await expect(f.locator("#query-metrics")).toContainText("2.81 RU");
 });
 
-test("collapsing SQL and document panels gives space back without discarding state", async ({
+test("documents open on demand and closing retains the draft and restores result space", async ({
   page,
 }) => {
   const f = await connect(page);
-  await query(f);
-  const before = await f.locator("#table").boundingBox();
-  await f.locator("#query-collapse").click();
-  await expect(f.locator("#query-body")).toBeHidden();
-  await expect(f.locator("#run-collapsed")).toBeVisible();
-  const collapsed = await f.locator("#table").boundingBox();
-  expect(collapsed.height).toBeGreaterThan(before.height + 150);
-  await f.locator("#document-toggle").click();
   await expect(f.locator(".document-panel")).toBeHidden();
+  await expect(f.locator("#document-toggle")).toHaveText("");
+  await expect(f.locator("#document-toggle svg")).toHaveCount(1);
+  await expect(f.locator("#document-toggle")).toHaveAttribute(
+    "aria-label",
+    "文档面板",
+  );
+  await expect(
+    f.locator("#query-collapse, #run-collapsed, #sql-search"),
+  ).toHaveCount(0);
+  await query(f);
+  await page
+    .locator("iframe")
+    .last()
+    .screenshot({ path: "docs/query-workspace.png" });
+  await expect(f.locator(".row-read").first()).toHaveText("");
+  await expect(f.locator(".row-read svg").first()).toBeVisible();
+  await expect(f.locator("#result-filter")).toHaveAttribute(
+    "placeholder",
+    "在本页结果中查找…",
+  );
+  await expect(f.locator("#result-filter")).toHaveAttribute(
+    "title",
+    /查全库请使用 SQL WHERE/,
+  );
   const wide = await f.locator("#table").boundingBox();
-  expect(wide.width).toBeGreaterThan(collapsed.width + 250);
   await f
     .getByRole("button", { name: "读取第 1 行完整文档", exact: true })
     .click();
   await expect(f.locator(".document-panel")).toBeVisible();
-  await expect(f.locator("#document-state")).toHaveText("完整文档");
-  await f.locator("#query-collapse").click();
-  await expect(f.locator("#sql .cm-content")).toContainText("SELECT * FROM c");
+  const split = await f.locator("#table").boundingBox();
+  expect(wide.width).toBeGreaterThan(split.width + 250);
+  const status = f.getByLabel("字段 /status", { exact: true });
+  await status.fill("draft-kept");
+  await f.locator("#document-close").click();
+  await expect(f.locator(".document-panel")).toBeHidden();
+  await expect(f.locator("#document-toggle")).toBeFocused();
+  await expect(f.locator("#confirm-dialog")).toBeHidden();
+  await f.locator("#document-toggle").click();
+  await expect(status).toHaveValue("draft-kept");
+  await expect(f.locator("#document-state")).toHaveText("未保存");
+  await f.locator("#document-expand").click();
+  await expect(f.locator("main")).toBeHidden();
+  await f.locator("#document-close").click();
+  await expect(f.locator("main")).toBeVisible();
+  await expect(f.locator(".document-panel")).toBeHidden();
+  await f.locator("#document-toggle").click();
+  await expect(f.locator("main")).toBeVisible();
+  await expect(status).toHaveValue("draft-kept");
   await page
     .locator("iframe")
     .last()
     .screenshot({ path: "/tmp/dbx-ux-refinement.png" });
+});
+
+test("successful queries clear the document panel and manual lookup remains available", async ({
+  page,
+}) => {
+  const f = await connect(page);
+  await query(f);
+  await f
+    .getByRole("button", { name: "读取第 1 行完整文档", exact: true })
+    .click();
+  await query(f);
+  await expect(f.locator(".document-panel")).toBeHidden();
+  await expect(f.locator("#document-toggle")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await f.locator("#document-toggle").click();
+  await f.locator("#document-id").fill("order-001");
+  await f.locator("#document-pk").fill('["demo"]');
+  await f.locator("#read").click();
+  await expect(f.locator("#document-state")).toHaveText("完整文档");
 });

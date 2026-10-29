@@ -131,7 +131,11 @@ test("SQL offers Cosmos keywords, learned fields and parameters without remote d
   const before = await (await request.get(base + "state")).json();
   await fillCode(sql, "SELECT * FROM c WHERE c.st");
   await sql.press("Control+Space");
-  await f.getByRole("option", { name: /status/ }).click();
+  await expect(
+    f.getByRole("option", { name: "status", exact: true }),
+  ).toBeVisible();
+  await expect(f.locator(".cm-completionDetail")).toHaveCount(0);
+  await f.getByRole("option", { name: "status", exact: true }).click();
   await expect(sql).toHaveText("SELECT * FROM c WHERE c.status");
   await f.locator(".query-panel details summary").click();
   await f.locator("#parameters").fill('[{"name":"@member","value":"example"}]');
@@ -148,4 +152,20 @@ test("SQL offers Cosmos keywords, learned fields and parameters without remote d
   await fillCode(sql, "SELECT * FROM c WHERE c.st");
   await sql.press("Control+Space");
   await expect(f.locator(".cm-tooltip-autocomplete")).toHaveCount(0);
+});
+
+test("SQL keeps completion, selection and undo without a search panel", async ({
+  page,
+}) => {
+  const f = await connect(page);
+  const sql = f.locator("#sql .cm-content");
+  await sql.fill("SELECT * FROM c");
+  await sql.press("ControlOrMeta+f");
+  await expect(f.locator("#sql .cm-search")).toHaveCount(0);
+  await expect(sql).toContainText("SELECT * FROM c");
+  await sql.press("End");
+  await sql.pressSequentially(" WHERE true");
+  await sql.press("Escape");
+  await sql.press("ControlOrMeta+z");
+  await expect(sql).not.toHaveText("SELECT * FROM c WHERE true");
 });

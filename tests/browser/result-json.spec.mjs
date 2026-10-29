@@ -157,10 +157,12 @@ test("opening result JSON before a query stays empty and copy/search remain unav
 }) => {
   const f = await connect(page);
   await f.locator("#json-view").click();
-  await expect(f.locator("#raw-results .cm-editor")).toHaveCount(1);
+  await expect(f.locator("#raw-results .cm-editor")).toHaveCount(0);
+  await expect(f.locator("#result-tools")).toBeHidden();
   await expect(f.locator("#copy-results-json")).toBeDisabled();
   await expect(f.locator("#result-json-search")).toBeDisabled();
   await query(f);
+  await expect(f.locator("#raw-results .cm-editor")).toHaveCount(1);
   await expect(f.locator("#copy-results-json")).toBeEnabled();
   await expect(f.locator("#result-json-search")).toBeEnabled();
 });

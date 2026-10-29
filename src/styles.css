@@ -669,14 +669,25 @@ dialog.has-changes {
 }
 .pk-input {
   display: flex;
-  gap: 5px;
+  gap: 0;
+  position: relative;
   min-width: 0;
 }
 .pk-input input {
   flex: 1;
   width: 0;
+  padding-right: 32px;
 }
 .pk-input button {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 28px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-size: 11px;
 }
 #pk-picker {
@@ -693,12 +704,10 @@ dialog.has-changes {
   background: var(--panel);
   box-shadow: 0 12px 40px #0005;
 }
-#pk-filter {
-  flex: none;
-}
 #pk-options {
   overflow: auto;
-  min-height: 70px;
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 230px;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -714,7 +723,8 @@ dialog.has-changes {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-#pk-options button[aria-selected="true"] {
+#pk-options button[aria-selected="true"],
+#pk-options button.keyboard-active {
   background: #7cd4bf18;
   color: var(--accent);
 }
@@ -1187,15 +1197,28 @@ body.light button.danger {
   }
 }
 
-.sql-diagnostic {
-  width: 100%;
-  padding: 6px 8px;
+.sql-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
   margin-top: 6px;
-  color: #d98274;
-  text-align: left;
-  justify-content: flex-start;
-  white-space: normal;
+  border-left: 2px solid #d98274;
+  background: #d9827410;
+  color: var(--error, #d98274);
   font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#sql-error-meta {
+  display: block;
+  font-size: 10px;
+}
+.sql-error button {
+  flex: none;
+}
+.code-editor .cm-tooltip-autocomplete {
+  max-width: min(420px, calc(100vw - 32px));
 }
 #execution-source {
   font-size: 10px;
@@ -1483,4 +1506,35 @@ header .badge {
 #scope-picker small {
   margin: 0;
   line-height: 1.5;
+}
+
+body.light .sql-error {
+  color: #a33126;
+}
+
+.pk-discovery,
+#pk-count {
+  flex: none;
+}
+
+.action-menu {
+  position: fixed;
+  z-index: 1100;
+  width: min(220px, calc(100vw - 16px));
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  box-shadow: 0 8px 28px #0004;
+}
+.action-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+.action-menu button:hover:not(:disabled),
+.action-menu button:focus-visible {
+  background: #7cd4bf18;
 }

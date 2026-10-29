@@ -20,12 +20,15 @@ test("new documents inherit partition fields, generate UUIDs, preview changes an
   await f.locator("#query-pk").fill('["demo"]');
   await query(f);
   await activate(f, "new");
+  await f.locator("#document-json-view").click();
   const initial = await f.locator("#document-id").inputValue();
   expect(initial).toMatch(/^[0-9a-f-]{36}$/);
   await expect(f.locator("#document-pk")).toHaveValue('["demo"]');
   expect(
     JSON.parse(await f.locator("#editor .cm-content").innerText()).tenant,
   ).toBe("demo");
+  await f.locator("#document-actions").press("ArrowDown");
+  await expect(f.locator("#document-actions-menu")).toBeVisible();
   await activate(f, "generate-id");
   expect(await f.locator("#document-id").inputValue()).not.toBe(initial);
   await f.locator("#document-id").fill("preview-document");
@@ -88,23 +91,23 @@ test("create adds a cached key, and deleting its last document removes it withou
   await f.locator("#query-pk-choose").click();
   await expect(f.locator("#pk-progress")).toContainText("全部分区键已加载");
   const calls = (await state(request)).discoveryCalls;
-  await f.locator("#pk-close").click();
+  await f.locator("#query-pk").press("Escape");
   await f.locator("#query-pk").fill('["new-partition"]');
   await activate(f, "new");
   await activate(f, "save");
   await f.locator("#confirm-accept").click();
   await expect(f.locator("#status")).toContainText("保存成功");
   await f.locator("#query-pk-choose").click();
-  await f.locator("#pk-filter").fill("new-partition");
+  await f.locator("#query-pk").fill("new-partition");
   await expect(f.locator("#pk-options").getByRole("option")).toHaveCount(1);
   expect((await state(request)).discoveryCalls).toBe(calls);
-  await f.locator("#pk-close").click();
+  await f.locator("#query-pk").press("Escape");
   await activate(f, "delete");
   await expect(f.locator("#change-rows")).toContainText("（删除）");
   await f.locator("#confirm-accept").click();
   await expect(f.locator("#status")).toContainText("删除成功");
   await f.locator("#query-pk-choose").click();
-  await f.locator("#pk-filter").fill("new-partition");
+  await f.locator("#query-pk").fill("new-partition");
   await expect(f.locator("#pk-options").getByRole("option")).toHaveCount(0);
   expect((await state(request)).discoveryCalls).toBe(calls);
   expect((await state(request)).writeCount).toBe(2);

@@ -17,7 +17,7 @@ test("query controls align and document tools stay in a single compact row", asy
   await request.get(base + "nested-document");
   const f = await connect(page);
   const boxes = await Promise.all(
-    ["page-size", "query-pk", "query-pk-choose", "run"].map((id) =>
+    ["page-size", "query-pk", "run"].map((id) =>
       f.locator("#" + id).boundingBox(),
     ),
   );
@@ -25,6 +25,12 @@ test("query controls align and document tools stay in a single compact row", asy
     expect(Math.abs(box.height - 32)).toBeLessThanOrEqual(1);
     expect(Math.abs(box.y - boxes[0].y)).toBeLessThanOrEqual(1);
   }
+  const arrow = await f.locator("#query-pk-choose").boundingBox();
+  expect(arrow.x).toBeGreaterThan(boxes[1].x);
+  expect(arrow.x + arrow.width).toBeLessThanOrEqual(
+    boxes[1].x + boxes[1].width,
+  );
+  await expect(f.locator("#query-pk-choose svg")).toHaveCount(1);
   await read(f);
   await expect(f.locator("#document-location")).not.toHaveAttribute("open");
   await expect(f.locator("#document-identity")).toHaveText("order-001");
@@ -100,7 +106,7 @@ for (const width of [1100, 900, 600]) {
       await f.locator("body").evaluate((el) => el.scrollWidth - el.clientWidth),
     ).toBeLessThanOrEqual(1);
     const boxes = await Promise.all(
-      ["page-size", "query-pk", "query-pk-choose", "run"].map((id) =>
+      ["page-size", "query-pk", "run"].map((id) =>
         f.locator("#" + id).boundingBox(),
       ),
     );
@@ -111,7 +117,7 @@ for (const width of [1100, 900, 600]) {
       expect(Math.abs(box.height - 32)).toBeLessThanOrEqual(1);
     }
     await expect(f.locator("#choose-columns")).toHaveCount(0);
-    await expect(f.locator("#table-tools #copy-cell")).toHaveCount(1);
+    await expect(f.locator("#table-tools #copy-selection")).toHaveCount(1);
     if (width === 600)
       await page
         .locator("iframe")

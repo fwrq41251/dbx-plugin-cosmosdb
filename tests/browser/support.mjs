@@ -7,7 +7,16 @@ export async function connect(
   readOnly = false,
   scoped = false,
   name = `E2E-${Date.now()}`,
+  { keepViews = false } = {},
 ) {
+  if (!keepViews) {
+    await mkdir(resolve(".dbx-dev/plugin-data"), { recursive: true });
+    await writeFile(
+      resolve(".dbx-dev/plugin-data/view-preferences-v1.json"),
+      JSON.stringify({ version: 1, results: "table", document: "fields" }),
+      { mode: 0o600 },
+    );
+  }
   page.on("pageerror", (error) =>
     console.error("Workbench page error:", error.message),
   );
@@ -66,5 +75,7 @@ export async function connect(
 }
 export async function query(frame) {
   await frame.getByRole("button", { name: "运行查询", exact: true }).click();
-  await expect(frame.locator("#status")).toContainText("2.81 RU");
+  await expect(frame.locator("#query-metrics")).toContainText("2.81 RU");
+  await expect(frame.locator("#run")).toBeEnabled();
+  await expect(frame.locator("#result-origin")).toHaveText("当前页");
 }

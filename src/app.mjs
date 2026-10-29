@@ -1,3 +1,5 @@
+import { icon } from "./icons.mjs";
+import { createMenu } from "./menu.mjs";
 import { validateSQLExecution, sqlErrorDiagnostic } from "./sql-execution.mjs";
 import { jsonResultItems, jsonResultItemAt } from "./result-items.mjs";
 import { createCodeEditor } from "./code-editor.mjs";
@@ -52,6 +54,7 @@ const state = {
   snapshot: null,
   baseline: "",
   creating: false,
+  resultView: "table",
   documentView: "json",
   preferredDocumentView: "fields",
   fieldErrors: new Map(),
@@ -64,6 +67,9 @@ const state = {
   resultStale: false,
 };
 const host = window.dbxPlugin;
+let copyMenu, documentWriteMenu;
+let viewPreferenceWrites = Promise.resolve(),
+  viewPreferenceRevision = 0;
 let resultEditor = null,
   resultEditorPage,
   resultEditorFilter = "";
@@ -111,7 +117,11 @@ const sqlEditor = createCodeEditor($("sql"), {
   },
 });
 const partitionScopes = new Map();
-let partitionTarget = "query-pk";
+let partitionTarget = "query-pk",
+  partitionFilter = "",
+  partitionActiveKey = null,
+  partitionPickerEpoch = 0,
+  partitionBrowseRequested = false;
 function partitionScope() {
   return JSON.stringify([state.connectionId, state.database, state.container]);
 }
@@ -136,6 +146,12 @@ function rememberKey(text) {
   }
 }
 function closePartitionPicker() {
+  partitionPickerEpoch++;
+  partitionActiveKey = null;
+  for (const id of ["query-pk", "document-pk"]) {
+    $(id).setAttribute("aria-expanded", "false");
+    $(id).removeAttribute("aria-activedescendant");
+  }
   if (state.container) candidates().loader?.stop();
   $("pk-picker").hidden = true;
   for (const id of ["query-pk-choose", "document-pk-choose"])
@@ -148,7 +164,7 @@ function activatePartitionScope() {
 }
 function renderPartitionOptions() {
   const cache = candidates(),
-    items = cache.filter($("pk-filter").value),
+    items = cache.filter(partitionFilter),
     target = $("pk-options");
   target.replaceChildren();
   let selected = "";
@@ -164,13 +180,19 @@ function renderPartitionOptions() {
       ? "暂无匹配，仍在加载时请稍候，也可手动输入。"
       : cache.loader?.error
         ? "无法自动获取候选，仍可手动输入分区键。"
-        : "正在读取本地缓存或查找分区键…";
+        : !cache.hydrated
+          ? "正在读取本地候选…"
+          : "暂无本地候选，可直接输入 JSON 分区键，或点下拉箭头加载。";
     target.append(empty);
   }
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     const button = document.createElement("button");
     button.type = "button";
     button.setAttribute("role", "option");
+    button.id = `pk-option-${index}`;
+    button.tabIndex = -1;
+    button.classList.toggle("keyboard-active", item.key === partitionActiveKey);
+    button.onpointerdown = (event) => event.preventDefault();
     button.setAttribute("aria-selected", String(selected === item.key));
     button.disabled = state.busy;
     button.dataset.key = item.key;
@@ -190,15 +212,29 @@ function renderPartitionOptions() {
     };
     target.append(button);
   }
+  const active = [...target.querySelectorAll("button")].find(
+    (b) => b.dataset.key === partitionActiveKey,
+  );
+  if (active)
+    $(partitionTarget).setAttribute("aria-activedescendant", active.id);
+  else {
+    partitionActiveKey = null;
+    $(partitionTarget).removeAttribute("aria-activedescendant");
+  }
   const loader = cache.loader,
     stats = cache.stats.seek,
     done = stats.started && !stats.continuation;
-  $("pk-load").textContent = done
+  const loadLabel = done
     ? "全部已加载"
     : loader?.running
       ? "暂停加载"
       : "继续加载";
+  $("pk-load").innerHTML = icon(loader?.running ? "pause" : "play");
+  $("pk-load").classList.add("icon-button");
+  $("pk-load").title = loadLabel;
+  $("pk-load").setAttribute("aria-label", loadLabel);
   $("pk-load").disabled = state.busy || done || !state.container;
+  $("pk-load").hidden = done;
   $("pk-reload").disabled = state.busy || !!loader?.task || !state.container;
   $("pk-clear").disabled = state.busy;
   const ru = Object.values(cache.stats).reduce((sum, s) => sum + s.ru, 0);
@@ -208,7 +244,7 @@ function renderPartitionOptions() {
       ? `全部分区键已加载 · ${cache.keys.size} 个`
       : loader?.running
         ? `自动加载中 · 已发现 ${cache.keys.size} 个，尚未完成`
-        : "已暂停，当前候选尚未加载完整",
+        : "当前为本地候选；下拉箭头可自动加载其余分区键",
     `本次 ${ru.toFixed(2)} RU`,
     cache.cachedAt
       ? `本地缓存：${new Date(cache.cachedAt).toLocaleString()}`
@@ -218,26 +254,40 @@ function renderPartitionOptions() {
     .filter(Boolean)
     .join(" · ");
   $("pk-progress").classList.toggle("error", !!loader?.error);
+  if (!$("pk-picker").hidden) positionPartitionPicker();
 }
-function openPartitionPicker(target) {
-  if (state.busy || !state.container) return;
-  partitionTarget = target;
-  $("pk-filter").value = "";
-  $("pk-title").textContent =
-    target === "query-pk" ? "选择查询分区键" : "选择文档分区键";
-  $("pk-picker").hidden = false;
-  void startPartitionOptions();
-  renderPartitionOptions();
-  const rect = $(target).getBoundingClientRect(),
+function positionPartitionPicker() {
+  const rect = $(partitionTarget).getBoundingClientRect(),
     picker = $("pk-picker");
-  const width = picker.getBoundingClientRect().width,
-    height = picker.getBoundingClientRect().height;
+  picker.style.width = `${Math.min(Math.max(rect.width + 28, 300), 600, innerWidth - 16)}px`;
+  const below = innerHeight - rect.bottom - 12,
+    above = rect.top - 12;
+  const down = below >= Math.min(300, picker.scrollHeight) || below >= above;
+  picker.style.maxHeight = `${Math.max(100, down ? below : above)}px`;
+  const { width, height } = picker.getBoundingClientRect();
   picker.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`;
-  picker.style.top = `${Math.max(8, Math.min(rect.bottom + 6, innerHeight - height - 8))}px`;
-  $(target + "-choose").setAttribute("aria-expanded", "true");
-  $("pk-filter").focus();
+  picker.style.top = `${down ? rect.bottom + 4 : Math.max(8, rect.top - height - 4)}px`;
 }
-async function startPartitionOptions(refresh = false) {
+function openPartitionPicker(target, discover = true) {
+  if (state.busy || !state.container) return;
+  if (partitionTarget !== target) closePartitionPicker();
+  partitionTarget = target;
+  partitionFilter = discover ? "" : $(target).value;
+  partitionBrowseRequested = discover;
+  partitionActiveKey = null;
+  const generation = ++partitionPickerEpoch;
+  $("pk-picker").hidden = false;
+  $(target).setAttribute("aria-expanded", "true");
+  $(target + "-choose").setAttribute("aria-expanded", "true");
+  void startPartitionOptions(false, discover, generation);
+  renderPartitionOptions();
+  $(target).focus();
+}
+async function startPartitionOptions(
+  refresh = false,
+  discover = true,
+  generation = partitionPickerEpoch,
+) {
   const key = partitionScope(),
     identity = scope(),
     epoch = state.epoch;
@@ -299,7 +349,10 @@ async function startPartitionOptions(refresh = false) {
       },
     );
   // The loader handles errors without blocking query inputs or candidate selection.
-  if (!$("pk-picker").hidden) void cache.loader.start();
+  if (!$("pk-picker").hidden && generation === partitionPickerEpoch) {
+    renderPartitionOptions();
+    if (discover) void cache.loader.start();
+  }
 }
 function learnPartitionKeys(rows) {
   const paths = partitionPaths();
@@ -409,11 +462,13 @@ function controls() {
     busy || state.readOnly || (!state.snapshot && !state.creating);
   $("scope-container").disabled = busy || !ready || !state.database;
   $("scope-info").disabled = busy || !state.container;
-  $("sql-search").disabled = busy || !ready;
   $("document-search").disabled =
     busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
   $("document-more").disabled = busy || !documentEditor.value.trim();
   if (busy) {
+    closePartitionPicker();
+    copyMenu?.close();
+    documentWriteMenu?.close();
     closeDocumentMenu();
     closeResultItemMenu();
     closeScopePicker();
@@ -423,11 +478,14 @@ function controls() {
     busy || state.readOnly || (!state.snapshot && !state.creating);
   $("previous").disabled = busy || state.page <= 0;
   $("next").disabled = busy || !state.pages[state.page]?.continuation;
-  $("run-collapsed").disabled = $("run").disabled;
   $("export").disabled = busy || state.page < 0;
   $("result-filter").disabled = busy || state.page < 0;
   $("copy-cell").disabled = busy || state.selectedCell === null;
   $("copy-row").disabled = busy || state.selectedRow === null;
+  $("copy-selection").disabled =
+    busy || (state.selectedCell === null && state.selectedRow === null);
+  $("result-tools").hidden = state.page < 0;
+  for (const id of ["table-view", "json-view"]) $(id).disabled = busy || !ready;
   resultReaderControls();
   updateFieldChanges();
   $("cancel-query").hidden = !state.queryJob;
@@ -441,6 +499,11 @@ function controls() {
   $("delete").disabled = busy || state.readOnly || !state.snapshot;
   $("new").disabled ||= state.readOnly;
   $("generate-id").hidden = !state.creating;
+  $("replace-document").hidden = !state.snapshot;
+  $("replace-document").disabled = $("save").disabled || !state.snapshot;
+  $("document-actions").hidden =
+    state.readOnly || (!state.creating && (!state.snapshot || !dirty()));
+  $("document-actions").disabled = busy;
   $("generate-id").disabled = busy || state.readOnly || !state.creating;
   $("write-hint").textContent = state.readOnly
     ? "当前连接只读。增删改需要可写凭据，并关闭保存连接中的只读设置后重新连接。"
@@ -460,8 +523,6 @@ function controls() {
   for (const id of ["add-field", "add-field-path", "add-field-value"])
     $(id).disabled =
       busy || state.readOnly || (!state.snapshot && !state.creating);
-  $("save-method-row").hidden = !state.snapshot;
-  $("save-method").disabled = busy || state.readOnly;
   for (const id of ["query-pk-choose", "document-pk-choose"])
     $(id).disabled = busy || !selected;
   if (!$("pk-picker").hidden) renderPartitionOptions();
@@ -506,6 +567,12 @@ function scope() {
     throw new Error("请先选择数据库和容器");
   return { database: state.database, container: state.container };
 }
+function clearStatus() {
+  clearTimeout(statusTimer);
+  $("status").hidden = true;
+  $("status").textContent = "";
+  $("status").classList.remove("progress", "error");
+}
 function metrics(result, prefix = "") {
   status(`${prefix}${result.ru.toFixed(2)} RU · ${result.durationMs} ms`);
   $("status").title = result.activityId
@@ -513,6 +580,8 @@ function metrics(result, prefix = "") {
     : "";
 }
 function resetEditor() {
+  hideDocument();
+  documentWriteMenu?.close();
   closeDocumentMenu();
   $("document-location").open = true;
   $("document-identity").textContent = "按 id 与分区键读取";
@@ -653,6 +722,33 @@ async function selectContainer(next, persist = true) {
   status(next ? "可以运行查询" : "请选择容器");
 }
 
+async function loadViewPreferences() {
+  const revision = viewPreferenceRevision;
+  const epoch = state.epoch;
+  try {
+    await viewPreferenceWrites;
+    const saved = await invoke("cosmos/viewPreferences");
+    if (epoch !== state.epoch || revision !== viewPreferenceRevision) return;
+    state.preferredDocumentView = saved.document === "json" ? "json" : "fields";
+    view(saved.results === "json", false);
+  } catch (error) {
+    if (epoch === state.epoch && error.message !== "STALE")
+      status("显示偏好存储不可用，本次仍可切换视图");
+  }
+}
+function saveViewPreference(views) {
+  ++viewPreferenceRevision;
+  viewPreferenceWrites = viewPreferenceWrites
+    .catch(() => {})
+    .then(async () => {
+      await host.invoke(
+        "cosmos/viewPreferences",
+        { views },
+        { timeoutMs: 10000 },
+      );
+    })
+    .catch(() => status("显示格式保存失败；本次选择仍有效", true));
+}
 let preferenceWrites = Promise.resolve();
 function preferenceKey() {
   return `table-v1:${partitionScope()}`;
@@ -711,6 +807,10 @@ function resultReaderControls() {
   $("copy-results-json").title = $("result-filter").value.trim()
     ? "复制当前页筛选后的 JSON（包含所有字段）"
     : "复制当前页全部 JSON（包含所有字段）";
+  $("copy-results-json").setAttribute(
+    "aria-label",
+    $("copy-results-json").title,
+  );
 }
 function syncResultReader(source) {
   const page = state.pages[state.page],
@@ -925,12 +1025,20 @@ async function copyResult(text, label) {
   }
 }
 function renderPage() {
+  copyMenu?.close();
+  const json = state.resultView === "json";
+  $("table").hidden = json && state.page >= 0;
+  $("raw-results").hidden = !json || state.page < 0;
+  $("result-tools").hidden = state.page < 0;
   closeResultItemMenu();
   const p = state.pages[state.page];
   const { all: allRows, filter, rows } = pageRows();
   renderResultSummary();
   $("clear-filter").hidden = !filter;
-  $("export").textContent = filter ? "导出筛选结果" : "导出当前页";
+  $("export").setAttribute(
+    "aria-label",
+    filter ? "导出筛选结果" : "导出当前页",
+  );
   $("export").title = filter
     ? "仅导出当前页匹配筛选的文档（包含所有字段）"
     : "导出当前页所有文档（包含所有字段）";
@@ -952,7 +1060,9 @@ function renderPage() {
     const el = document.createElement("div");
     el.className = "empty";
     el.textContent = !p
-      ? "选择容器后运行查询"
+      ? state.container
+        ? "运行查询以查看结果"
+        : "选择容器后运行查询"
       : filter && allRows.length
         ? `当前页没有匹配的结果，请清除筛选${p.continuation ? "或查看下一页" : ""}`
         : p.continuation
@@ -984,7 +1094,7 @@ function renderPage() {
       name === "#"
         ? 48
         : name === "操作"
-          ? 96
+          ? 48
           : state.tablePrefs.widths[name] || 180;
     col.style.width = `${width}px`;
     colgroup.append(col);
@@ -1061,9 +1171,11 @@ function renderPage() {
     const actions = tr.insertCell(),
       read = document.createElement("button");
     const identity = rowIdentity(row, partitionPaths());
-    read.textContent = identity ? "打开文档" : "预览";
+    read.innerHTML = identity
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
     read.type = "button";
-    read.className = "row-read";
+    read.className = "row-read icon-button";
     read.setAttribute(
       "aria-label",
       identity
@@ -1081,7 +1193,6 @@ function renderPage() {
         void select();
         return;
       }
-      showDocument();
       void action(async () => {
         if (await discard())
           opened(await invoke("cosmos/read", { ...scope(), ...identity }), {
@@ -1103,7 +1214,21 @@ function renderPage() {
         selectCell(td, row, k);
         td.focus({ preventScroll: true });
       });
+      const openCopy = (x, y) => {
+        selectCell(td, row, k);
+        copyMenu.open({ x, y, focus: td });
+      };
+      td.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        openCopy(event.clientX, event.clientY);
+      });
       td.addEventListener("keydown", (e) => {
+        if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+          e.preventDefault();
+          const rect = td.getBoundingClientRect();
+          openCopy(rect.left, rect.bottom);
+          return;
+        }
         if (
           (e.metaKey || e.ctrlKey) &&
           e.key.toLowerCase() === "c" &&
@@ -1132,8 +1257,8 @@ function renderPage() {
     const select = () =>
       action(async () => {
         if (!(await discard())) return;
-        showDocument();
         resetEditor();
+        showDocument();
         state.selectedRow = encodeJSON(row, null, 2);
         state.baseline = encodeJSON(row, null, 2);
         documentEditor.value = state.baseline;
@@ -1169,6 +1294,13 @@ function renderPage() {
           .querySelectorAll("tr.selected")
           .forEach((x) => x.classList.remove("selected"));
         tr.classList.add("selected");
+        let previewView = state.preferredDocumentView;
+        try {
+          editableDocument(row);
+        } catch {
+          previewView = "json";
+        }
+        setDocumentView(previewView);
         controls();
         status("已预览查询结果。确认 id 和分区键后，点击「读取完整文档」。");
       });
@@ -1232,11 +1364,21 @@ async function query(next = false) {
   } catch (error) {
     if (job.canceled || error.message === "STALE") throw new Error("STALE");
     const diagnostic = sqlErrorDiagnostic(execution, sqlEditor.value, error);
-    if (diagnostic) {
-      setSQLCollapsed(false);
+    const syntaxError =
+      error.data?.category === "sql-syntax" ||
+      /HTTP 400: SQL 语法错误/.test(error.message || "");
+    if (syntaxError) {
       sqlEditor.setDiagnostic(diagnostic);
-      $("sql-diagnostic").textContent = diagnostic.message;
-      $("sql-diagnostic").hidden = false;
+      $("sql-error-message").textContent = diagnostic
+        ? diagnostic.message.replace("（点击定位）", "")
+        : error.message.replace(/^HTTP 400:\s*/, "");
+      $("sql-error-meta").textContent =
+        `${((performance.now() - job.started) / 1000).toFixed(1)} s · 本次 RU 未知`;
+      $("sql-diagnostic").hidden = !diagnostic;
+      $("sql-error").hidden = false;
+      clearTimeout(statusTimer);
+      $("status").hidden = true;
+      return;
     }
     throw new Error(
       `查询失败 · ${((performance.now() - job.started) / 1000).toFixed(1)} s · 本次 RU 未知 · ${error.message}`,
@@ -1258,7 +1400,7 @@ async function query(next = false) {
   state.page = state.pages.length - 1;
   renderPage();
   resetEditor();
-  metrics(result, `查询完成 · ${parseJSON(result.json).length} 条 · `);
+  clearStatus();
 }
 function cancelQuery() {
   const job = state.queryJob;
@@ -1294,6 +1436,7 @@ function point() {
 function opened(result, identity) {
   const doc = parseJSON(result.json),
     etag = result.etag || doc._etag;
+  showDocument();
   knownFields().learn(doc);
   state.snapshot = { ...identity, etag };
   state.creating = false;
@@ -1308,7 +1451,6 @@ function opened(result, identity) {
     ? `ETag: ${etag}`
     : "服务未提供 ETag，无法更新或删除";
   metrics(result, "文档已读取 · ");
-  $("save-method").value = "patch";
   $("field-filter").value = "";
   $("document-location").open = false;
   $("document-identity").textContent = identity.id;
@@ -1628,7 +1770,7 @@ function draftChanged() {
       : "完整文档";
   controls();
 }
-function setDocumentView(view) {
+function setDocumentView(view, remember = false) {
   if (state.fieldErrors.size && view !== state.documentView) {
     status("请先修正字段值格式，再切换视图。", true);
     return;
@@ -1645,6 +1787,10 @@ function setDocumentView(view) {
     }
   }
   state.documentView = view;
+  if (remember) {
+    state.preferredDocumentView = view;
+    saveViewPreference({ document: view });
+  }
   $("field-editor").hidden = view !== "fields";
   $("editor").hidden = view !== "json";
   $("json-diagnostic").hidden = !documentError || view !== "json";
@@ -1781,7 +1927,7 @@ $("document-search").onclick = () => {
     status("请先修正字段值格式，再搜索 JSON。", true);
     return;
   }
-  setDocumentView("json");
+  setDocumentView("json", true);
   documentEditor.search();
 };
 function closeDocumentMenu(focus = false) {
@@ -1861,7 +2007,6 @@ $("document-location").addEventListener("toggle", () =>
   documentEditor.measure(),
 );
 $("json-diagnostic").onclick = () => documentEditor.focusError();
-$("sql-search").onclick = () => sqlEditor.search();
 const workspace = document.querySelector(".workspace"),
   separator = $("document-resize");
 function resizeDocument(width) {
@@ -1900,7 +2045,11 @@ separator.onkeydown = (e) => {
 };
 $("document-expand").onclick = () => {
   const expanded = workspace.classList.toggle("document-expanded");
-  $("document-expand").textContent = expanded ? "还原" : "放大";
+  $("document-expand").innerHTML = icon(expanded ? "restore" : "expand");
+  $("document-expand").setAttribute(
+    "aria-label",
+    expanded ? "还原文档面板" : "放大文档面板",
+  );
   $("document-expand").title = expanded ? "还原文档面板" : "放大文档面板";
   $("document-expand").setAttribute("aria-pressed", String(expanded));
   documentEditor.measure();
@@ -1910,12 +2059,10 @@ window.addEventListener("resize", () =>
   resizeDocument(Number(separator.getAttribute("aria-valuenow"))),
 );
 $("fields-view").onclick = () => {
-  setDocumentView("fields");
-  if (state.documentView === "fields") state.preferredDocumentView = "fields";
+  setDocumentView("fields", true);
 };
 $("document-json-view").onclick = () => {
-  setDocumentView("json");
-  if (state.documentView === "json") state.preferredDocumentView = "json";
+  setDocumentView("json", true);
 };
 $("field-filter").oninput = () => {
   if (state.fieldErrors.size) {
@@ -1966,6 +2113,7 @@ function syncDraftPartition() {
     );
     documentEditor.value = encodeJSON(doc, null, 2);
     $("document-id").value = doc.id || "";
+    if (state.documentView === "fields") renderFields();
     controls();
   } catch (error) {
     status(error.message, true);
@@ -2021,10 +2169,12 @@ async function afterMutation(result, identity, verb) {
     `${verb}成功 · ${result.ru.toFixed(2)} RU${notes.length ? " · " + notes.join("；") : ""}`,
   );
 }
-function view(json) {
+function view(json, remember = true) {
+  state.resultView = json ? "json" : "table";
+  if (remember) saveViewPreference({ results: state.resultView });
   closeResultItemMenu();
-  $("table").hidden = json;
-  $("raw-results").hidden = !json;
+  $("table").hidden = json && state.page >= 0;
+  $("raw-results").hidden = !json || state.page < 0;
   $("table-view").classList.toggle("active", !json);
   $("table-view").setAttribute("aria-pressed", String(!json));
   $("json-view").setAttribute("aria-pressed", String(json));
@@ -2033,6 +2183,30 @@ function view(json) {
   $("result-json-tools").hidden = !json;
   if (json) syncResultReader();
 }
+for (const [id, name, label] of [
+  ["export", "download", "导出当前页"],
+  ["copy-selection", "copy", "复制所选内容"],
+  ["copy-results-json", "copy", "复制当前页 JSON"],
+  ["document-expand", "expand", "放大文档面板"],
+  ["document-close", "close", "关闭文档面板（保留草稿）"],
+  ["clear-filter", "close", "清除结果筛选"],
+  ["scope-reload", "refresh", "刷新列表"],
+  ["pk-reload", "refresh", "刷新分区键列表"],
+  ["pk-clear", "close", "清除分区键"],
+  ["document-actions", "more", "更多文档操作"],
+  ["query-pk-choose", "down", "选择查询分区键"],
+  ["document-pk-choose", "down", "选择文档分区键"],
+]) {
+  $(id).innerHTML = icon(name);
+  $(id).classList.add("icon-button");
+  $(id).title = label;
+  $(id).setAttribute("aria-label", label);
+}
+copyMenu = createMenu($("copy-selection"), $("copy-menu"));
+documentWriteMenu = createMenu(
+  $("document-actions"),
+  $("document-actions-menu"),
+);
 const bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
 bind("refresh", async () => {
   if (await discard()) await loadDatabases();
@@ -2058,7 +2232,6 @@ $("container").addEventListener("change", () =>
   }),
 );
 bind("run", () => query());
-bind("run-collapsed", () => query());
 $("cancel-query").onclick = cancelQuery;
 $("result-filter").oninput = renderPage;
 $("clear-filter").onclick = () => {
@@ -2067,10 +2240,12 @@ $("clear-filter").onclick = () => {
   $("result-filter").focus();
 };
 $("copy-cell").onclick = () => {
+  copyMenu.close(true);
   if (state.selectedCell !== null)
     void copyResult(state.selectedCell, "单元格");
 };
 $("copy-row").onclick = () => {
+  copyMenu.close(true);
   if (state.selectedRow !== null)
     void copyResult(state.selectedRow, "行 JSON（查询投影）");
 };
@@ -2083,9 +2258,73 @@ $("pk-load").onclick = () => {
 $("pk-reload").onclick = () => {
   if (!state.busy) void startPartitionOptions(true);
 };
-$("query-pk-choose").onclick = () => openPartitionPicker("query-pk");
-$("document-pk-choose").onclick = () => openPartitionPicker("document-pk");
-$("pk-close").onclick = () => closePartitionPicker();
+for (const id of ["query-pk", "document-pk"]) {
+  $(id + "-choose").onclick = () => {
+    if (!$("pk-picker").hidden && partitionTarget === id) {
+      closePartitionPicker();
+      $(id).focus();
+    } else openPartitionPicker(id);
+  };
+  $(id).addEventListener("focus", () => {
+    if (partitionTarget !== id && !$("pk-picker").hidden)
+      closePartitionPicker();
+  });
+  $(id).addEventListener("input", () => {
+    try {
+      parseArray($(id).value, "分区键");
+      if (partitionTarget === id) closePartitionPicker();
+      return;
+    } catch {
+      /* A keyword or incomplete JSON can filter local suggestions. */
+    }
+    if ($("pk-picker").hidden || partitionTarget !== id)
+      openPartitionPicker(id, false);
+    else {
+      partitionFilter = $(id).value;
+      partitionActiveKey = null;
+      renderPartitionOptions();
+    }
+  });
+  $(id).addEventListener("keydown", (event) => {
+    if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+      event.preventDefault();
+      if ($("pk-picker").hidden) openPartitionPicker(id);
+      else if (!partitionBrowseRequested) {
+        partitionBrowseRequested = true;
+        void startPartitionOptions();
+      }
+      const items = [
+        ...$("pk-options").querySelectorAll("button:not(:disabled)"),
+      ];
+      const current = items.findIndex(
+        (item) => item.dataset.key === partitionActiveKey,
+      );
+      const next =
+        current < 0
+          ? event.key === "ArrowDown"
+            ? 0
+            : items.length - 1
+          : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+            items.length;
+      partitionActiveKey = items[next]?.dataset.key || null;
+      renderPartitionOptions();
+      const active = document.getElementById(
+        $(id).getAttribute("aria-activedescendant"),
+      );
+      active?.scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter" && !$("pk-picker").hidden) {
+      event.preventDefault();
+      const active = document.getElementById(
+        $(id).getAttribute("aria-activedescendant"),
+      );
+      if (active) active.click();
+      else {
+        closePartitionPicker();
+        $(id).dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else if (event.key === "Tab") closePartitionPicker();
+  });
+}
 $("pk-clear").onclick = () => {
   if (!state.busy) {
     $(partitionTarget).value = "";
@@ -2095,31 +2334,11 @@ $("pk-clear").onclick = () => {
     $(partitionTarget).focus();
   }
 };
-$("pk-filter").oninput = renderPartitionOptions;
-$("pk-filter").onkeydown = (e) => {
-  if (e.key === "ArrowDown") {
-    e.preventDefault();
-    $("pk-options").querySelector("button:not(:disabled)")?.focus();
-  }
-};
-$("pk-options").onkeydown = (e) => {
-  const buttons = [
-      ...$("pk-options").querySelectorAll("button:not(:disabled)"),
-    ],
-    index = buttons.indexOf(document.activeElement);
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    e.preventDefault();
-    buttons[
-      (index + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) %
-        buttons.length
-    ]?.focus();
-  }
-};
 document.addEventListener("pointerdown", (e) => {
   if (
     !$("pk-picker").hidden &&
     !$("pk-picker").contains(e.target) &&
-    !e.target.closest("#query-pk-choose,#document-pk-choose")
+    !e.target.closest(".pk-input")
   )
     closePartitionPicker();
 });
@@ -2143,7 +2362,7 @@ bind("previous", async () => {
     state.page--;
     renderPage();
     resetEditor();
-    metrics(state.pages[state.page]);
+    clearStatus();
   }
 });
 bind("read", async () => {
@@ -2157,6 +2376,7 @@ bind("new", async () => {
   const key = $("query-pk").value.trim() || $("document-pk").value.trim();
   const doc = newDocument(partitionPaths(), key, crypto.randomUUID());
   resetEditor();
+  showDocument();
   state.creating = true;
   state.baseline = encodeJSON(doc, null, 2);
   documentEditor.value = state.baseline;
@@ -2165,9 +2385,10 @@ bind("new", async () => {
   $("document-state").textContent = "新文档";
   $("etag").textContent =
     "新文档使用创建操作；同 id 与分区键已存在时会报冲突，不会覆盖。";
+  setDocumentView(state.preferredDocumentView);
   status("正在编辑新文档");
 });
-bind("save", async () => {
+async function saveDocument(forceReplace = false) {
   if (state.fieldErrors.size) throw new Error("请先修正字段值格式。");
   const text = documentEditor.value;
   const prepared = prepareDocument(
@@ -2195,7 +2416,7 @@ bind("save", async () => {
     status("没有需要保存的字段变化。");
     return;
   }
-  const patch = !creating && $("save-method").value === "patch";
+  const patch = !creating && !forceReplace;
   const operations = patch
     ? buildDocumentPatch(parseJSON(state.baseline), doc, partitionPaths())
     : null;
@@ -2219,7 +2440,12 @@ bind("save", async () => {
   );
   opened(result, identity);
   await afterMutation(result, identity, "保存");
-});
+}
+bind("save", () => saveDocument());
+bind("replace-document", () => saveDocument(true));
+$("replace-document").addEventListener("click", () =>
+  documentWriteMenu.close(),
+);
 bind("delete", async () => {
   if (dirty()) throw new Error("当前有未保存修改，请先保存或重新读取文档");
   const identity = state.snapshot;
@@ -2299,12 +2525,14 @@ $("document-id").addEventListener("input", () => {
     const doc = editableDocument(parseJSON(documentEditor.value));
     doc.id = $("document-id").value;
     documentEditor.value = encodeJSON(doc, null, 2);
+    if (state.documentView === "fields") renderFields();
     controls();
   } catch (error) {
     status(error.message, true);
   }
 });
 bind("generate-id", async () => {
+  documentWriteMenu.close();
   const doc = editableDocument(parseJSON(documentEditor.value));
   doc.id = crypto.randomUUID();
   const paths = partitionPaths();
@@ -2315,6 +2543,7 @@ bind("generate-id", async () => {
   }
   documentEditor.value = encodeJSON(doc, null, 2);
   $("document-id").value = doc.id;
+  if (state.documentView === "fields") renderFields();
   status("已生成新的文档 UUID。");
 });
 // Capture before CodeMirror's Mod-Enter binding can insert a blank line and
@@ -2379,6 +2608,7 @@ async function contextChanged(context) {
     state.savedContainer = info.container || "";
     updateScopeContext();
     $("mode").textContent = info.readOnly ? "只读连接" : "允许文档写入";
+    await loadViewPreferences();
     await loadDatabases();
     if (info.scopeWarning) status(info.scopeWarning, true);
   });
@@ -2406,20 +2636,20 @@ if (host) {
 function clearSQLError() {
   sqlEditor.setDiagnostic(null);
   $("sql-diagnostic").hidden = true;
+  $("sql-error").hidden = true;
 }
 function updateSQLExecution() {
   const selected = sqlEditor.execution.selected;
   const label = selected ? "运行选中 SQL" : "运行查询";
-  for (const id of ["run", "run-collapsed"]) {
-    $(id).textContent = label;
-    $(id).title = selected
-      ? "只执行 SQL 编辑器中的选中内容（⌘ / Ctrl + Enter）"
-      : "执行 SQL 编辑器全文（⌘ / Ctrl + Enter）";
-  }
+  $("run").textContent = label;
+  $("run").title = selected
+    ? "只执行 SQL 编辑器中的选中内容（⌘ / Ctrl + Enter）"
+    : "执行 SQL 编辑器全文（⌘ / Ctrl + Enter）";
   renderResultSummary();
 }
 sqlEditor.onChange(() => {
   $("sql-diagnostic").hidden = true;
+  $("sql-error").hidden = true;
 });
 sqlEditor.onSelection(updateSQLExecution);
 updateSQLExecution();
@@ -2428,26 +2658,36 @@ for (const id of ["query-pk", "parameters", "page-size"]) {
   $(id).addEventListener("input", renderResultSummary);
   $(id).addEventListener("change", renderResultSummary);
 }
-function setSQLCollapsed(collapsed) {
-  $("query-body").hidden = collapsed;
-  $("run-collapsed").hidden = !collapsed;
-  $("query-collapse").textContent = collapsed ? "展开 SQL" : "收起 SQL";
-  $("query-collapse").setAttribute("aria-expanded", String(!collapsed));
-  if (!collapsed) sqlEditor.measure();
-}
-$("query-collapse").onclick = () => setSQLCollapsed(!$("query-body").hidden);
 function showDocument() {
   workspace.classList.remove("document-hidden");
-  $("document-toggle").textContent = "收起文档";
+  $("document-toggle").hidden = true;
+  $("document-toggle").title = "关闭文档面板（保留草稿）";
   $("document-toggle").setAttribute("aria-expanded", "true");
   documentEditor.measure();
+  sqlEditor.measure();
+}
+function hideDocument(focus = false) {
+  workspace.classList.add("document-hidden");
+  workspace.classList.remove("document-expanded");
+  $("document-expand").innerHTML = icon("expand");
+  $("document-expand").setAttribute("aria-label", "放大文档面板");
+  $("document-expand").title = "放大文档面板";
+  $("document-expand").setAttribute("aria-pressed", "false");
+  $("document-toggle").hidden = false;
+  $("document-toggle").title = "打开文档面板：按 id 读取或返回草稿";
+  $("document-toggle").setAttribute("aria-expanded", "false");
+  documentWriteMenu?.close();
+  closeDocumentMenu();
+  if (partitionTarget === "document-pk") closePartitionPicker();
+  if (focus) $("document-toggle").focus();
+  sqlEditor.measure();
 }
 $("document-toggle").onclick = () => {
-  if (workspace.classList.contains("document-hidden")) showDocument();
-  else {
-    workspace.classList.add("document-hidden");
-    $("document-toggle").textContent = "展开文档";
-    $("document-toggle").setAttribute("aria-expanded", "false");
-  }
-  sqlEditor.measure();
+  if (workspace.classList.contains("document-hidden")) {
+    showDocument();
+    if ($("document-location").open) $("document-id").focus();
+    else if (state.documentView === "json") documentEditor.focus();
+    else $("fields-view").focus();
+  } else hideDocument(true);
 };
+$("document-close").onclick = () => hideDocument(true);

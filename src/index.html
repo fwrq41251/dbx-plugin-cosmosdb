@@ -72,7 +72,7 @@
       </nav>
       <span id="mode" class="badge">未连接</span>
     </header>
-    <div class="workspace">
+    <div class="workspace document-hidden">
       <aside id="scope-panel" aria-label="数据库与容器">
         <div class="section-title">
           <span id="scope-panel-title">数据库与容器</span
@@ -112,46 +112,26 @@
             <span>SQL 查询</span>
             <div class="toolbar">
               <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
-              <button
-                id="query-collapse"
-                type="button"
-                class="compact"
-                aria-expanded="true"
-                aria-controls="query-body"
-              >
-                收起 SQL
-              </button>
-              <button
-                id="run-collapsed"
-                type="button"
-                class="primary compact"
-                hidden
-              >
-                运行查询
-              </button>
               <button id="cancel-query" type="button" hidden>取消查询</button>
-              <button
-                id="sql-search"
-                type="button"
-                class="icon-button"
-                aria-label="搜索 SQL"
-                title="搜索 SQL（⌘ / Ctrl + F）"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="10.5" cy="10.5" r="6.5" />
-                  <path d="m16 16 4.5 4.5" />
-                </svg>
-              </button>
             </div>
           </div>
           <div id="query-body">
             <div id="sql" class="code-editor"></div>
-            <button
-              id="sql-diagnostic"
-              class="sql-diagnostic"
-              type="button"
-              hidden
-            ></button>
+            <div id="sql-error" class="sql-error" role="alert" hidden>
+              <div class="grow">
+                <span id="sql-error-message"></span>
+                <span id="sql-error-meta" class="muted"></span>
+              </div>
+              <button
+                id="sql-diagnostic"
+                class="compact"
+                type="button"
+                aria-label="定位 SQL 错误"
+                hidden
+              >
+                定位
+              </button>
+            </div>
             <div class="query-options">
               <label
                 >每页<select id="page-size" aria-label="每页条数">
@@ -166,7 +146,13 @@
                 ><span class="pk-input"
                   ><input
                     id="query-pk"
-                    placeholder='["tenant-a"] 或留空跨分区'
+                    role="combobox"
+                    aria-label="查询分区键"
+                    aria-expanded="false"
+                    aria-controls="pk-options"
+                    aria-autocomplete="list"
+                    autocomplete="off"
+                    placeholder="输入 JSON 分区键或搜索候选；留空跨分区"
                     spellcheck="false"
                   /><button
                     id="query-pk-choose"
@@ -175,7 +161,7 @@
                     aria-expanded="false"
                     aria-controls="pk-picker"
                   >
-                    选择 ▾
+                    ▾
                   </button></span
                 ></label
               ><button id="run" class="primary">运行查询</button>
@@ -210,18 +196,31 @@
                 <button id="json-view" aria-pressed="false">JSON</button>
               </div>
               <button id="export">导出当前页</button>
-              <button id="document-toggle" type="button" aria-expanded="true">
-                收起文档
+              <button id="new" class="compact" type="button">新建文档</button>
+              <button
+                id="document-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="document-panel"
+                class="icon-button"
+                aria-label="文档面板"
+                title="打开文档面板：按 id 读取或返回草稿"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M14 4v16" />
+                </svg>
               </button>
             </div>
           </div>
-          <div class="result-tools">
+          <div id="result-tools" class="result-tools" hidden>
             <div class="result-filter">
               <input
                 type="search"
                 id="result-filter"
                 aria-label="筛选当前页"
-                placeholder="筛选当前页（不查询数据库）"
+                placeholder="在本页结果中查找…"
+                title="仅搜索已加载的这一页，匹配所有字段；不查询其他页或数据库。查全库请使用 SQL WHERE。"
               /><button
                 id="clear-filter"
                 type="button"
@@ -232,8 +231,17 @@
               </button>
             </div>
             <div id="table-tools" class="toolbar">
-              <button id="copy-cell" type="button" disabled>复制单元格</button>
-              <button id="copy-row" type="button" disabled>复制行 JSON</button>
+              <button
+                id="copy-selection"
+                type="button"
+                class="icon-button"
+                aria-label="复制所选内容"
+                title="复制所选内容"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="copy-menu"
+                disabled
+              ></button>
             </div>
             <div id="result-json-tools" class="toolbar" hidden>
               <button
@@ -275,11 +283,10 @@
         aria-valuemax="900"
         aria-valuenow="400"
       ></div>
-      <section class="document-panel">
+      <section id="document-panel" class="document-panel">
         <div class="section-title">
           <div>文档 <span id="document-state" class="muted">未选择</span></div>
           <div class="toolbar">
-            <button id="new" class="compact" type="button">新建</button>
             <button
               id="document-expand"
               class="compact"
@@ -288,6 +295,15 @@
               title="放大文档面板"
             >
               放大
+            </button>
+            <button
+              id="document-close"
+              class="icon-button"
+              type="button"
+              aria-label="关闭文档面板"
+              title="关闭文档面板（保留草稿）"
+            >
+              ×
             </button>
           </div>
         </div>
@@ -308,7 +324,13 @@
               >完整分区键（JSON 数组）<span class="pk-input"
                 ><input
                   id="document-pk"
-                  placeholder='["tenant-a"] / [null] / [{}]'
+                  role="combobox"
+                  aria-label="文档分区键"
+                  aria-expanded="false"
+                  aria-controls="pk-options"
+                  aria-autocomplete="list"
+                  autocomplete="off"
+                  placeholder="输入 JSON 分区键或搜索候选"
                   spellcheck="false"
                 /><button
                   id="document-pk-choose"
@@ -317,13 +339,12 @@
                   aria-expanded="false"
                   aria-controls="pk-picker"
                 >
-                  选择 ▾
+                  ▾
                 </button></span
               ></label
             >
             <div class="toolbar">
               <button id="read">读取完整文档</button>
-              <button id="generate-id" hidden>生成 UUID</button>
             </div>
             <small id="write-hint">连接后可查看文档操作权限。</small>
           </div>
@@ -424,20 +445,53 @@
         </section>
         <div id="editor" class="code-editor"></div>
         <div class="document-footer">
-          <label id="save-method-row" hidden
-            >保存方式<select id="save-method" aria-label="保存方式">
-              <option value="patch">局部更新（最多 10 个操作）</option>
-              <option value="replace">完整替换文档</option>
-            </select></label
-          >
           <small id="draft-summary" role="status" hidden></small>
           <small id="etag">读取完整文档后才能更新或删除。</small>
           <div class="toolbar">
             <button id="save" class="primary">保存</button
             ><button id="delete" class="danger">删除</button>
+            <button
+              id="document-actions"
+              type="button"
+              class="icon-button"
+              aria-label="更多文档操作"
+              title="更多文档操作"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="document-actions-menu"
+              hidden
+            ></button>
           </div>
         </div>
       </section>
+    </div>
+    <div
+      id="copy-menu"
+      class="action-menu"
+      role="menu"
+      aria-label="复制所选内容"
+      hidden
+    >
+      <button id="copy-cell" type="button" role="menuitem" disabled>
+        复制单元格
+      </button>
+      <button id="copy-row" type="button" role="menuitem" disabled>
+        复制行 JSON
+      </button>
+    </div>
+    <div
+      id="document-actions-menu"
+      class="action-menu"
+      role="menu"
+      aria-label="更多文档操作"
+      hidden
+    >
+      <button id="replace-document" type="button" role="menuitem">
+        完整替换文档…
+      </button>
+      <button id="generate-id" type="button" role="menuitem" hidden>
+        重新生成 UUID
+      </button>
     </div>
     <section
       id="scope-picker"
@@ -498,20 +552,7 @@
       </button>
       <div id="result-item-hint" class="muted"></div>
     </div>
-    <section id="pk-picker" role="dialog" aria-label="分区键选择" hidden>
-      <div class="section-title">
-        <span id="pk-title">选择分区键</span
-        ><button id="pk-close" type="button" aria-label="关闭分区键选择">
-          ×
-        </button>
-      </div>
-      <input
-        id="pk-filter"
-        type="search"
-        aria-label="过滤分区键"
-        placeholder="输入关键词查找分区键…"
-        autocomplete="off"
-      />
+    <section id="pk-picker" aria-label="分区键候选列表" hidden>
       <div id="pk-count" class="muted" aria-live="polite"></div>
       <div id="pk-options" role="listbox" aria-label="分区键候选"></div>
       <div class="pk-discovery">
@@ -523,9 +564,7 @@
           ><button id="pk-reload" type="button">刷新列表</button
           ><button id="pk-clear" type="button">清除选择</button>
         </div>
-        <small
-          >优先使用本地缓存；刷新列表才重新读取。关闭列表会停止续读。</small
-        >
+        <small>输入框内直接筛选；下拉时自动续读，关闭后暂停。</small>
       </div>
     </section>
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">

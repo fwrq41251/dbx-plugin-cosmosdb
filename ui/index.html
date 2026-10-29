@@ -676,14 +676,25 @@ dialog.has-changes {
 }
 .pk-input {
   display: flex;
-  gap: 5px;
+  gap: 0;
+  position: relative;
   min-width: 0;
 }
 .pk-input input {
   flex: 1;
   width: 0;
+  padding-right: 32px;
 }
 .pk-input button {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 28px;
+  min-height: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-size: 11px;
 }
 #pk-picker {
@@ -700,12 +711,10 @@ dialog.has-changes {
   background: var(--panel);
   box-shadow: 0 12px 40px #0005;
 }
-#pk-filter {
-  flex: none;
-}
 #pk-options {
   overflow: auto;
-  min-height: 70px;
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 230px;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -721,7 +730,8 @@ dialog.has-changes {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-#pk-options button[aria-selected="true"] {
+#pk-options button[aria-selected="true"],
+#pk-options button.keyboard-active {
   background: #7cd4bf18;
   color: var(--accent);
 }
@@ -1194,15 +1204,28 @@ body.light button.danger {
   }
 }
 
-.sql-diagnostic {
-  width: 100%;
-  padding: 6px 8px;
+.sql-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
   margin-top: 6px;
-  color: #d98274;
-  text-align: left;
-  justify-content: flex-start;
-  white-space: normal;
+  border-left: 2px solid #d98274;
+  background: #d9827410;
+  color: var(--error, #d98274);
   font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#sql-error-meta {
+  display: block;
+  font-size: 10px;
+}
+.sql-error button {
+  flex: none;
+}
+.code-editor .cm-tooltip-autocomplete {
+  max-width: min(420px, calc(100vw - 32px));
 }
 #execution-source {
   font-size: 10px;
@@ -1492,6 +1515,37 @@ header .badge {
   line-height: 1.5;
 }
 
+body.light .sql-error {
+  color: #a33126;
+}
+
+.pk-discovery,
+#pk-count {
+  flex: none;
+}
+
+.action-menu {
+  position: fixed;
+  z-index: 1100;
+  width: min(220px, calc(100vw - 16px));
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  box-shadow: 0 8px 28px #0004;
+}
+.action-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  text-align: left;
+}
+.action-menu button:hover:not(:disabled),
+.action-menu button:focus-visible {
+  background: #7cd4bf18;
+}
+
     </style>
   </head>
   <body>
@@ -1558,7 +1612,7 @@ header .badge {
       </nav>
       <span id="mode" class="badge">未连接</span>
     </header>
-    <div class="workspace">
+    <div class="workspace document-hidden">
       <aside id="scope-panel" aria-label="数据库与容器">
         <div class="section-title">
           <span id="scope-panel-title">数据库与容器</span
@@ -1598,46 +1652,26 @@ header .badge {
             <span>SQL 查询</span>
             <div class="toolbar">
               <span class="muted shortcut">⌘ / Ctrl + Enter 运行</span>
-              <button
-                id="query-collapse"
-                type="button"
-                class="compact"
-                aria-expanded="true"
-                aria-controls="query-body"
-              >
-                收起 SQL
-              </button>
-              <button
-                id="run-collapsed"
-                type="button"
-                class="primary compact"
-                hidden
-              >
-                运行查询
-              </button>
               <button id="cancel-query" type="button" hidden>取消查询</button>
-              <button
-                id="sql-search"
-                type="button"
-                class="icon-button"
-                aria-label="搜索 SQL"
-                title="搜索 SQL（⌘ / Ctrl + F）"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <circle cx="10.5" cy="10.5" r="6.5" />
-                  <path d="m16 16 4.5 4.5" />
-                </svg>
-              </button>
             </div>
           </div>
           <div id="query-body">
             <div id="sql" class="code-editor"></div>
-            <button
-              id="sql-diagnostic"
-              class="sql-diagnostic"
-              type="button"
-              hidden
-            ></button>
+            <div id="sql-error" class="sql-error" role="alert" hidden>
+              <div class="grow">
+                <span id="sql-error-message"></span>
+                <span id="sql-error-meta" class="muted"></span>
+              </div>
+              <button
+                id="sql-diagnostic"
+                class="compact"
+                type="button"
+                aria-label="定位 SQL 错误"
+                hidden
+              >
+                定位
+              </button>
+            </div>
             <div class="query-options">
               <label
                 >每页<select id="page-size" aria-label="每页条数">
@@ -1652,7 +1686,13 @@ header .badge {
                 ><span class="pk-input"
                   ><input
                     id="query-pk"
-                    placeholder='["tenant-a"] 或留空跨分区'
+                    role="combobox"
+                    aria-label="查询分区键"
+                    aria-expanded="false"
+                    aria-controls="pk-options"
+                    aria-autocomplete="list"
+                    autocomplete="off"
+                    placeholder="输入 JSON 分区键或搜索候选；留空跨分区"
                     spellcheck="false"
                   /><button
                     id="query-pk-choose"
@@ -1661,7 +1701,7 @@ header .badge {
                     aria-expanded="false"
                     aria-controls="pk-picker"
                   >
-                    选择 ▾
+                    ▾
                   </button></span
                 ></label
               ><button id="run" class="primary">运行查询</button>
@@ -1696,18 +1736,31 @@ header .badge {
                 <button id="json-view" aria-pressed="false">JSON</button>
               </div>
               <button id="export">导出当前页</button>
-              <button id="document-toggle" type="button" aria-expanded="true">
-                收起文档
+              <button id="new" class="compact" type="button">新建文档</button>
+              <button
+                id="document-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="document-panel"
+                class="icon-button"
+                aria-label="文档面板"
+                title="打开文档面板：按 id 读取或返回草稿"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M14 4v16" />
+                </svg>
               </button>
             </div>
           </div>
-          <div class="result-tools">
+          <div id="result-tools" class="result-tools" hidden>
             <div class="result-filter">
               <input
                 type="search"
                 id="result-filter"
                 aria-label="筛选当前页"
-                placeholder="筛选当前页（不查询数据库）"
+                placeholder="在本页结果中查找…"
+                title="仅搜索已加载的这一页，匹配所有字段；不查询其他页或数据库。查全库请使用 SQL WHERE。"
               /><button
                 id="clear-filter"
                 type="button"
@@ -1718,8 +1771,17 @@ header .badge {
               </button>
             </div>
             <div id="table-tools" class="toolbar">
-              <button id="copy-cell" type="button" disabled>复制单元格</button>
-              <button id="copy-row" type="button" disabled>复制行 JSON</button>
+              <button
+                id="copy-selection"
+                type="button"
+                class="icon-button"
+                aria-label="复制所选内容"
+                title="复制所选内容"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="copy-menu"
+                disabled
+              ></button>
             </div>
             <div id="result-json-tools" class="toolbar" hidden>
               <button
@@ -1761,11 +1823,10 @@ header .badge {
         aria-valuemax="900"
         aria-valuenow="400"
       ></div>
-      <section class="document-panel">
+      <section id="document-panel" class="document-panel">
         <div class="section-title">
           <div>文档 <span id="document-state" class="muted">未选择</span></div>
           <div class="toolbar">
-            <button id="new" class="compact" type="button">新建</button>
             <button
               id="document-expand"
               class="compact"
@@ -1774,6 +1835,15 @@ header .badge {
               title="放大文档面板"
             >
               放大
+            </button>
+            <button
+              id="document-close"
+              class="icon-button"
+              type="button"
+              aria-label="关闭文档面板"
+              title="关闭文档面板（保留草稿）"
+            >
+              ×
             </button>
           </div>
         </div>
@@ -1794,7 +1864,13 @@ header .badge {
               >完整分区键（JSON 数组）<span class="pk-input"
                 ><input
                   id="document-pk"
-                  placeholder='["tenant-a"] / [null] / [{}]'
+                  role="combobox"
+                  aria-label="文档分区键"
+                  aria-expanded="false"
+                  aria-controls="pk-options"
+                  aria-autocomplete="list"
+                  autocomplete="off"
+                  placeholder="输入 JSON 分区键或搜索候选"
                   spellcheck="false"
                 /><button
                   id="document-pk-choose"
@@ -1803,13 +1879,12 @@ header .badge {
                   aria-expanded="false"
                   aria-controls="pk-picker"
                 >
-                  选择 ▾
+                  ▾
                 </button></span
               ></label
             >
             <div class="toolbar">
               <button id="read">读取完整文档</button>
-              <button id="generate-id" hidden>生成 UUID</button>
             </div>
             <small id="write-hint">连接后可查看文档操作权限。</small>
           </div>
@@ -1910,20 +1985,53 @@ header .badge {
         </section>
         <div id="editor" class="code-editor"></div>
         <div class="document-footer">
-          <label id="save-method-row" hidden
-            >保存方式<select id="save-method" aria-label="保存方式">
-              <option value="patch">局部更新（最多 10 个操作）</option>
-              <option value="replace">完整替换文档</option>
-            </select></label
-          >
           <small id="draft-summary" role="status" hidden></small>
           <small id="etag">读取完整文档后才能更新或删除。</small>
           <div class="toolbar">
             <button id="save" class="primary">保存</button
             ><button id="delete" class="danger">删除</button>
+            <button
+              id="document-actions"
+              type="button"
+              class="icon-button"
+              aria-label="更多文档操作"
+              title="更多文档操作"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="document-actions-menu"
+              hidden
+            ></button>
           </div>
         </div>
       </section>
+    </div>
+    <div
+      id="copy-menu"
+      class="action-menu"
+      role="menu"
+      aria-label="复制所选内容"
+      hidden
+    >
+      <button id="copy-cell" type="button" role="menuitem" disabled>
+        复制单元格
+      </button>
+      <button id="copy-row" type="button" role="menuitem" disabled>
+        复制行 JSON
+      </button>
+    </div>
+    <div
+      id="document-actions-menu"
+      class="action-menu"
+      role="menu"
+      aria-label="更多文档操作"
+      hidden
+    >
+      <button id="replace-document" type="button" role="menuitem">
+        完整替换文档…
+      </button>
+      <button id="generate-id" type="button" role="menuitem" hidden>
+        重新生成 UUID
+      </button>
     </div>
     <section
       id="scope-picker"
@@ -1984,20 +2092,7 @@ header .badge {
       </button>
       <div id="result-item-hint" class="muted"></div>
     </div>
-    <section id="pk-picker" role="dialog" aria-label="分区键选择" hidden>
-      <div class="section-title">
-        <span id="pk-title">选择分区键</span
-        ><button id="pk-close" type="button" aria-label="关闭分区键选择">
-          ×
-        </button>
-      </div>
-      <input
-        id="pk-filter"
-        type="search"
-        aria-label="过滤分区键"
-        placeholder="输入关键词查找分区键…"
-        autocomplete="off"
-      />
+    <section id="pk-picker" aria-label="分区键候选列表" hidden>
       <div id="pk-count" class="muted" aria-live="polite"></div>
       <div id="pk-options" role="listbox" aria-label="分区键候选"></div>
       <div class="pk-discovery">
@@ -2009,9 +2104,7 @@ header .badge {
           ><button id="pk-reload" type="button">刷新列表</button
           ><button id="pk-clear" type="button">清除选择</button>
         </div>
-        <small
-          >优先使用本地缓存；刷新列表才重新读取。关闭列表会停止续读。</small
-        >
+        <small>输入框内直接筛选；下拉时自动续读，关闭后暂停。</small>
       </div>
     </section>
     <dialog id="confirm-dialog" tabindex="-1" aria-labelledby="confirm-title">
@@ -2039,6 +2132,92 @@ header .badge {
     </dialog>
     <script type="module">
       (() => {
+  // src/icons.mjs
+  var paths = {
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M15 9V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4"/>',
+    download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
+    refresh: '<path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
+    expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
+    restore: '<path d="M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5"/>',
+    more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+    down: '<path d="m7 9 5 5 5-5"/>',
+    pause: '<path d="M9 4v16M15 4v16"/>',
+    play: '<path d="m8 4 12 8-12 8z"/>'
+  };
+  function icon(name2) {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name2]}</svg>`;
+  }
+
+  // src/menu.mjs
+  var menus = /* @__PURE__ */ new Set();
+  function createMenu(trigger, menu) {
+    let returnFocus = trigger;
+    const items = () => [
+      ...menu.querySelectorAll("button:not(:disabled):not([hidden])")
+    ];
+    function close(focus = false) {
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+      if (focus) (returnFocus?.isConnected ? returnFocus : trigger).focus();
+    }
+    function open({ x, y, focus = trigger, last: last2 = false } = {}) {
+      if (trigger.disabled) return;
+      for (const other of menus) other.close();
+      returnFocus = focus;
+      menu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      const rect = trigger.getBoundingClientRect();
+      const width = menu.offsetWidth, height = menu.offsetHeight;
+      menu.style.left = `${Math.max(8, Math.min(x ?? rect.right - width, innerWidth - width - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(y ?? (rect.bottom + height + 4 < innerHeight ? rect.bottom + 4 : rect.top - height - 4), innerHeight - height - 8))}px`;
+      (last2 ? items().at(-1) : items()[0])?.focus();
+    }
+    const api = { open, close };
+    menus.add(api);
+    trigger.onclick = () => menu.hidden ? open() : close(true);
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        open({ last: event.key === "ArrowUp" });
+      }
+    });
+    menu.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close(true);
+        return;
+      }
+      if (event.key === "Tab") {
+        close(true);
+        return;
+      }
+      if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const all = items(), i = all.indexOf(document.activeElement);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? all.length - 1 : (i + (event.key === "ArrowDown" ? 1 : -1) + all.length) % all.length;
+      all[next]?.focus();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!menu.contains(event.target) && !trigger.contains(event.target))
+        close();
+    });
+    document.addEventListener("focusin", (event) => {
+      if (!menu.contains(event.target) && !trigger.contains(event.target))
+        close();
+    });
+    document.addEventListener(
+      "wheel",
+      (event) => {
+        if (!menu.contains(event.target)) close();
+      },
+      true
+    );
+    window.addEventListener("resize", () => close());
+    return api;
+  }
+
   // src/sql-execution.mjs
   function sqlExecution(document2, selection) {
     const range = selection.main;
@@ -24931,12 +25110,12 @@ header .badge {
     if (config3.icons)
       content2.push({
         render(completion) {
-          let icon = document.createElement("div");
-          icon.classList.add("cm-completionIcon");
+          let icon2 = document.createElement("div");
+          icon2.classList.add("cm-completionIcon");
           if (completion.type)
-            icon.classList.add(...completion.type.split(/\s+/g).map((cls) => "cm-completionIcon-" + cls));
-          icon.setAttribute("aria-hidden", "true");
-          return icon;
+            icon2.classList.add(...completion.type.split(/\s+/g).map((cls) => "cm-completionIcon-" + cls));
+          icon2.setAttribute("aria-hidden", "true");
+          return icon2;
         },
         position: 20
       });
@@ -26875,6 +27054,16 @@ header .badge {
       ...lintKeymap
     ])
   ])();
+  var minimalSetup = /* @__PURE__ */ (() => [
+    highlightSpecialChars(),
+    history(),
+    drawSelection(),
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    keymap.of([
+      ...defaultKeymap,
+      ...historyKeymap
+    ])
+  ])();
 
   // node_modules/@codemirror/lang-sql/dist/index.js
   var whitespace = 36;
@@ -28183,8 +28372,8 @@ ${indent}}` : "}";
   }
 
   // src/model.mjs
-  function keyFromDocument(document2, paths) {
-    const values = paths.map((path) => {
+  function keyFromDocument(document2, paths2) {
+    const values = paths2.map((path) => {
       const tokens3 = path.replace(/^\//, "").split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
       let value = document2;
       for (const token of tokens3) {
@@ -28366,7 +28555,17 @@ ${indent}}` : "}";
       diagnostics(lastDiagnostic);
     };
     const extensions = [
-      basicSetup,
+      ...language2 === "sql" ? [
+        minimalSetup,
+        lineNumbers(),
+        highlightActiveLineGutter(),
+        highlightActiveLine(),
+        EditorState.allowMultipleSelections.of(true),
+        indentOnInput(),
+        bracketMatching(),
+        closeBrackets(),
+        keymap.of([...closeBracketsKeymap, ...completionKeymap])
+      ] : [basicSetup],
       ...language2 === "sql" ? [
         EditorState.transactionExtender.of(
           (tr) => tr.docChanged ? { effects: setDiagnosticsEffect.of([]) } : null
@@ -28709,7 +28908,6 @@ ${indent}}` : "}";
           label: "." + name2,
           displayLabel: name2,
           type: "property",
-          detail: "\u5DF2\u8BFB\u53D6\u6587\u6863\u4E2D\u7684\u5B57\u6BB5",
           apply: identifier.test(name2) ? "." + name2 : `[${JSON.stringify(name2)}]`
         }))
       };
@@ -28872,10 +29070,10 @@ ${indent}}` : "}";
   function tableColumns(columns) {
     return columns.includes("id") ? ["id", ...columns.filter((name2) => name2 !== "id")] : columns;
   }
-  function rowIdentity(row, paths) {
-    if (!row || typeof row.id !== "string" || !row.id || !paths.length)
+  function rowIdentity(row, paths2) {
+    if (!row || typeof row.id !== "string" || !row.id || !paths2.length)
       return null;
-    for (const path of paths) {
+    for (const path of paths2) {
       let value = row;
       for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
         if (value === null || typeof value !== "object" || !Object.hasOwn(value, part))
@@ -28883,7 +29081,7 @@ ${indent}}` : "}";
         value = value[part];
       }
     }
-    return { id: row.id, partitionKeyText: keyFromDocument(row, paths) };
+    return { id: row.id, partitionKeyText: keyFromDocument(row, paths2) };
   }
 
   // src/documents.mjs
@@ -28901,15 +29099,15 @@ ${indent}}` : "}";
     if (!path.startsWith("/")) throw new Error("\u65E0\u6548\u7684\u5206\u533A\u952E\u8DEF\u5F84");
     return path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"));
   }
-  function applyDocumentPartition(doc2, text, paths) {
+  function applyDocumentPartition(doc2, text, paths2) {
     const values = parseArray(text, "\u5206\u533A\u952E");
-    if (values.length !== (paths.length || 1))
+    if (values.length !== (paths2.length || 1))
       throw new Error("\u5206\u533A\u952E\u7EC4\u4EF6\u6570\u91CF\u4E0E\u5BB9\u5668\u5B9A\u4E49\u4E0D\u4E00\u81F4");
     values.forEach((value, index) => {
       if (Array.isArray(value) || object(value) && Object.keys(value).length)
         throw new Error("\u5206\u533A\u952E\u5FC5\u987B\u662F\u6807\u91CF\u3001null \u6216 {}");
-      if (!paths[index]) return;
-      const parts = tokens2(paths[index]), undefinedKey = object(value);
+      if (!paths2[index]) return;
+      const parts = tokens2(paths2[index]), undefinedKey = object(value);
       let target = doc2;
       for (const part of parts.slice(0, -1)) {
         if (!Object.hasOwn(target, part)) {
@@ -28937,19 +29135,19 @@ ${indent}}` : "}";
     });
     return doc2;
   }
-  function newDocument(paths, partitionText, id) {
+  function newDocument(paths2, partitionText, id) {
     const doc2 = { id };
-    if (partitionText.trim()) applyDocumentPartition(doc2, partitionText, paths);
+    if (partitionText.trim()) applyDocumentPartition(doc2, partitionText, paths2);
     return doc2;
   }
-  function prepareDocument(text, partitionText, paths, identity = null) {
+  function prepareDocument(text, partitionText, paths2, identity = null) {
     const doc2 = editableDocument(parse(text));
     if (typeof doc2.id !== "string" || !doc2.id)
       throw new Error("\u6587\u6863\u5FC5\u987B\u5305\u542B\u975E\u7A7A\u5B57\u7B26\u4E32 id");
     const values = parseArray(partitionText, "\u5206\u533A\u952E");
-    if (values.length !== (paths.length || 1))
+    if (values.length !== (paths2.length || 1))
       throw new Error("\u5206\u533A\u952E\u7EC4\u4EF6\u6570\u91CF\u4E0E\u5BB9\u5668\u5B9A\u4E49\u4E0D\u4E00\u81F4");
-    const key = stringify(values), actual = keyFromDocument(doc2, paths);
+    const key = stringify(values), actual = keyFromDocument(doc2, paths2);
     if (key !== actual)
       throw new Error(
         "\u6587\u6863\u6B63\u6587\u7684\u5206\u533A\u952E\u4E0E\u6240\u9009\u5206\u533A\u952E\u4E0D\u4E00\u81F4\uFF0C\u8BF7\u4FEE\u6B63\u6587\u6863\u6216\u91CD\u65B0\u9009\u62E9\u5206\u533A\u952E"
@@ -29001,7 +29199,7 @@ ${indent}}` : "}";
       return part.replace(/~1/g, "/").replace(/~0/g, "~");
     });
   }
-  function protectedField(path, paths) {
+  function protectedField(path, paths2) {
     const field = pointerTokens(path);
     return [
       "/id",
@@ -29010,7 +29208,7 @@ ${indent}}` : "}";
       "/_etag",
       "/_attachments",
       "/_ts",
-      ...paths
+      ...paths2
     ].some((p) => {
       const key = pointerTokens(p);
       return field.slice(0, Math.min(field.length, key.length)).every((part, index) => part === key[index]);
@@ -29032,7 +29230,7 @@ ${indent}}` : "}";
     }
     return true;
   }
-  function documentFields(document2, paths) {
+  function documentFields(document2, paths2) {
     const rows = [];
     function walk(doc2, path) {
       for (const [key, value] of Object.entries(doc2)) {
@@ -29043,7 +29241,7 @@ ${indent}}` : "}";
             path: next,
             value,
             kind: fieldKind(value),
-            locked: protectedField(next, paths)
+            locked: protectedField(next, paths2)
           });
       }
     }
@@ -29059,8 +29257,8 @@ ${indent}}` : "}";
       throw new Error("\u5E03\u5C14\u5B57\u6BB5\u5FC5\u987B\u4E3A true \u6216 false");
     return value;
   }
-  function editDocumentField(document2, path, value, paths, remove2 = false) {
-    if (protectedField(path, paths))
+  function editDocumentField(document2, path, value, paths2, remove2 = false) {
+    if (protectedField(path, paths2))
       throw new Error("\u4E0D\u80FD\u4FEE\u6539 id\u3001\u5206\u533A\u952E\u6216\u7CFB\u7EDF\u5B57\u6BB5\uFF1B\u8BF7\u91CD\u65B0\u8BFB\u53D6\u76EE\u6807\u6587\u6863");
     const doc2 = parse(stringify(editableDocument(document2))), parts = pointerTokens(path);
     let parent = doc2;
@@ -29084,14 +29282,14 @@ ${indent}}` : "}";
       });
     return doc2;
   }
-  function buildDocumentPatch(before, after, paths) {
+  function buildDocumentPatch(before, after, paths2) {
     const changes = documentChanges(before, after);
     if (changes.length > 10)
       throw new Error(
         `\u672C\u6B21\u6709 ${changes.length} \u4E2A\u64CD\u4F5C\uFF0C\u5C40\u90E8\u66F4\u65B0\u6700\u591A 10 \u4E2A\u3002\u8BF7\u51CF\u5C11\u6539\u52A8\uFF0C\u6216\u5728\u4FDD\u5B58\u65B9\u5F0F\u4E2D\u660E\u786E\u9009\u62E9\u5B8C\u6574\u66FF\u6362\u3002`
       );
     return changes.map((change) => {
-      if (protectedField(change.path, paths))
+      if (protectedField(change.path, paths2))
         throw new Error("\u5C40\u90E8\u66F4\u65B0\u4E0D\u80FD\u4FEE\u6539 id\u3001\u5206\u533A\u952E\u6216\u7CFB\u7EDF\u5B57\u6BB5");
       return change.after === "\uFF08\u5220\u9664\uFF09" ? { op: "remove", path: change.path } : { op: "set", path: change.path, value: parse(change.after) };
     });
@@ -29115,6 +29313,7 @@ ${indent}}` : "}";
     snapshot: null,
     baseline: "",
     creating: false,
+    resultView: "table",
     documentView: "json",
     preferredDocumentView: "fields",
     fieldErrors: /* @__PURE__ */ new Map(),
@@ -29127,6 +29326,10 @@ ${indent}}` : "}";
     resultStale: false
   };
   var host = window.dbxPlugin;
+  var copyMenu;
+  var documentWriteMenu;
+  var viewPreferenceWrites = Promise.resolve();
+  var viewPreferenceRevision = 0;
   var resultEditor = null;
   var resultEditorPage;
   var resultEditorFilter = "";
@@ -29173,6 +29376,10 @@ ${indent}}` : "}";
   });
   var partitionScopes = /* @__PURE__ */ new Map();
   var partitionTarget = "query-pk";
+  var partitionFilter = "";
+  var partitionActiveKey = null;
+  var partitionPickerEpoch = 0;
+  var partitionBrowseRequested = false;
   function partitionScope() {
     return JSON.stringify([state.connectionId, state.database, state.container]);
   }
@@ -29193,6 +29400,12 @@ ${indent}}` : "}";
     }
   }
   function closePartitionPicker() {
+    partitionPickerEpoch++;
+    partitionActiveKey = null;
+    for (const id of ["query-pk", "document-pk"]) {
+      $(id).setAttribute("aria-expanded", "false");
+      $(id).removeAttribute("aria-activedescendant");
+    }
     if (state.container) candidates().loader?.stop();
     $("pk-picker").hidden = true;
     for (const id of ["query-pk-choose", "document-pk-choose"])
@@ -29204,7 +29417,7 @@ ${indent}}` : "}";
     $("query-pk").value = state.container ? candidates().selected || "" : "";
   }
   function renderPartitionOptions() {
-    const cache = candidates(), items = cache.filter($("pk-filter").value), target = $("pk-options");
+    const cache = candidates(), items = cache.filter(partitionFilter), target = $("pk-options");
     target.replaceChildren();
     let selected = "";
     try {
@@ -29215,13 +29428,17 @@ ${indent}}` : "}";
     if (!items.length) {
       const empty2 = document.createElement("div");
       empty2.className = "empty";
-      empty2.textContent = cache.keys.size ? "\u6682\u65E0\u5339\u914D\uFF0C\u4ECD\u5728\u52A0\u8F7D\u65F6\u8BF7\u7A0D\u5019\uFF0C\u4E5F\u53EF\u624B\u52A8\u8F93\u5165\u3002" : cache.loader?.error ? "\u65E0\u6CD5\u81EA\u52A8\u83B7\u53D6\u5019\u9009\uFF0C\u4ECD\u53EF\u624B\u52A8\u8F93\u5165\u5206\u533A\u952E\u3002" : "\u6B63\u5728\u8BFB\u53D6\u672C\u5730\u7F13\u5B58\u6216\u67E5\u627E\u5206\u533A\u952E\u2026";
+      empty2.textContent = cache.keys.size ? "\u6682\u65E0\u5339\u914D\uFF0C\u4ECD\u5728\u52A0\u8F7D\u65F6\u8BF7\u7A0D\u5019\uFF0C\u4E5F\u53EF\u624B\u52A8\u8F93\u5165\u3002" : cache.loader?.error ? "\u65E0\u6CD5\u81EA\u52A8\u83B7\u53D6\u5019\u9009\uFF0C\u4ECD\u53EF\u624B\u52A8\u8F93\u5165\u5206\u533A\u952E\u3002" : !cache.hydrated ? "\u6B63\u5728\u8BFB\u53D6\u672C\u5730\u5019\u9009\u2026" : "\u6682\u65E0\u672C\u5730\u5019\u9009\uFF0C\u53EF\u76F4\u63A5\u8F93\u5165 JSON \u5206\u533A\u952E\uFF0C\u6216\u70B9\u4E0B\u62C9\u7BAD\u5934\u52A0\u8F7D\u3002";
       target.append(empty2);
     }
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const button = document.createElement("button");
       button.type = "button";
       button.setAttribute("role", "option");
+      button.id = `pk-option-${index}`;
+      button.tabIndex = -1;
+      button.classList.toggle("keyboard-active", item.key === partitionActiveKey);
+      button.onpointerdown = (event) => event.preventDefault();
       button.setAttribute("aria-selected", String(selected === item.key));
       button.disabled = state.busy;
       button.dataset.key = item.key;
@@ -29241,37 +29458,62 @@ ${indent}}` : "}";
       };
       target.append(button);
     }
+    const active = [...target.querySelectorAll("button")].find(
+      (b) => b.dataset.key === partitionActiveKey
+    );
+    if (active)
+      $(partitionTarget).setAttribute("aria-activedescendant", active.id);
+    else {
+      partitionActiveKey = null;
+      $(partitionTarget).removeAttribute("aria-activedescendant");
+    }
     const loader = cache.loader, stats = cache.stats.seek, done = stats.started && !stats.continuation;
-    $("pk-load").textContent = done ? "\u5168\u90E8\u5DF2\u52A0\u8F7D" : loader?.running ? "\u6682\u505C\u52A0\u8F7D" : "\u7EE7\u7EED\u52A0\u8F7D";
+    const loadLabel = done ? "\u5168\u90E8\u5DF2\u52A0\u8F7D" : loader?.running ? "\u6682\u505C\u52A0\u8F7D" : "\u7EE7\u7EED\u52A0\u8F7D";
+    $("pk-load").innerHTML = icon(loader?.running ? "pause" : "play");
+    $("pk-load").classList.add("icon-button");
+    $("pk-load").title = loadLabel;
+    $("pk-load").setAttribute("aria-label", loadLabel);
     $("pk-load").disabled = state.busy || done || !state.container;
+    $("pk-load").hidden = done;
     $("pk-reload").disabled = state.busy || !!loader?.task || !state.container;
     $("pk-clear").disabled = state.busy;
     const ru = Object.values(cache.stats).reduce((sum, s) => sum + s.ru, 0);
     $("pk-progress").textContent = [
       loader?.error || loader?.notice,
-      done ? `\u5168\u90E8\u5206\u533A\u952E\u5DF2\u52A0\u8F7D \xB7 ${cache.keys.size} \u4E2A` : loader?.running ? `\u81EA\u52A8\u52A0\u8F7D\u4E2D \xB7 \u5DF2\u53D1\u73B0 ${cache.keys.size} \u4E2A\uFF0C\u5C1A\u672A\u5B8C\u6210` : "\u5DF2\u6682\u505C\uFF0C\u5F53\u524D\u5019\u9009\u5C1A\u672A\u52A0\u8F7D\u5B8C\u6574",
+      done ? `\u5168\u90E8\u5206\u533A\u952E\u5DF2\u52A0\u8F7D \xB7 ${cache.keys.size} \u4E2A` : loader?.running ? `\u81EA\u52A8\u52A0\u8F7D\u4E2D \xB7 \u5DF2\u53D1\u73B0 ${cache.keys.size} \u4E2A\uFF0C\u5C1A\u672A\u5B8C\u6210` : "\u5F53\u524D\u4E3A\u672C\u5730\u5019\u9009\uFF1B\u4E0B\u62C9\u7BAD\u5934\u53EF\u81EA\u52A8\u52A0\u8F7D\u5176\u4F59\u5206\u533A\u952E",
       `\u672C\u6B21 ${ru.toFixed(2)} RU`,
       cache.cachedAt ? `\u672C\u5730\u7F13\u5B58\uFF1A${new Date(cache.cachedAt).toLocaleString()}` : "",
       cache.cacheWarning
     ].filter(Boolean).join(" \xB7 ");
     $("pk-progress").classList.toggle("error", !!loader?.error);
+    if (!$("pk-picker").hidden) positionPartitionPicker();
   }
-  function openPartitionPicker(target) {
-    if (state.busy || !state.container) return;
-    partitionTarget = target;
-    $("pk-filter").value = "";
-    $("pk-title").textContent = target === "query-pk" ? "\u9009\u62E9\u67E5\u8BE2\u5206\u533A\u952E" : "\u9009\u62E9\u6587\u6863\u5206\u533A\u952E";
-    $("pk-picker").hidden = false;
-    void startPartitionOptions();
-    renderPartitionOptions();
-    const rect = $(target).getBoundingClientRect(), picker = $("pk-picker");
-    const width = picker.getBoundingClientRect().width, height = picker.getBoundingClientRect().height;
+  function positionPartitionPicker() {
+    const rect = $(partitionTarget).getBoundingClientRect(), picker = $("pk-picker");
+    picker.style.width = `${Math.min(Math.max(rect.width + 28, 300), 600, innerWidth - 16)}px`;
+    const below = innerHeight - rect.bottom - 12, above = rect.top - 12;
+    const down = below >= Math.min(300, picker.scrollHeight) || below >= above;
+    picker.style.maxHeight = `${Math.max(100, down ? below : above)}px`;
+    const { width, height } = picker.getBoundingClientRect();
     picker.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - width - 8))}px`;
-    picker.style.top = `${Math.max(8, Math.min(rect.bottom + 6, innerHeight - height - 8))}px`;
-    $(target + "-choose").setAttribute("aria-expanded", "true");
-    $("pk-filter").focus();
+    picker.style.top = `${down ? rect.bottom + 4 : Math.max(8, rect.top - height - 4)}px`;
   }
-  async function startPartitionOptions(refresh = false) {
+  function openPartitionPicker(target, discover = true) {
+    if (state.busy || !state.container) return;
+    if (partitionTarget !== target) closePartitionPicker();
+    partitionTarget = target;
+    partitionFilter = discover ? "" : $(target).value;
+    partitionBrowseRequested = discover;
+    partitionActiveKey = null;
+    const generation = ++partitionPickerEpoch;
+    $("pk-picker").hidden = false;
+    $(target).setAttribute("aria-expanded", "true");
+    $(target + "-choose").setAttribute("aria-expanded", "true");
+    void startPartitionOptions(false, discover, generation);
+    renderPartitionOptions();
+    $(target).focus();
+  }
+  async function startPartitionOptions(refresh = false, discover = true, generation = partitionPickerEpoch) {
     const key = partitionScope(), identity = scope(), epoch = state.epoch;
     if (refresh) {
       const old = candidates();
@@ -29322,12 +29564,15 @@ ${indent}}` : "}";
             renderPartitionOptions();
         }
       );
-    if (!$("pk-picker").hidden) void cache.loader.start();
+    if (!$("pk-picker").hidden && generation === partitionPickerEpoch) {
+      renderPartitionOptions();
+      if (discover) void cache.loader.start();
+    }
   }
   function learnPartitionKeys(rows) {
-    const paths = partitionPaths();
+    const paths2 = partitionPaths();
     for (const row of rows) {
-      const complete = paths.every((path) => {
+      const complete = paths2.every((path) => {
         let value = row;
         for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
           if (value === null || typeof value !== "object" || !Object.hasOwn(value, part))
@@ -29336,7 +29581,7 @@ ${indent}}` : "}";
         }
         return true;
       });
-      if (complete) rememberKey(keyFromDocument(row, paths));
+      if (complete) rememberKey(keyFromDocument(row, paths2));
     }
   }
   $("confirm-cancel").onclick = () => $("confirm-dialog").close("cancel");
@@ -29414,10 +29659,12 @@ ${indent}}` : "}";
     documentEditor.readOnly = busy || state.readOnly || !state.snapshot && !state.creating;
     $("scope-container").disabled = busy || !ready || !state.database;
     $("scope-info").disabled = busy || !state.container;
-    $("sql-search").disabled = busy || !ready;
     $("document-search").disabled = busy || !documentEditor.value.trim() || state.fieldErrors.size > 0;
     $("document-more").disabled = busy || !documentEditor.value.trim();
     if (busy) {
+      closePartitionPicker();
+      copyMenu?.close();
+      documentWriteMenu?.close();
       closeDocumentMenu();
       closeResultItemMenu();
       closeScopePicker();
@@ -29426,11 +29673,13 @@ ${indent}}` : "}";
     $("document-format").disabled = busy || state.readOnly || !state.snapshot && !state.creating;
     $("previous").disabled = busy || state.page <= 0;
     $("next").disabled = busy || !state.pages[state.page]?.continuation;
-    $("run-collapsed").disabled = $("run").disabled;
     $("export").disabled = busy || state.page < 0;
     $("result-filter").disabled = busy || state.page < 0;
     $("copy-cell").disabled = busy || state.selectedCell === null;
     $("copy-row").disabled = busy || state.selectedRow === null;
+    $("copy-selection").disabled = busy || state.selectedCell === null && state.selectedRow === null;
+    $("result-tools").hidden = state.page < 0;
+    for (const id of ["table-view", "json-view"]) $(id).disabled = busy || !ready;
     resultReaderControls();
     updateFieldChanges();
     $("cancel-query").hidden = !state.queryJob;
@@ -29438,6 +29687,10 @@ ${indent}}` : "}";
     $("delete").disabled = busy || state.readOnly || !state.snapshot;
     $("new").disabled ||= state.readOnly;
     $("generate-id").hidden = !state.creating;
+    $("replace-document").hidden = !state.snapshot;
+    $("replace-document").disabled = $("save").disabled || !state.snapshot;
+    $("document-actions").hidden = state.readOnly || !state.creating && (!state.snapshot || !dirty());
+    $("document-actions").disabled = busy;
     $("generate-id").disabled = busy || state.readOnly || !state.creating;
     $("write-hint").textContent = state.readOnly ? "\u5F53\u524D\u8FDE\u63A5\u53EA\u8BFB\u3002\u589E\u5220\u6539\u9700\u8981\u53EF\u5199\u51ED\u636E\uFF0C\u5E76\u5173\u95ED\u4FDD\u5B58\u8FDE\u63A5\u4E2D\u7684\u53EA\u8BFB\u8BBE\u7F6E\u540E\u91CD\u65B0\u8FDE\u63A5\u3002" : state.creating ? "\u5DF2\u5E26\u5165\u5F53\u524D\u5206\u533A\u952E\uFF1B\u53EF\u7F16\u8F91 id \u6216\u751F\u6210 UUID\u3002\u4FDD\u5B58\u524D\u4F1A\u663E\u793A\u5B57\u6BB5\u9884\u89C8\u3002" : "\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u540E\u53EF\u4FEE\u6539\u6216\u5220\u9664\uFF1B\u4FDD\u5B58\u524D\u663E\u793A\u5DEE\u5F02\uFF0C\u7CFB\u7EDF\u5B57\u6BB5\u4E0D\u53C2\u4E0E\u7F16\u8F91\u3002";
     for (const id of ["fields-view", "document-json-view", "field-filter"])
@@ -29448,8 +29701,6 @@ ${indent}}` : "}";
       el.disabled = busy || state.readOnly || !state.snapshot && !state.creating || el.dataset.locked === "true";
     for (const id of ["add-field", "add-field-path", "add-field-value"])
       $(id).disabled = busy || state.readOnly || !state.snapshot && !state.creating;
-    $("save-method-row").hidden = !state.snapshot;
-    $("save-method").disabled = busy || state.readOnly;
     for (const id of ["query-pk-choose", "document-pk-choose"])
       $(id).disabled = busy || !selected;
     if (!$("pk-picker").hidden) renderPartitionOptions();
@@ -29490,11 +29741,19 @@ ${indent}}` : "}";
       throw new Error("\u8BF7\u5148\u9009\u62E9\u6570\u636E\u5E93\u548C\u5BB9\u5668");
     return { database: state.database, container: state.container };
   }
+  function clearStatus() {
+    clearTimeout(statusTimer);
+    $("status").hidden = true;
+    $("status").textContent = "";
+    $("status").classList.remove("progress", "error");
+  }
   function metrics(result, prefix = "") {
     status(`${prefix}${result.ru.toFixed(2)} RU \xB7 ${result.durationMs} ms`);
     $("status").title = result.activityId ? `Activity ID: ${result.activityId}` : "";
   }
   function resetEditor() {
+    hideDocument();
+    documentWriteMenu?.close();
     closeDocumentMenu();
     $("document-location").open = true;
     $("document-identity").textContent = "\u6309 id \u4E0E\u5206\u533A\u952E\u8BFB\u53D6";
@@ -29622,6 +29881,31 @@ ${indent}}` : "}";
     updateScopeContext();
     status(next ? "\u53EF\u4EE5\u8FD0\u884C\u67E5\u8BE2" : "\u8BF7\u9009\u62E9\u5BB9\u5668");
   }
+  async function loadViewPreferences() {
+    const revision = viewPreferenceRevision;
+    const epoch = state.epoch;
+    try {
+      await viewPreferenceWrites;
+      const saved = await invoke("cosmos/viewPreferences");
+      if (epoch !== state.epoch || revision !== viewPreferenceRevision) return;
+      state.preferredDocumentView = saved.document === "json" ? "json" : "fields";
+      view(saved.results === "json", false);
+    } catch (error) {
+      if (epoch === state.epoch && error.message !== "STALE")
+        status("\u663E\u793A\u504F\u597D\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u672C\u6B21\u4ECD\u53EF\u5207\u6362\u89C6\u56FE");
+    }
+  }
+  function saveViewPreference(views) {
+    ++viewPreferenceRevision;
+    viewPreferenceWrites = viewPreferenceWrites.catch(() => {
+    }).then(async () => {
+      await host.invoke(
+        "cosmos/viewPreferences",
+        { views },
+        { timeoutMs: 1e4 }
+      );
+    }).catch(() => status("\u663E\u793A\u683C\u5F0F\u4FDD\u5B58\u5931\u8D25\uFF1B\u672C\u6B21\u9009\u62E9\u4ECD\u6709\u6548", true));
+  }
   var preferenceWrites = Promise.resolve();
   function preferenceKey() {
     return `table-v1:${partitionScope()}`;
@@ -29672,6 +29956,10 @@ ${indent}}` : "}";
     $("result-json-search").disabled = unavailable;
     $("copy-results-json").disabled = unavailable;
     $("copy-results-json").title = $("result-filter").value.trim() ? "\u590D\u5236\u5F53\u524D\u9875\u7B5B\u9009\u540E\u7684 JSON\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09" : "\u590D\u5236\u5F53\u524D\u9875\u5168\u90E8 JSON\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09";
+    $("copy-results-json").setAttribute(
+      "aria-label",
+      $("copy-results-json").title
+    );
   }
   function syncResultReader(source) {
     const page = state.pages[state.page], filter = $("result-filter").value.trim().toLowerCase();
@@ -29732,7 +30020,7 @@ ${indent}}` : "}";
     const item = jsonResultItemAt(resultItemRanges, position);
     if (!item || to > item.to) return false;
     const json2 = text.slice(item.from, item.to), row = parse(json2);
-    const paths = partitionPaths(), identity = rowIdentity(row, paths);
+    const paths2 = partitionPaths(), identity = rowIdentity(row, paths2);
     const filter = $("result-filter").value.trim().toLowerCase();
     resultItemContext = {
       page,
@@ -29745,7 +30033,7 @@ ${indent}}` : "}";
     };
     $("result-item-summary").textContent = `${filter ? "\u7B5B\u9009\u7ED3\u679C" : "\u5F53\u524D\u9875"}\u7B2C ${item.index + 1} \u9879 \xB7 \u67E5\u8BE2\u6295\u5F71`;
     $("read-result-item").disabled = !identity;
-    $("result-item-hint").textContent = identity ? "\u590D\u5236\u7684\u662F\u67E5\u8BE2\u6295\u5F71\uFF1B\u6253\u5F00\u65F6\u6309\u6B64\u9879\u81EA\u8EAB\u7684 id \u548C\u5206\u533A\u952E\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u3002" : paths.length ? `\u7F3A\u5C11\u53EF\u7528\u7684\u5B57\u7B26\u4E32 id \u6216\u5B8C\u6574\u5206\u533A\u5B57\u6BB5\uFF08${paths.join(", ")}\uFF09\uFF0C\u4E0D\u80FD\u6253\u5F00\u5B8C\u6574\u6587\u6863\uFF1B\u4ECD\u53EF\u590D\u5236\u6B64\u9879\u3002` : "\u5BB9\u5668\u5206\u533A\u8DEF\u5F84\u4E0D\u53EF\u7528\uFF0C\u4E0D\u80FD\u6253\u5F00\u5B8C\u6574\u6587\u6863\uFF1B\u4ECD\u53EF\u590D\u5236\u6B64\u9879\u3002";
+    $("result-item-hint").textContent = identity ? "\u590D\u5236\u7684\u662F\u67E5\u8BE2\u6295\u5F71\uFF1B\u6253\u5F00\u65F6\u6309\u6B64\u9879\u81EA\u8EAB\u7684 id \u548C\u5206\u533A\u952E\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u3002" : paths2.length ? `\u7F3A\u5C11\u53EF\u7528\u7684\u5B57\u7B26\u4E32 id \u6216\u5B8C\u6574\u5206\u533A\u5B57\u6BB5\uFF08${paths2.join(", ")}\uFF09\uFF0C\u4E0D\u80FD\u6253\u5F00\u5B8C\u6574\u6587\u6863\uFF1B\u4ECD\u53EF\u590D\u5236\u6B64\u9879\u3002` : "\u5BB9\u5668\u5206\u533A\u8DEF\u5F84\u4E0D\u53EF\u7528\uFF0C\u4E0D\u80FD\u6253\u5F00\u5B8C\u6574\u6587\u6863\uFF1B\u4ECD\u53EF\u590D\u5236\u6B64\u9879\u3002";
     const menu = $("result-item-menu");
     menu.hidden = false;
     menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
@@ -29834,12 +30122,20 @@ ${indent}}` : "}";
     }
   }
   function renderPage() {
+    copyMenu?.close();
+    const json2 = state.resultView === "json";
+    $("table").hidden = json2 && state.page >= 0;
+    $("raw-results").hidden = !json2 || state.page < 0;
+    $("result-tools").hidden = state.page < 0;
     closeResultItemMenu();
     const p = state.pages[state.page];
     const { all: allRows, filter, rows } = pageRows();
     renderResultSummary();
     $("clear-filter").hidden = !filter;
-    $("export").textContent = filter ? "\u5BFC\u51FA\u7B5B\u9009\u7ED3\u679C" : "\u5BFC\u51FA\u5F53\u524D\u9875";
+    $("export").setAttribute(
+      "aria-label",
+      filter ? "\u5BFC\u51FA\u7B5B\u9009\u7ED3\u679C" : "\u5BFC\u51FA\u5F53\u524D\u9875"
+    );
     $("export").title = filter ? "\u4EC5\u5BFC\u51FA\u5F53\u524D\u9875\u5339\u914D\u7B5B\u9009\u7684\u6587\u6863\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09" : "\u5BFC\u51FA\u5F53\u524D\u9875\u6240\u6709\u6587\u6863\uFF08\u5305\u542B\u6240\u6709\u5B57\u6BB5\uFF09";
     $("row-count").textContent = filter ? `${rows.length} / ${allRows.length} \u6761\uFF08\u4EC5\u5F53\u524D\u9875\uFF09` : `${allRows.length} \u6761`;
     $("page-label").textContent = `\u7B2C ${state.page + 1} \u9875`;
@@ -29855,7 +30151,7 @@ ${indent}}` : "}";
     if (!rows.length) {
       const el = document.createElement("div");
       el.className = "empty";
-      el.textContent = !p ? "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2" : filter && allRows.length ? `\u5F53\u524D\u9875\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C\uFF0C\u8BF7\u6E05\u9664\u7B5B\u9009${p.continuation ? "\u6216\u67E5\u770B\u4E0B\u4E00\u9875" : ""}` : p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C";
+      el.textContent = !p ? state.container ? "\u8FD0\u884C\u67E5\u8BE2\u4EE5\u67E5\u770B\u7ED3\u679C" : "\u9009\u62E9\u5BB9\u5668\u540E\u8FD0\u884C\u67E5\u8BE2" : filter && allRows.length ? `\u5F53\u524D\u9875\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C\uFF0C\u8BF7\u6E05\u9664\u7B5B\u9009${p.continuation ? "\u6216\u67E5\u770B\u4E0B\u4E00\u9875" : ""}` : p.continuation ? "\u5F53\u524D\u9875\u4E3A\u7A7A\uFF0C\u4ECD\u53EF\u8BFB\u53D6\u4E0B\u4E00\u9875" : "\u6CA1\u6709\u5339\u914D\u7684\u7ED3\u679C";
       if (filter) {
         const clear = document.createElement("button");
         clear.textContent = "\u6E05\u9664\u7B5B\u9009";
@@ -29875,7 +30171,7 @@ ${indent}}` : "}";
     table.prepend(colgroup);
     for (const name2 of ["#", "\u64CD\u4F5C", ...columns]) {
       const col = document.createElement("col");
-      const width = name2 === "#" ? 48 : name2 === "\u64CD\u4F5C" ? 96 : state.tablePrefs.widths[name2] || 180;
+      const width = name2 === "#" ? 48 : name2 === "\u64CD\u4F5C" ? 48 : state.tablePrefs.widths[name2] || 180;
       col.style.width = `${width}px`;
       colgroup.append(col);
       const th = document.createElement("th");
@@ -29947,9 +30243,9 @@ ${indent}}` : "}";
       number2.textContent = String(index + 1);
       const actions = tr2.insertCell(), read = document.createElement("button");
       const identity = rowIdentity(row, partitionPaths());
-      read.textContent = identity ? "\u6253\u5F00\u6587\u6863" : "\u9884\u89C8";
+      read.innerHTML = identity ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>' : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
       read.type = "button";
-      read.className = "row-read";
+      read.className = "row-read icon-button";
       read.setAttribute(
         "aria-label",
         identity ? `\u8BFB\u53D6\u7B2C ${index + 1} \u884C\u5B8C\u6574\u6587\u6863` : `\u9884\u89C8\u7B2C ${index + 1} \u884C\u67E5\u8BE2\u6295\u5F71`
@@ -29963,7 +30259,6 @@ ${indent}}` : "}";
           void select();
           return;
         }
-        showDocument();
         void action(async () => {
           if (await discard())
             opened(await invoke("cosmos/read", { ...scope(), ...identity }), {
@@ -29985,7 +30280,21 @@ ${indent}}` : "}";
           selectCell(td, row, k);
           td.focus({ preventScroll: true });
         });
+        const openCopy = (x, y) => {
+          selectCell(td, row, k);
+          copyMenu.open({ x, y, focus: td });
+        };
+        td.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          openCopy(event.clientX, event.clientY);
+        });
         td.addEventListener("keydown", (e) => {
+          if (e.key === "ContextMenu" || e.shiftKey && e.key === "F10") {
+            e.preventDefault();
+            const rect = td.getBoundingClientRect();
+            openCopy(rect.left, rect.bottom);
+            return;
+          }
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && !e.altKey) {
             e.preventDefault();
             selectCell(td, row, k);
@@ -30001,15 +30310,15 @@ ${indent}}` : "}";
       }
       const select = () => action(async () => {
         if (!await discard()) return;
-        showDocument();
         resetEditor();
+        showDocument();
         state.selectedRow = stringify(row, null, 2);
         state.baseline = stringify(row, null, 2);
         documentEditor.value = state.baseline;
         $("document-state").textContent = "\u67E5\u8BE2\u6295\u5F71\uFF08\u53EA\u8BFB\uFF09";
         if (row && typeof row.id === "string") $("document-id").value = row.id;
-        const paths = state.containers.find((x) => x.id === state.container)?.partitionKey?.paths || [];
-        const missing = paths.some((path) => {
+        const paths2 = state.containers.find((x) => x.id === state.container)?.partitionKey?.paths || [];
+        const missing = paths2.some((path) => {
           let value = row;
           for (const part of path.slice(1).split("/").map((x) => x.replace(/~1/g, "/").replace(/~0/g, "~"))) {
             if (!value || typeof value !== "object" || !Object.hasOwn(value, part))
@@ -30019,13 +30328,20 @@ ${indent}}` : "}";
           return false;
         });
         try {
-          if (!missing) $("document-pk").value = keyFromDocument(row, paths);
+          if (!missing) $("document-pk").value = keyFromDocument(row, paths2);
         } catch (error) {
           status(error.message, true);
           return;
         }
         target.querySelectorAll("tr.selected").forEach((x) => x.classList.remove("selected"));
         tr2.classList.add("selected");
+        let previewView = state.preferredDocumentView;
+        try {
+          editableDocument(row);
+        } catch {
+          previewView = "json";
+        }
+        setDocumentView(previewView);
         controls();
         status("\u5DF2\u9884\u89C8\u67E5\u8BE2\u7ED3\u679C\u3002\u786E\u8BA4 id \u548C\u5206\u533A\u952E\u540E\uFF0C\u70B9\u51FB\u300C\u8BFB\u53D6\u5B8C\u6574\u6587\u6863\u300D\u3002");
       });
@@ -30086,11 +30402,16 @@ ${indent}}` : "}";
     } catch (error) {
       if (job.canceled || error.message === "STALE") throw new Error("STALE");
       const diagnostic = sqlErrorDiagnostic(execution, sqlEditor.value, error);
-      if (diagnostic) {
-        setSQLCollapsed(false);
+      const syntaxError = error.data?.category === "sql-syntax" || /HTTP 400: SQL 语法错误/.test(error.message || "");
+      if (syntaxError) {
         sqlEditor.setDiagnostic(diagnostic);
-        $("sql-diagnostic").textContent = diagnostic.message;
-        $("sql-diagnostic").hidden = false;
+        $("sql-error-message").textContent = diagnostic ? diagnostic.message.replace("\uFF08\u70B9\u51FB\u5B9A\u4F4D\uFF09", "") : error.message.replace(/^HTTP 400:\s*/, "");
+        $("sql-error-meta").textContent = `${((performance.now() - job.started) / 1e3).toFixed(1)} s \xB7 \u672C\u6B21 RU \u672A\u77E5`;
+        $("sql-diagnostic").hidden = !diagnostic;
+        $("sql-error").hidden = false;
+        clearTimeout(statusTimer);
+        $("status").hidden = true;
+        return;
       }
       throw new Error(
         `\u67E5\u8BE2\u5931\u8D25 \xB7 ${((performance.now() - job.started) / 1e3).toFixed(1)} s \xB7 \u672C\u6B21 RU \u672A\u77E5 \xB7 ${error.message}`
@@ -30112,7 +30433,7 @@ ${indent}}` : "}";
     state.page = state.pages.length - 1;
     renderPage();
     resetEditor();
-    metrics(result, `\u67E5\u8BE2\u5B8C\u6210 \xB7 ${parse(result.json).length} \u6761 \xB7 `);
+    clearStatus();
   }
   function cancelQuery() {
     const job = state.queryJob;
@@ -30142,6 +30463,7 @@ ${indent}}` : "}";
   }
   function opened(result, identity) {
     const doc2 = parse(result.json), etag = result.etag || doc2._etag;
+    showDocument();
     knownFields().learn(doc2);
     state.snapshot = { ...identity, etag };
     state.creating = false;
@@ -30154,7 +30476,6 @@ ${indent}}` : "}";
     $("document-state").textContent = "\u5B8C\u6574\u6587\u6863";
     $("etag").textContent = etag ? `ETag: ${etag}` : "\u670D\u52A1\u672A\u63D0\u4F9B ETag\uFF0C\u65E0\u6CD5\u66F4\u65B0\u6216\u5220\u9664";
     metrics(result, "\u6587\u6863\u5DF2\u8BFB\u53D6 \xB7 ");
-    $("save-method").value = "patch";
     $("field-filter").value = "";
     $("document-location").open = false;
     $("document-identity").textContent = identity.id;
@@ -30399,7 +30720,7 @@ ${indent}}` : "}";
     $("document-state").textContent = dirty() ? "\u672A\u4FDD\u5B58" : state.creating ? "\u65B0\u6587\u6863" : "\u5B8C\u6574\u6587\u6863";
     controls();
   }
-  function setDocumentView(view2) {
+  function setDocumentView(view2, remember = false) {
     if (state.fieldErrors.size && view2 !== state.documentView) {
       status("\u8BF7\u5148\u4FEE\u6B63\u5B57\u6BB5\u503C\u683C\u5F0F\uFF0C\u518D\u5207\u6362\u89C6\u56FE\u3002", true);
       return;
@@ -30416,6 +30737,10 @@ ${indent}}` : "}";
       }
     }
     state.documentView = view2;
+    if (remember) {
+      state.preferredDocumentView = view2;
+      saveViewPreference({ document: view2 });
+    }
     $("field-editor").hidden = view2 !== "fields";
     $("editor").hidden = view2 !== "json";
     $("json-diagnostic").hidden = !documentError || view2 !== "json";
@@ -30535,7 +30860,7 @@ ${indent}}` : "}";
       status("\u8BF7\u5148\u4FEE\u6B63\u5B57\u6BB5\u503C\u683C\u5F0F\uFF0C\u518D\u641C\u7D22 JSON\u3002", true);
       return;
     }
-    setDocumentView("json");
+    setDocumentView("json", true);
     documentEditor.search();
   };
   function closeDocumentMenu(focus = false) {
@@ -30603,7 +30928,6 @@ ${indent}}` : "}";
     () => documentEditor.measure()
   );
   $("json-diagnostic").onclick = () => documentEditor.focusError();
-  $("sql-search").onclick = () => sqlEditor.search();
   var workspace = document.querySelector(".workspace");
   var separator = $("document-resize");
   function resizeDocument(width) {
@@ -30638,7 +30962,11 @@ ${indent}}` : "}";
   };
   $("document-expand").onclick = () => {
     const expanded = workspace.classList.toggle("document-expanded");
-    $("document-expand").textContent = expanded ? "\u8FD8\u539F" : "\u653E\u5927";
+    $("document-expand").innerHTML = icon(expanded ? "restore" : "expand");
+    $("document-expand").setAttribute(
+      "aria-label",
+      expanded ? "\u8FD8\u539F\u6587\u6863\u9762\u677F" : "\u653E\u5927\u6587\u6863\u9762\u677F"
+    );
     $("document-expand").title = expanded ? "\u8FD8\u539F\u6587\u6863\u9762\u677F" : "\u653E\u5927\u6587\u6863\u9762\u677F";
     $("document-expand").setAttribute("aria-pressed", String(expanded));
     documentEditor.measure();
@@ -30649,12 +30977,10 @@ ${indent}}` : "}";
     () => resizeDocument(Number(separator.getAttribute("aria-valuenow")))
   );
   $("fields-view").onclick = () => {
-    setDocumentView("fields");
-    if (state.documentView === "fields") state.preferredDocumentView = "fields";
+    setDocumentView("fields", true);
   };
   $("document-json-view").onclick = () => {
-    setDocumentView("json");
-    if (state.documentView === "json") state.preferredDocumentView = "json";
+    setDocumentView("json", true);
   };
   $("field-filter").oninput = () => {
     if (state.fieldErrors.size) {
@@ -30703,6 +31029,7 @@ ${indent}}` : "}";
       );
       documentEditor.value = stringify(doc2, null, 2);
       $("document-id").value = doc2.id || "";
+      if (state.documentView === "fields") renderFields();
       controls();
     } catch (error) {
       status(error.message, true);
@@ -30757,10 +31084,12 @@ ${indent}}` : "}";
       `${verb}\u6210\u529F \xB7 ${result.ru.toFixed(2)} RU${notes.length ? " \xB7 " + notes.join("\uFF1B") : ""}`
     );
   }
-  function view(json2) {
+  function view(json2, remember = true) {
+    state.resultView = json2 ? "json" : "table";
+    if (remember) saveViewPreference({ results: state.resultView });
     closeResultItemMenu();
-    $("table").hidden = json2;
-    $("raw-results").hidden = !json2;
+    $("table").hidden = json2 && state.page >= 0;
+    $("raw-results").hidden = !json2 || state.page < 0;
     $("table-view").classList.toggle("active", !json2);
     $("table-view").setAttribute("aria-pressed", String(!json2));
     $("json-view").setAttribute("aria-pressed", String(json2));
@@ -30769,6 +31098,30 @@ ${indent}}` : "}";
     $("result-json-tools").hidden = !json2;
     if (json2) syncResultReader();
   }
+  for (const [id, name2, label] of [
+    ["export", "download", "\u5BFC\u51FA\u5F53\u524D\u9875"],
+    ["copy-selection", "copy", "\u590D\u5236\u6240\u9009\u5185\u5BB9"],
+    ["copy-results-json", "copy", "\u590D\u5236\u5F53\u524D\u9875 JSON"],
+    ["document-expand", "expand", "\u653E\u5927\u6587\u6863\u9762\u677F"],
+    ["document-close", "close", "\u5173\u95ED\u6587\u6863\u9762\u677F\uFF08\u4FDD\u7559\u8349\u7A3F\uFF09"],
+    ["clear-filter", "close", "\u6E05\u9664\u7ED3\u679C\u7B5B\u9009"],
+    ["scope-reload", "refresh", "\u5237\u65B0\u5217\u8868"],
+    ["pk-reload", "refresh", "\u5237\u65B0\u5206\u533A\u952E\u5217\u8868"],
+    ["pk-clear", "close", "\u6E05\u9664\u5206\u533A\u952E"],
+    ["document-actions", "more", "\u66F4\u591A\u6587\u6863\u64CD\u4F5C"],
+    ["query-pk-choose", "down", "\u9009\u62E9\u67E5\u8BE2\u5206\u533A\u952E"],
+    ["document-pk-choose", "down", "\u9009\u62E9\u6587\u6863\u5206\u533A\u952E"]
+  ]) {
+    $(id).innerHTML = icon(name2);
+    $(id).classList.add("icon-button");
+    $(id).title = label;
+    $(id).setAttribute("aria-label", label);
+  }
+  copyMenu = createMenu($("copy-selection"), $("copy-menu"));
+  documentWriteMenu = createMenu(
+    $("document-actions"),
+    $("document-actions-menu")
+  );
   var bind = (id, fn) => $(id).addEventListener("click", () => action(fn));
   bind("refresh", async () => {
     if (await discard()) await loadDatabases();
@@ -30796,7 +31149,6 @@ ${indent}}` : "}";
     })
   );
   bind("run", () => query());
-  bind("run-collapsed", () => query());
   $("cancel-query").onclick = cancelQuery;
   $("result-filter").oninput = renderPage;
   $("clear-filter").onclick = () => {
@@ -30805,10 +31157,12 @@ ${indent}}` : "}";
     $("result-filter").focus();
   };
   $("copy-cell").onclick = () => {
+    copyMenu.close(true);
     if (state.selectedCell !== null)
       void copyResult(state.selectedCell, "\u5355\u5143\u683C");
   };
   $("copy-row").onclick = () => {
+    copyMenu.close(true);
     if (state.selectedRow !== null)
       void copyResult(state.selectedRow, "\u884C JSON\uFF08\u67E5\u8BE2\u6295\u5F71\uFF09");
   };
@@ -30821,9 +31175,66 @@ ${indent}}` : "}";
   $("pk-reload").onclick = () => {
     if (!state.busy) void startPartitionOptions(true);
   };
-  $("query-pk-choose").onclick = () => openPartitionPicker("query-pk");
-  $("document-pk-choose").onclick = () => openPartitionPicker("document-pk");
-  $("pk-close").onclick = () => closePartitionPicker();
+  for (const id of ["query-pk", "document-pk"]) {
+    $(id + "-choose").onclick = () => {
+      if (!$("pk-picker").hidden && partitionTarget === id) {
+        closePartitionPicker();
+        $(id).focus();
+      } else openPartitionPicker(id);
+    };
+    $(id).addEventListener("focus", () => {
+      if (partitionTarget !== id && !$("pk-picker").hidden)
+        closePartitionPicker();
+    });
+    $(id).addEventListener("input", () => {
+      try {
+        parseArray($(id).value, "\u5206\u533A\u952E");
+        if (partitionTarget === id) closePartitionPicker();
+        return;
+      } catch {
+      }
+      if ($("pk-picker").hidden || partitionTarget !== id)
+        openPartitionPicker(id, false);
+      else {
+        partitionFilter = $(id).value;
+        partitionActiveKey = null;
+        renderPartitionOptions();
+      }
+    });
+    $(id).addEventListener("keydown", (event) => {
+      if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        if ($("pk-picker").hidden) openPartitionPicker(id);
+        else if (!partitionBrowseRequested) {
+          partitionBrowseRequested = true;
+          void startPartitionOptions();
+        }
+        const items = [
+          ...$("pk-options").querySelectorAll("button:not(:disabled)")
+        ];
+        const current = items.findIndex(
+          (item) => item.dataset.key === partitionActiveKey
+        );
+        const next = current < 0 ? event.key === "ArrowDown" ? 0 : items.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        partitionActiveKey = items[next]?.dataset.key || null;
+        renderPartitionOptions();
+        const active = document.getElementById(
+          $(id).getAttribute("aria-activedescendant")
+        );
+        active?.scrollIntoView({ block: "nearest" });
+      } else if (event.key === "Enter" && !$("pk-picker").hidden) {
+        event.preventDefault();
+        const active = document.getElementById(
+          $(id).getAttribute("aria-activedescendant")
+        );
+        if (active) active.click();
+        else {
+          closePartitionPicker();
+          $(id).dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      } else if (event.key === "Tab") closePartitionPicker();
+    });
+  }
   $("pk-clear").onclick = () => {
     if (!state.busy) {
       $(partitionTarget).value = "";
@@ -30833,24 +31244,8 @@ ${indent}}` : "}";
       $(partitionTarget).focus();
     }
   };
-  $("pk-filter").oninput = renderPartitionOptions;
-  $("pk-filter").onkeydown = (e) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      $("pk-options").querySelector("button:not(:disabled)")?.focus();
-    }
-  };
-  $("pk-options").onkeydown = (e) => {
-    const buttons = [
-      ...$("pk-options").querySelectorAll("button:not(:disabled)")
-    ], index = buttons.indexOf(document.activeElement);
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      buttons[(index + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
-    }
-  };
   document.addEventListener("pointerdown", (e) => {
-    if (!$("pk-picker").hidden && !$("pk-picker").contains(e.target) && !e.target.closest("#query-pk-choose,#document-pk-choose"))
+    if (!$("pk-picker").hidden && !$("pk-picker").contains(e.target) && !e.target.closest(".pk-input"))
       closePartitionPicker();
   });
   document.addEventListener("keydown", (e) => {
@@ -30873,7 +31268,7 @@ ${indent}}` : "}";
       state.page--;
       renderPage();
       resetEditor();
-      metrics(state.pages[state.page]);
+      clearStatus();
     }
   });
   bind("read", async () => {
@@ -30887,6 +31282,7 @@ ${indent}}` : "}";
     const key = $("query-pk").value.trim() || $("document-pk").value.trim();
     const doc2 = newDocument(partitionPaths(), key, crypto.randomUUID());
     resetEditor();
+    showDocument();
     state.creating = true;
     state.baseline = stringify(doc2, null, 2);
     documentEditor.value = state.baseline;
@@ -30894,9 +31290,10 @@ ${indent}}` : "}";
     $("document-pk").value = key;
     $("document-state").textContent = "\u65B0\u6587\u6863";
     $("etag").textContent = "\u65B0\u6587\u6863\u4F7F\u7528\u521B\u5EFA\u64CD\u4F5C\uFF1B\u540C id \u4E0E\u5206\u533A\u952E\u5DF2\u5B58\u5728\u65F6\u4F1A\u62A5\u51B2\u7A81\uFF0C\u4E0D\u4F1A\u8986\u76D6\u3002";
+    setDocumentView(state.preferredDocumentView);
     status("\u6B63\u5728\u7F16\u8F91\u65B0\u6587\u6863");
   });
-  bind("save", async () => {
+  async function saveDocument(forceReplace = false) {
     if (state.fieldErrors.size) throw new Error("\u8BF7\u5148\u4FEE\u6B63\u5B57\u6BB5\u503C\u683C\u5F0F\u3002");
     const text = documentEditor.value;
     const prepared = prepareDocument(
@@ -30918,7 +31315,7 @@ ${indent}}` : "}";
       status("\u6CA1\u6709\u9700\u8981\u4FDD\u5B58\u7684\u5B57\u6BB5\u53D8\u5316\u3002");
       return;
     }
-    const patch = !creating && $("save-method").value === "patch";
+    const patch = !creating && !forceReplace;
     const operations = patch ? buildDocumentPatch(parse(state.baseline), doc2, partitionPaths()) : null;
     if (!await confirmAction(
       creating ? "\u521B\u5EFA\u6587\u6863\uFF1F" : patch ? "\u5C40\u90E8\u66F4\u65B0\u6587\u6863\uFF1F" : "\u66FF\u6362\u5B8C\u6574\u6587\u6863\uFF1F",
@@ -30939,7 +31336,13 @@ id: ${identity.id}
     );
     opened(result, identity);
     await afterMutation(result, identity, "\u4FDD\u5B58");
-  });
+  }
+  bind("save", () => saveDocument());
+  bind("replace-document", () => saveDocument(true));
+  $("replace-document").addEventListener(
+    "click",
+    () => documentWriteMenu.close()
+  );
   bind("delete", async () => {
     if (dirty()) throw new Error("\u5F53\u524D\u6709\u672A\u4FDD\u5B58\u4FEE\u6539\uFF0C\u8BF7\u5148\u4FDD\u5B58\u6216\u91CD\u65B0\u8BFB\u53D6\u6587\u6863");
     const identity = state.snapshot;
@@ -31015,22 +31418,25 @@ id: ${identity.id}
       const doc2 = editableDocument(parse(documentEditor.value));
       doc2.id = $("document-id").value;
       documentEditor.value = stringify(doc2, null, 2);
+      if (state.documentView === "fields") renderFields();
       controls();
     } catch (error) {
       status(error.message, true);
     }
   });
   bind("generate-id", async () => {
+    documentWriteMenu.close();
     const doc2 = editableDocument(parse(documentEditor.value));
     doc2.id = crypto.randomUUID();
-    const paths = partitionPaths();
-    if (paths.includes("/id")) {
+    const paths2 = partitionPaths();
+    if (paths2.includes("/id")) {
       const values = parseArray($("document-pk").value, "\u5206\u533A\u952E");
-      values[paths.indexOf("/id")] = doc2.id;
+      values[paths2.indexOf("/id")] = doc2.id;
       $("document-pk").value = stringify(values);
     }
     documentEditor.value = stringify(doc2, null, 2);
     $("document-id").value = doc2.id;
+    if (state.documentView === "fields") renderFields();
     status("\u5DF2\u751F\u6210\u65B0\u7684\u6587\u6863 UUID\u3002");
   });
   document.addEventListener(
@@ -31083,6 +31489,7 @@ id: ${identity.id}
       state.savedContainer = info.container || "";
       updateScopeContext();
       $("mode").textContent = info.readOnly ? "\u53EA\u8BFB\u8FDE\u63A5" : "\u5141\u8BB8\u6587\u6863\u5199\u5165";
+      await loadViewPreferences();
       await loadDatabases();
       if (info.scopeWarning) status(info.scopeWarning, true);
     });
@@ -31106,18 +31513,18 @@ id: ${identity.id}
   function clearSQLError() {
     sqlEditor.setDiagnostic(null);
     $("sql-diagnostic").hidden = true;
+    $("sql-error").hidden = true;
   }
   function updateSQLExecution() {
     const selected = sqlEditor.execution.selected;
     const label = selected ? "\u8FD0\u884C\u9009\u4E2D SQL" : "\u8FD0\u884C\u67E5\u8BE2";
-    for (const id of ["run", "run-collapsed"]) {
-      $(id).textContent = label;
-      $(id).title = selected ? "\u53EA\u6267\u884C SQL \u7F16\u8F91\u5668\u4E2D\u7684\u9009\u4E2D\u5185\u5BB9\uFF08\u2318 / Ctrl + Enter\uFF09" : "\u6267\u884C SQL \u7F16\u8F91\u5668\u5168\u6587\uFF08\u2318 / Ctrl + Enter\uFF09";
-    }
+    $("run").textContent = label;
+    $("run").title = selected ? "\u53EA\u6267\u884C SQL \u7F16\u8F91\u5668\u4E2D\u7684\u9009\u4E2D\u5185\u5BB9\uFF08\u2318 / Ctrl + Enter\uFF09" : "\u6267\u884C SQL \u7F16\u8F91\u5668\u5168\u6587\uFF08\u2318 / Ctrl + Enter\uFF09";
     renderResultSummary();
   }
   sqlEditor.onChange(() => {
     $("sql-diagnostic").hidden = true;
+    $("sql-error").hidden = true;
   });
   sqlEditor.onSelection(updateSQLExecution);
   updateSQLExecution();
@@ -31126,29 +31533,39 @@ id: ${identity.id}
     $(id).addEventListener("input", renderResultSummary);
     $(id).addEventListener("change", renderResultSummary);
   }
-  function setSQLCollapsed(collapsed) {
-    $("query-body").hidden = collapsed;
-    $("run-collapsed").hidden = !collapsed;
-    $("query-collapse").textContent = collapsed ? "\u5C55\u5F00 SQL" : "\u6536\u8D77 SQL";
-    $("query-collapse").setAttribute("aria-expanded", String(!collapsed));
-    if (!collapsed) sqlEditor.measure();
-  }
-  $("query-collapse").onclick = () => setSQLCollapsed(!$("query-body").hidden);
   function showDocument() {
     workspace.classList.remove("document-hidden");
-    $("document-toggle").textContent = "\u6536\u8D77\u6587\u6863";
+    $("document-toggle").hidden = true;
+    $("document-toggle").title = "\u5173\u95ED\u6587\u6863\u9762\u677F\uFF08\u4FDD\u7559\u8349\u7A3F\uFF09";
     $("document-toggle").setAttribute("aria-expanded", "true");
     documentEditor.measure();
+    sqlEditor.measure();
+  }
+  function hideDocument(focus = false) {
+    workspace.classList.add("document-hidden");
+    workspace.classList.remove("document-expanded");
+    $("document-expand").innerHTML = icon("expand");
+    $("document-expand").setAttribute("aria-label", "\u653E\u5927\u6587\u6863\u9762\u677F");
+    $("document-expand").title = "\u653E\u5927\u6587\u6863\u9762\u677F";
+    $("document-expand").setAttribute("aria-pressed", "false");
+    $("document-toggle").hidden = false;
+    $("document-toggle").title = "\u6253\u5F00\u6587\u6863\u9762\u677F\uFF1A\u6309 id \u8BFB\u53D6\u6216\u8FD4\u56DE\u8349\u7A3F";
+    $("document-toggle").setAttribute("aria-expanded", "false");
+    documentWriteMenu?.close();
+    closeDocumentMenu();
+    if (partitionTarget === "document-pk") closePartitionPicker();
+    if (focus) $("document-toggle").focus();
+    sqlEditor.measure();
   }
   $("document-toggle").onclick = () => {
-    if (workspace.classList.contains("document-hidden")) showDocument();
-    else {
-      workspace.classList.add("document-hidden");
-      $("document-toggle").textContent = "\u5C55\u5F00\u6587\u6863";
-      $("document-toggle").setAttribute("aria-expanded", "false");
-    }
-    sqlEditor.measure();
+    if (workspace.classList.contains("document-hidden")) {
+      showDocument();
+      if ($("document-location").open) $("document-id").focus();
+      else if (state.documentView === "json") documentEditor.focus();
+      else $("fields-view").focus();
+    } else hideDocument(true);
   };
+  $("document-close").onclick = () => hideDocument(true);
 })();
 
     </script>

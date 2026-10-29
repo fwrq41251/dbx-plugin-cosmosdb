@@ -174,7 +174,6 @@ export function sqlCompletions(
           label: "." + name,
           displayLabel: name,
           type: "property",
-          detail: "已读取文档中的字段",
           apply: identifier.test(name)
             ? "." + name
             : `[${JSON.stringify(name)}]`,

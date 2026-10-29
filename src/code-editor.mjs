@@ -1,12 +1,19 @@
 import { nestedJSONFolds } from "./json-folding.mjs";
-import { basicSetup } from "codemirror";
+import { basicSetup, minimalSetup } from "codemirror";
 import {
   EditorState,
   Compartment,
   Transaction,
   EditorSelection,
 } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
+import {
+  EditorView,
+  keymap,
+  placeholder,
+  lineNumbers,
+  highlightActiveLineGutter,
+  highlightActiveLine,
+} from "@codemirror/view";
 import { indentWithTab, isolateHistory } from "@codemirror/commands";
 import { json, jsonLanguage } from "@codemirror/lang-json";
 import { sql, SQLDialect } from "@codemirror/lang-sql";
@@ -17,13 +24,20 @@ import {
   getSearchQuery,
   searchPanelOpen,
 } from "@codemirror/search";
-import { autocompletion } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+} from "@codemirror/autocomplete";
 import {
   foldEffect,
   foldedRanges,
   unfoldAll,
   syntaxHighlighting,
   HighlightStyle,
+  bracketMatching,
+  indentOnInput,
 } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { parseJSON, formatJSON } from "./model.mjs";
@@ -176,7 +190,19 @@ export function createCodeEditor(
     diagnostics(lastDiagnostic);
   };
   const extensions = [
-    basicSetup,
+    ...(language === "sql"
+      ? [
+          minimalSetup,
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          highlightActiveLine(),
+          EditorState.allowMultipleSelections.of(true),
+          indentOnInput(),
+          bracketMatching(),
+          closeBrackets(),
+          keymap.of([...closeBracketsKeymap, ...completionKeymap]),
+        ]
+      : [basicSetup]),
     ...(language === "sql"
       ? [
           EditorState.transactionExtender.of((tr) =>
