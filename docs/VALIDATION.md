@@ -266,3 +266,4 @@
 - Windows 原生 DBX/WebView2 实机验证按用户要求暂时跳过。CI 的 Windows Chromium 测试属于自动化浏览器验证，不能描述为原生 DBX 实机验证。本轮未发布 Release 或更新商店。
 
 - 首轮 Windows CI 的模型与 Go race/vet 已通过；浏览器启动暴露固定 CLI 0.1.9 的 verbatim cwd（`\\?\D:`）与 Node 相对脚本入口不兼容。新增仅开发宿主启动使用的路径适配器，保留固定官方 runtime 与 SDK，不修改已安装依赖或插件协议；增加 drive/UNC、中文与空格、参数保留和不修改原配置的测试。
+- 第二轮 Windows CI 已通过 78/79 项浏览器用例；唯一失败为测试统一按 Ctrl+Shift+Z 重做，而 CodeMirror 的 Windows 默认重做键为 Ctrl+Y。测试改为使用各平台标准快捷键，保留原有撤销/重做和草稿完整性断言；没有修改产品的键盘行为。CI 提前执行原生打包/运行校验，并在浏览器失败时保留调试产物。

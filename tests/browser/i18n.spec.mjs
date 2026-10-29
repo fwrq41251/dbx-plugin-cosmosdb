@@ -65,7 +65,8 @@ test("host language switches UI, JSON folds and search without losing SQL, resul
   await expect(editor).toHaveAttribute("aria-label", "JSON document");
   await editor.press("ControlOrMeta+z");
   expect(await editor.innerText()).not.toBe(draft);
-  await editor.press("ControlOrMeta+Shift+z");
+  // CodeMirror follows the platform: Cmd+Shift+Z on macOS, Ctrl+Y on Windows.
+  await editor.press(process.platform === "darwin" ? "Meta+Shift+z" : "Control+y");
   expect(await editor.innerText()).toBe(draft);
   await f.locator("#document-search").click();
   await expect(f.locator('#editor .cm-search button[name="next"]')).toHaveText(

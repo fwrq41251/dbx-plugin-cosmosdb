@@ -4,7 +4,7 @@
 
 ## 0.24.0 准备状态
 
-当前商店目录的 `latestVersion` 为 `0.16.0`（[PR #397](https://github.com/t8y2/dbx-store/pull/397) 已合并），源码最新已验证功能提交为 `c4e5589`。0.24.0 已在本机安装并验证，发布说明见 [0.24.0](releases/0.24.0.md)。版本兼容目标仍为 DBX 0.6.59+ / macOS ARM64，插件身份及四个只读 MCP 工具不变。
+0.24.0 发布准备时，商店目录的 `latestVersion` 为 `0.16.0`（[PR #397](https://github.com/t8y2/dbx-store/pull/397) 已合并），当时源码最新已验证功能提交为 `c4e5589`。0.24.0 已在本机安装并验证，发布说明见 [0.24.0](releases/0.24.0.md)。版本兼容目标仍为 DBX 0.6.59+ / macOS ARM64，插件身份及四个只读 MCP 工具不变。
 
 发布准备可以先创建 GitHub Release 草稿，目标固定到完成文档准备的提交。草稿尚不公开，不触发 release workflow；正式发布后才由固定的官方 workflow 构建并上传候选包和 `release-candidates.json`。不提前把本地包作为正式候选资产上传，避免与 CI 重建结果混淆。发布后核对 workflow、下载产物的哈希/大小和协议，再检查自动创建的商店更新 PR。商店审核签名及合并仍由维护者完成。
 
