@@ -2,12 +2,13 @@
 
 ## 0.26.0 发布前确认（2026-11-09）
 
-- 版本保持 0.26.0；manifest、前端 package/lock 和 Go protocol 元信息一致。本轮只更新发布文档，未修改插件运行时代码。
+- 版本保持 0.26.0；manifest、前端 package/lock 和 Go protocol 元信息一致。本轮更新发布文档及 Linux CI runner，未修改插件运行时代码。
 - 本机 DBX 0.6.68-beta.20261107.4，已安装插件 0.26.0。原生「＋」创建第二、第三个同连接标签，继承来源数据库/容器，默认 SQL 和空分区键，不复制查询结果；第二个标签修改 SQL/分区键后往返切换保留输入，原标签的输入与已有结果不变。依次关闭验证标签后，原标签仍保留容器、SQL、分区键、结果 JSON 格式及已有结果。未执行业务查询或修改业务文档，未重启 DBX 以免丢失用户已有内存结果；跨重载恢复由自动化测试覆盖，用户另行确认实际体验正常。
 - DBX [PR #13866](https://github.com/t8y2/dbx/pull/13866) 已合并；通过 GitHub compare 确认 0.6.68 正式版包含合并提交。README 和发布说明建议多标签使用 0.6.68+，基础兼容仍为 0.6.59+。
 - 本轮 macOS 验证：52 项前端测试、Go race 测试及 vet、79 项完整浏览器回归全部通过。浏览器工作台用例使用实际 Go sidecar 和本地模拟服务，覆盖三个同连接工作台、不同容器、精确参数、结果/草稿隔离及重载后恢复而不执行查询；E2E 临时上下文已自动清理。
 - 重新构建 macOS ARM64 包，`npm run verify:package` 通过外部 SHA-256、包内逐文件哈希、许可证、protocol v1、连接生命周期和独立工作台持久化校验。安装中的 UI 与重新构建的 UI 一致；本轮没有重新安装同版本包或更改连接配置。
 - Windows x64 与 Linux x64 使用此前同一运行时代码的 [CI 40828426244](https://github.com/fwrq41251/dbx-plugin-cosmosdb/actions/runs/40828426244) 作为平台验证基线：两项成功，包含完整浏览器、原生打包和包内后端运行检查。Windows DBX/WebView2 实机测试仍暂缓。发布草稿公开后，官方 release workflow 将从版本提交重新构建两个发布目标。
+- 发布准备首轮 [CI 42538260024](https://github.com/fwrq41251/dbx-plugin-cosmosdb/actions/runs/42538260024) 的 Linux 模型、Go race/vet 和原生包运行检查通过，但 `ubuntu-latest` 已迁到 Ubuntu 26.04，固定的 Playwright 1.56.1 无法安装该系统的浏览器依赖。将 runner 显式固定为 `ubuntu-24.04` 后重新执行完整 CI，不升级或跳过浏览器测试。
 
 日期：2026-10-27。构建环境：macOS / Apple Silicon。
 
