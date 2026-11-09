@@ -1,7 +1,8 @@
 # Changelog
 
-## 0.26.0 — Windows x64 build support
+## 0.26.0 — Windows x64 and native query tabs
 
+- Include the independent native query workspaces introduced in 0.25.0. The upstream New Query fix is merged and included in DBX 0.6.68; DBX 0.6.59+ remains supported with older-host behavior.
 - Add native Windows x64 CI and release builds alongside the existing macOS ARM64 release target; no Windows ARM64 package yet. Windows native DBX/WebView2 device testing is deferred.
 - Fix UI build paths containing drive letters, spaces or non-ASCII characters, and declare Edge/WebView2 alongside Safari as a compilation target. Keep browser screenshots inside each isolated test run.
 - Make packaged-sidecar verification portable to Windows pipes; check native target/executable suffix, protocol, exact input persistence and independent workspaces using a disposable local service and data directory.

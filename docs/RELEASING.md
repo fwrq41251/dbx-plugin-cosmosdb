@@ -46,11 +46,12 @@
 
 参考：[DBX Store 贡献指南](https://github.com/t8y2/dbx-store/blob/main/CONTRIBUTING.md)。
 
-## 0.26.0 Windows 发布准备
+## 0.26.0 多查询标签与 Windows 发布准备
 
 - 发布矩阵新增 `windows-2022 / windows-x64`，保留 `macos-15 / darwin-arm64`；继续使用已固定的官方 reusable workflow 和 plugin CLI 0.1.9。CLI 在各自原生 runner 自动生成带平台路径的 manifest，Windows 后端附加 `.exe`，不手工改写源 manifest。
 - `npm run verify:package` 定位当前版本和原生目标的包，Windows 调用 `python`，macOS/Linux 调用 `python3`。校验 SHA-256、包内文件和许可证、平台/可执行入口、protocol v1、连接生命周期，以及两个工作台的精确输入保存、覆盖写入、位置隔离。仅使用临时目录和回环模拟服务。
 - CI 分别在 Linux 和 Windows 执行完整模型/Go race/vet/Chromium 浏览器测试。Windows CI 的协议和浏览器验证不代表 Windows 原生 DBX/WebView2 实机验证；本轮按用户要求跳过实机测试，发布说明必须保留这一限制。
-- 本轮没有发布 Release 或更新商店。当前多查询标签仍取决于 DBX 上游 [PR #13866](https://github.com/t8y2/dbx/pull/13866) 合并和发布，与 Windows 构建能力独立。
+- DBX 上游 [PR #13866](https://github.com/t8y2/dbx/pull/13866) 已合并，0.6.68 正式版包含原生 New Query 修复。2026-11-09 在本机 DBX 0.6.68-beta.20261107.4 / 插件 0.26.0 中验证新建、切换、关闭独立标签；用户也确认多标签使用正常。最低兼容版本仍为 0.6.59，原生多标签建议 0.6.68+。
+- 发布说明见 [0.26.0](releases/0.26.0.md)。准备阶段只创建固定到验证提交的 GitHub Release 草稿；发布草稿后才触发双平台正式候选构建和商店自动同步。
 
 Windows 开发宿主通过仓库内启动适配器将固定 CLI 的 verbatim 路径转成普通 Win32 路径，继续调用官方 runtime。该适配仅用于 `dev`，不进入插件包，也不改变 package/release 路径。
